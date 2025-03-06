@@ -1,7 +1,8 @@
 import React from 'react';
-import { Button, Typography, Box, Container } from '@mui/material';
+import { Button, Typography, Box, Container, Divider } from '@mui/material';
 import CarouselComponent from '../components/specific/CarouselComponent';
 import { useNavigate } from 'react-router-dom';
+import PropertyGrid from '../components/common/PropertyGrid';
 
 const Home = () => {
   const navigate = useNavigate();
@@ -21,6 +22,8 @@ const Home = () => {
       <Button variant="contained" color="primary" onClick={() => navigate("/addproperty")}>
         Post my property
       </Button>
+      <Divider sx={{marginTop:"20px"}}/>
+      <PropertyGrid limit={3}/>
     </Container>
   );
 };
