@@ -33,7 +33,8 @@ import { addPropertyDetails } from '../api/propertyApi';
 import { ThemeContext } from '../contexts/ThemeContext';
 import AppSnackbar from '../components/common/AppSnackbar';
 
-const FacilityCounter = ({ facility, count, onIncrement, onDecrement }) => (
+const FacilityCounter = ({ facility, count, onIncrement, onDecrement, error }) => (
+  <>
   <Box
     display="flex"
     alignItems="center"
@@ -55,6 +56,8 @@ const FacilityCounter = ({ facility, count, onIncrement, onDecrement }) => (
       </IconButton>
     </Box>
   </Box>
+  <Typography variant='caption' color='error'>{error}</Typography>
+  </>
 );
 
 const schema = yup.object().shape({
@@ -65,8 +68,8 @@ const schema = yup.object().shape({
     .of(yup.string())
     .min(1, 'Select at least one amenity'),
   facilities: yup.object().shape({
-    Bathroom: yup.number().min(0).required(),
-    Bedroom: yup.number().min(0).required()
+    Bathroom: yup.number().min(1, "One or more bathrooms must").required("Bathroom count is required"),
+        Bedroom: yup.number().min(1, "one or more bedrooms must").required("Bedroom count is required")
   }),
   otherFacility: yup.string().notRequired(),
   address: yup.string().required('Address is required'),
@@ -348,6 +351,7 @@ const AppPropertyDetails = () => {
                 count={facilitiesValue[facility]}
                 onIncrement={() => incrementFacility(facility)}
                 onDecrement={() => decrementFacility(facility)}
+                error={errors.facilities?.[facility]?.message}
               />
             </Grid>
           ))}
