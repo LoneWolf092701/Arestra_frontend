@@ -14,7 +14,13 @@ const Login = () => {
     try {
       const data = await loginApi({ username, password });
       console.log('Login successful:', data);
+      // Save the token
       localStorage.setItem('token', data.token);
+      // Save the user role (and any other relevant user info) from the login response
+      localStorage.setItem('userRole', data.user.role);
+      // Optionally, token expiry is handled in your loginApi already
+
+      // Navigate to home. Later, you can conditionally route based on role.
       navigate('/home');
     } catch (err) {
       console.error(err);
