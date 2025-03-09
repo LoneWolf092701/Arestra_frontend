@@ -18,7 +18,14 @@ apiClient.interceptors.request.use((config) => {
 export const loginApi = async (credentials) => {
   try {
     const response = await apiClient.post('/auth/login', credentials);
-    return response.data; 
+    const data = response.data;
+    // Save the token and role
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('userRole', data.user.role); // assuming the response has a user object with role
+    // Set expiry to 8 hours from now
+    const expiryTime = Date.now() + 8 * 60 * 60 * 1000;
+    localStorage.setItem('tokenExpiry', expiryTime);
+    return data;
   } catch (error) {
     throw error;
   }

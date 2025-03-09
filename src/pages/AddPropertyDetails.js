@@ -1,4 +1,7 @@
-import React, { useState, useContext } from 'react';
+import React from 'react';
+import { useForm, Controller, useFieldArray } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
 import {
   Container,
   Typography,
@@ -30,7 +33,8 @@ import { addPropertyDetails } from '../api/propertyApi';
 import { ThemeContext } from '../contexts/ThemeContext';
 import AppSnackbar from '../components/common/AppSnackbar';
 
-const FacilityCounter = ({ facility, count, onIncrement, onDecrement }) => (
+const FacilityCounter = ({ facility, count, onIncrement, onDecrement, error }) => (
+  <>
   <Box
     display="flex"
     alignItems="center"
@@ -52,20 +56,132 @@ const FacilityCounter = ({ facility, count, onIncrement, onDecrement }) => (
       </IconButton>
     </Box>
   </Box>
+  <Typography variant='caption' color='error'>{error}</Typography>
+  </>
 );
 
+const schema = yup.object().shape({
+  propertyType: yup.string().required('Property type is required'),
+  unitType: yup.string().required('Unit type is required'),
+  selectedAmenities: yup
+    .array()
+    .of(yup.string())
+    .min(1, 'Select at least one amenity'),
+  facilities: yup.object().shape({
+    Bathroom: yup.number().min(1, "One or more bathrooms must").required("Bathroom count is required"),
+        Bedroom: yup.number().min(1, "one or more bedrooms must").required("Bedroom count is required")
+  }),
+  otherFacility: yup.string().notRequired(),
+  address: yup.string().required('Address is required'),
+  // For roommates, allow an empty array.
+  // If any field is provided in a roommate object, then all three fields become required.
+  roommates: yup.array().of(
+    yup.object().shape({
+      name: yup.string(),
+      occupation: yup.string(),
+      field: yup.string()
+    }).test(
+      'all-or-none',
+      'If one roommate field is provided, then all fields are required',
+      function (value) {
+        if (!value) return true;
+        const { name, occupation, field } = value;
+        const anyProvided = Boolean(name || occupation || field);
+        const allProvided = Boolean(name && occupation && field);
+        return !anyProvided || allProvided;
+      }
+    )
+  ),
+  // Rules
+  rules: yup
+    .array()
+    .of(yup.string().trim().min(1, 'Rule cannot be empty'))
+    .required('Rules are required'),
+  contractPolicy: yup.string().required('Contract policy is required'),
+  availableFrom: yup.date()
+    .min(new Date(), 'Available from date cannot be in the past')
+    .required('Available from date is required'),
+  availableTo: yup.date()
+    .required('Available to date is required')
+    .test(
+      'date-not-equal',
+      'Available to date must be later than available from date',
+      function (value) {
+        const { availableFrom } = this.parent;
+        if (!value || !availableFrom) return true;
+        return dayjs(value).isAfter(dayjs(availableFrom));
+      }
+    ),
+    priceRange: yup
+    .array()
+    .of(yup.number())
+    .test(
+      'priceRange',
+      'Min price must be less than or equal to max price',
+      (value) => Array.isArray(value) && value[0] <= value[1]
+    ),
+  // Bills inclusive
+  billsInclusive: yup
+    .array()
+    .of(yup.string().trim().min(1, 'Bills inclusive cannot be empty'))
+    .notRequired()
+});
 
 const AppPropertyDetails = () => {
-  const { propertyType } = useContext(PropertyContext);
+  const { propertyType } = React.useContext(PropertyContext);
+  const { theme } = React.useContext(ThemeContext);
   const navigate = useNavigate();
-  const { theme } = useContext(ThemeContext);
-  
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
-  
-  const [address, setAddress] = useState('');
-  
-  const [unitType, setUnitType] = useState('');
+
+  const [snackbarOpen, setSnackbarOpen] = React.useState(false);
+  const [snackbarMessage, setSnackbarMessage] = React.useState('');
+
+  const {
+    control,
+    handleSubmit,
+    register,
+    setValue,
+    getValues,
+    watch,
+    formState: { errors }
+  } = useForm({
+    defaultValues: {
+      propertyType: propertyType || '',
+      unitType: '',
+      selectedAmenities: [],
+      facilities: { Bathroom: 0, Bedroom: 0 },
+      otherFacility: '',
+      address: '',
+      roommates: [],
+      rules: [''],
+      contractPolicy: '',
+      availableFrom: dayjs(),
+      availableTo: dayjs(),
+      priceRange: [500, 2000],
+      billsInclusive: []
+    },
+    resolver: yupResolver(schema)
+  });
+
+  console.log({errors});
+
+  // For Roommates field array
+  const { fields: roommateFields, append: appendRoommate, remove: removeRoommate } = useFieldArray({
+    control,
+    name: 'roommates'
+  });
+
+  // For Rules field array
+  const { fields: ruleFields, append: appendRule, remove: removeRule } = useFieldArray({
+    control,
+    name: 'rules'
+  });
+
+  // For Bills Inclusive
+  const { fields: billsFields, append: appendBill, remove: removeBill } = useFieldArray({
+    control,
+    name: 'billsInclusive'
+  });
+
   const unitOptions = [
     {
       label: 'Rental unit',
@@ -81,115 +197,48 @@ const AppPropertyDetails = () => {
     }
   ];
 
-  const [selectedAmenities, setSelectedAmenities] = useState([]);
   const amenitiesOptions = ['TV', 'AC', 'Couch', 'Wi-Fi', 'Fridge'];
 
+  // Toggle amenities by updating the form value directly
   const toggleAmenity = (amenity) => {
-    setSelectedAmenities((prev) =>
-      prev.includes(amenity)
-        ? prev.filter((item) => item !== amenity)
-        : [...prev, amenity]
-    );
+    const currentAmenities = getValues('selectedAmenities');
+    if (currentAmenities.includes(amenity)) {
+      setValue('selectedAmenities', currentAmenities.filter((item) => item !== amenity));
+    } else {
+      setValue('selectedAmenities', [...currentAmenities, amenity]);
+    }
   };
 
-  const initialFacilities = { Bathroom: 0, Bedroom: 0 };
-  const [facilities, setFacilities] = useState(initialFacilities);
-
+  const facilitiesValue = watch('facilities');
   const incrementFacility = (facility) => {
-    setFacilities((prev) => ({ ...prev, [facility]: prev[facility] + 1 }));
+    const currentFacilities = getValues('facilities');
+    setValue('facilities', { ...currentFacilities, [facility]: currentFacilities[facility] + 1 });
   };
 
   const decrementFacility = (facility) => {
-    setFacilities((prev) => ({
-      ...prev,
-      [facility]: Math.max(prev[facility] - 1, 0)
-    }));
+    const currentFacilities = getValues('facilities');
+    setValue('facilities', { ...currentFacilities, [facility]: Math.max(currentFacilities[facility] - 1, 0) });
   };
 
-  const [otherFacility, setOtherFacility] = useState('');
+  const occupationOptions = ['Student', 'Professional', 'Other'];
+  const fieldOptions = ['Engineering', 'Arts', 'Science', 'Business', 'Other'];
 
   const handleImageUpload = (uploadedFiles) => {
     console.log('Uploaded files:', uploadedFiles);
   };
 
-  const [roommates, setRoommates] = useState([{ name: '', occupation: '', field: '' }]);
-  const occupationOptions = ['Student', 'Professional', 'Other'];
-  const fieldOptions = ['Engineering', 'Arts', 'Science', 'Business', 'Other'];
-
-  const addRoommate = () =>
-    setRoommates([...roommates, { name: '', occupation: '', field: '' }]);
-  const removeRoommate = (index) => {
-    setRoommates(roommates.filter((_, i) => i !== index));
-  };
-  const updateRoommate = (index, key, value) => {
-    const updated = [...roommates];
-    updated[index][key] = value;
-    setRoommates(updated);
-  };
-
-  const [rules, setRules] = useState(['']);
-  const addRule = () => setRules([...rules, '']);
-  const removeRule = (index) => {
-    setRules(rules.filter((_, i) => i !== index));
-  };
-  const updateRule = (index, value) => {
-    const updated = [...rules];
-    updated[index] = value;
-    setRules(updated);
-  };
-
-  const [contractPolicy, setContractPolicy] = useState('');
-
-  const [availableFrom, setAvailableFrom] = useState(null);
-  const [availableTo, setAvailableTo] = useState(null);
-
-  const [priceRange, setPriceRange] = useState([500, 2000]);
-  const handlePriceRangeChange = (event, newValue) => {
-    setPriceRange(newValue);
-  };
-  const handleMinPriceChange = (event) => {
-    const min = Number(event.target.value);
-    setPriceRange([min, priceRange[1]]);
-  };
-  const handleMaxPriceChange = (event) => {
-    const max = Number(event.target.value);
-    setPriceRange([priceRange[0], max]);
-  };
-
-  const [billsInclusive, setBillsInclusive] = useState(['']);
-  const addbillsInclusive = () => setBillsInclusive([...billsInclusive, '']);
-  const removebillsInclusive = (index) => {
-    setBillsInclusive(billsInclusive.filter((_, i) => i !== index));
-  };
-  const updatebillsInclusive = (index, value) => {
-    const updated = [...billsInclusive];
-    updated[index] = value;
-    setBillsInclusive(updated);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const propertyData = {
-      propertyType,
-      unitType,
-      selectedAmenities,
-      facilities,
-      otherFacility,
-      address,
-      roommates,
-      rules,
-      contractPolicy,
-      availableFrom: availableFrom ? dayjs(availableFrom).format('YYYY-MM-DD HH:mm:ss') : null,
-      availableTo: availableTo ? dayjs(availableTo).format('YYYY-MM-DD HH:mm:ss') : null,
-      priceRange,
-      billsInclusive
+  const onSubmit = async (data) => {
+    // Format the available dates
+    const formattedData = {
+      ...data,
+      availableFrom: data.availableFrom ? dayjs(data.availableFrom).format('YYYY-MM-DD HH:mm:ss') : null,
+      availableTo: data.availableTo ? dayjs(data.availableTo).format('YYYY-MM-DD HH:mm:ss') : null
     };
 
     try {
       const token = localStorage.getItem('token');
-      const data = await addPropertyDetails(propertyData, token);
-      console.log('Submitting property data:', data);
+      const result = await addPropertyDetails(formattedData, token);
+      console.log('Submitting property data:', result);
       setSnackbarMessage('Property details submitted successfully!');
       setSnackbarOpen(true);
       setTimeout(() => {
@@ -201,12 +250,10 @@ const AppPropertyDetails = () => {
       setSnackbarOpen(true);
     }
   };
-  
+
   const handleSnackbarClose = () => {
     setSnackbarOpen(false);
   };
-
-  console.log(localStorage.getItem('propertyType'));
 
   return (
     <Container sx={{ my: 4 }}>
@@ -224,14 +271,21 @@ const AppPropertyDetails = () => {
           <Grid item xs={12} sm={6} md={4} key={option.label}>
             <Card
               sx={{
-                border: unitType === option.label ? `2px solid ${theme.secondary}` : '1px solid #ccc',
+                border:
+                  watch('unitType') === option.label
+                    ? `2px solid ${theme.secondary}`
+                    : '1px solid #ccc',
                 cursor: 'pointer'
               }}
-              onClick={() => setUnitType(option.label)}
+              onClick={() => setValue('unitType', option.label)}
             >
               <CardActionArea>
                 <CardContent>
-                  <Typography variant="h6" align="center" color={unitType === option.label ? `${theme.secondary}` : 'inherit'}>
+                  <Typography
+                    variant="h6"
+                    align="center"
+                    color={watch('unitType') === option.label ? theme.secondary : 'inherit'}
+                  >
                     {option.label}
                   </Typography>
                   <Typography variant="body2" align="center">
@@ -243,6 +297,7 @@ const AppPropertyDetails = () => {
           </Grid>
         ))}
       </Grid>
+      {errors.unitType && <Typography color="error">{errors.unitType.message}</Typography>}
 
       <Divider sx={{ my: 2 }} />
 
@@ -255,7 +310,7 @@ const AppPropertyDetails = () => {
             <Grid item xs={12} sm={4} md={3} key={amenity}>
               <Card
                 sx={{
-                  border: selectedAmenities.includes(amenity)
+                  border: getValues('selectedAmenities').includes(amenity)
                     ? '2px solid green'
                     : '1px solid #ccc',
                   cursor: 'pointer'
@@ -264,8 +319,11 @@ const AppPropertyDetails = () => {
               >
                 <CardActionArea>
                   <CardContent>
-                    <Typography variant="body1" align="center" color={selectedAmenities.includes(amenity)
-                    ? 'green' : 'inherit'}>
+                    <Typography
+                      variant="body1"
+                      align="center"
+                      color={getValues('selectedAmenities').includes(amenity) ? 'green' : 'inherit'}
+                    >
                       {amenity}
                     </Typography>
                   </CardContent>
@@ -274,6 +332,9 @@ const AppPropertyDetails = () => {
             </Grid>
           ))}
         </Grid>
+        {errors.selectedAmenities && (
+          <Typography color="error">{errors.selectedAmenities.message}</Typography>
+        )}
       </Box>
 
       <Divider sx={{ my: 2 }} />
@@ -283,13 +344,14 @@ const AppPropertyDetails = () => {
           Add Facilities available at your place
         </Typography>
         <Grid container spacing={2}>
-          {Object.keys(facilities).map((facility) => (
+          {Object.keys(facilitiesValue).map((facility) => (
             <Grid item xs={12} sm={6} md={4} key={facility}>
               <FacilityCounter
                 facility={facility}
-                count={facilities[facility]}
+                count={facilitiesValue[facility]}
                 onIncrement={() => incrementFacility(facility)}
                 onDecrement={() => decrementFacility(facility)}
+                error={errors.facilities?.[facility]?.message}
               />
             </Grid>
           ))}
@@ -299,8 +361,9 @@ const AppPropertyDetails = () => {
             fullWidth
             label="Other Facilities"
             variant="outlined"
-            value={otherFacility}
-            onChange={(e) => setOtherFacility(e.target.value)}
+            {...register('otherFacility')}
+            error={!!errors.otherFacility}
+            helperText={errors.otherFacility?.message}
           />
         </Box>
       </Box>
@@ -320,30 +383,34 @@ const AppPropertyDetails = () => {
         <Typography variant="h6" gutterBottom>
           Add the Address
         </Typography>
-        <MapSearch address={address} setAddress={setAddress} />
+        <MapSearch address={watch('address')} setAddress={(addr) => setValue('address', addr)} />
+        {errors.address && <Typography color="error">{errors.address.message}</Typography>}
       </Box>
 
       <Divider sx={{ my: 2 }} />
 
+      {/* Roommates Section */}
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" gutterBottom>
           Existing Roommates
         </Typography>
-        {roommates.map((roommate, index) => (
-          <Box display="flex" alignItems="center" key={index} my={1} gap={1}>
+        {roommateFields.map((item, index) => (
+          <Box display="flex" alignItems="center" key={item.id} my={1} gap={1}>
             <TextField
               fullWidth
               label="Roommate Name"
               variant="outlined"
-              value={roommate.name}
-              onChange={(e) => updateRoommate(index, 'name', e.target.value)}
+              {...register(`roommates.${index}.name`)}
+              error={!!errors.roommates?.[index]?.name}
+              helperText={errors.roommates?.[index]?.name?.message}
             />
             <FormControl variant="outlined" sx={{ minWidth: 180 }}>
               <InputLabel>Occupation</InputLabel>
               <Select
                 label="Occupation"
-                value={roommate.occupation}
-                onChange={(e) => updateRoommate(index, 'occupation', e.target.value)}
+                defaultValue={item.occupation}
+                {...register(`roommates.${index}.occupation`)}
+                error={!!errors.roommates?.[index]?.occupation}
               >
                 {occupationOptions.map((option) => (
                   <MenuItem key={option} value={option}>
@@ -351,13 +418,19 @@ const AppPropertyDetails = () => {
                   </MenuItem>
                 ))}
               </Select>
+              {errors.roommates?.[index]?.occupation && (
+                <Typography color="error" variant="caption">
+                  {errors.roommates[index].occupation.message}
+                </Typography>
+              )}
             </FormControl>
             <FormControl variant="outlined" sx={{ minWidth: 180 }}>
               <InputLabel>Field</InputLabel>
               <Select
                 label="Field"
-                value={roommate.field}
-                onChange={(e) => updateRoommate(index, 'field', e.target.value)}
+                defaultValue={item.field}
+                {...register(`roommates.${index}.field`)}
+                error={!!errors.roommates?.[index]?.field}
               >
                 {fieldOptions.map((option) => (
                   <MenuItem key={option} value={option}>
@@ -365,44 +438,52 @@ const AppPropertyDetails = () => {
                   </MenuItem>
                 ))}
               </Select>
+              {errors.roommates?.[index]?.field && (
+                <Typography color="error" variant="caption">
+                  {errors.roommates[index].field.message}
+                </Typography>
+              )}
             </FormControl>
             <IconButton onClick={() => removeRoommate(index)}>
               <RemoveIcon />
             </IconButton>
           </Box>
         ))}
-        <Button onClick={addRoommate} startIcon={<AddIcon />}>
+        <Button onClick={() => appendRoommate({ name: '', occupation: '', field: '' })} startIcon={<AddIcon />}>
           Add Roommate
         </Button>
       </Box>
 
       <Divider sx={{ my: 2 }} />
 
+      {/* Rules Section */}
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" gutterBottom>
           Rules
         </Typography>
-        {rules.map((rule, index) => (
-          <Box display="flex" alignItems="center" key={index} my={1} gap={1}>
+        {ruleFields.map((item, index) => (
+          <Box display="flex" alignItems="center" key={item.id} my={1} gap={1}>
             <TextField
               fullWidth
               label="Rule"
               variant="outlined"
-              value={rule}
-              onChange={(e) => updateRule(index, e.target.value)}
+              {...register(`rules.${index}`)}
+              error={!!errors.rules?.[index]}
+              helperText={errors.rules?.[index]?.message}
             />
             <IconButton onClick={() => removeRule(index)}>
               <RemoveIcon />
             </IconButton>
           </Box>
         ))}
-        <Button onClick={addRule} startIcon={<AddIcon />}>
+        <Button onClick={() => appendRule('')} startIcon={<AddIcon />}>
           Add Rule
         </Button>
       </Box>
 
       <Divider sx={{ my: 2 }} />
 
+      {/* Contract Policy Section */}
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" gutterBottom>
           Contract & Cancellation Policy
@@ -413,28 +494,56 @@ const AppPropertyDetails = () => {
           rows={3}
           variant="outlined"
           placeholder="Enter contract details..."
-          value={contractPolicy}
-          onChange={(e) => setContractPolicy(e.target.value)}
+          {...register('contractPolicy')}
+          error={!!errors.contractPolicy}
+          helperText={errors.contractPolicy?.message}
         />
       </Box>
 
       <Divider sx={{ my: 2 }} />
 
+      {/* Available Dates */}
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" gutterBottom>
           Available Dates
         </Typography>
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <DatePicker
-              label="From"
-              value={availableFrom}
-              onChange={(newValue) => setAvailableFrom(newValue)}
+            <Controller
+              name="availableFrom"
+              control={control}
+              render={({ field }) => (
+                <DatePicker
+                  label="From"
+                  value={field.value}
+                  onChange={(newValue) => field.onChange(newValue)}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      error={!!errors.availableFrom}
+                      helperText={errors.availableFrom?.message}
+                    />
+                  )}
+                />
+              )}
             />
-            <DatePicker
-              label="To"
-              value={availableTo}
-              onChange={(newValue) => setAvailableTo(newValue)}
+            <Controller
+              name="availableTo"
+              control={control}
+              render={({ field }) => (
+                <DatePicker
+                  label="To"
+                  value={field.value}
+                  onChange={(newValue) => field.onChange(newValue)}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      error={!!errors.availableTo}
+                      helperText={errors.availableTo?.message}
+                    />
+                  )}
+                />
+              )}
             />
           </Box>
         </LocalizationProvider>
@@ -442,55 +551,76 @@ const AppPropertyDetails = () => {
 
       <Divider sx={{ my: 2 }} />
 
+      {/* Price Range Section */}
       <Box sx={{ mt: 4 }}>
         <Typography variant="h6" gutterBottom>
           Set Price Range
         </Typography>
-        <Slider
-          value={priceRange}
-          onChange={handlePriceRangeChange}
-          min={100}
-          max={5000}
-          sx={{ mb: 2 }}
-        />
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <TextField
-            label="Min Price"
-            type="number"
-            value={priceRange[0]}
-            onChange={handleMinPriceChange}
-          />
-          <TextField
-            label="Max Price"
-            type="number"
-            value={priceRange[1]}
-            onChange={handleMaxPriceChange}
-          />
-        </Box>
-        <Box sx={{ mt: 2 }}>
-          {billsInclusive.map((rule, index) => (
-            <Box display="flex" alignItems="center" key={index} my={1} gap={1}>
-              <TextField
-                fullWidth
-                label="Bills Inclusive"
-                variant="outlined"
-                value={rule}
-                onChange={(e) => updatebillsInclusive(index, e.target.value)}
+        <Controller
+          name="priceRange"
+          control={control}
+          render={({ field }) => (
+            <>
+              <Slider
+                value={field.value}
+                onChange={(event, newValue) => field.onChange(newValue)}
+                min={100}
+                max={5000}
+                sx={{ mb: 2 }}
               />
-              <IconButton onClick={() => removebillsInclusive(index)}>
-                <RemoveIcon />
-              </IconButton>
-            </Box>
-          ))}
-          <Button onClick={addbillsInclusive} startIcon={<AddIcon />}>
-            Add Bills Inclusive
-          </Button>
-        </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <TextField
+                  label="Min Price"
+                  type="number"
+                  value={field.value[0]}
+                  onChange={(e) => {
+                    const min = Number(e.target.value);
+                    field.onChange([min, field.value[1]]);
+                  }}
+                />
+                <TextField
+                  label="Max Price"
+                  type="number"
+                  value={field.value[1]}
+                  onChange={(e) => {
+                    const max = Number(e.target.value);
+                    field.onChange([field.value[0], max]);
+                  }}
+                />
+              </Box>
+            </>
+          )}
+        />
       </Box>
 
-      <Button variant="contained" sx={{ mt: 4 }} onClick={handleSubmit}>
-        Next
-      </Button>
+      {/* Bills Inclusive Section */}
+      <Box sx={{ mt: 2 }}>
+        {billsFields.map((item, index) => (
+          <Box display="flex" alignItems="center" key={item.id} my={1} gap={1}>
+            <TextField
+              fullWidth
+              label="Bills Inclusive"
+              variant="outlined"
+              {...register(`billsInclusive.${index}`)}
+              error={!!errors.billsInclusive?.[index]}
+              helperText={errors.billsInclusive?.[index]?.message}
+            />
+            <IconButton onClick={() => removeBill(index)}>
+              <RemoveIcon />
+            </IconButton>
+          </Box>
+        ))}
+        <Button onClick={() => appendBill('')} startIcon={<AddIcon />}>
+          Add Bills Inclusive
+        </Button>
+      </Box>
+
+      <Box sx={{ mt: 4 }}>
+        <Button variant="contained" onClick={handleSubmit(onSubmit)}>
+          Next
+        </Button>
+      </Box>
+
       <AppSnackbar
         open={snackbarOpen}
         message={snackbarMessage}
