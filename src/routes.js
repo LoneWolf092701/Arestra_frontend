@@ -7,6 +7,8 @@ import AddProperty from './pages/AddProperty';
 import AddPropertyDetails from './pages/AddPropertyDetails';
 import UpdateProperty from './pages/UpdateProperty';
 import Login from './pages/Login';
+import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
 import Header from './components/common/Header';
 import { isAuthenticated } from './utils/auth';
 import ProtectedRoute from './components/common/ProtectedRoute';
@@ -23,8 +25,9 @@ const AppRoutes = () => {
       <Routes>
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup/>} />
+        <Route path="/forgot-password" element={<ForgotPassword/>} />
 
-        {/* Example: Home page is accessible only to authenticated property owners */}
         <Route
           path="/home"
           element={
@@ -40,7 +43,6 @@ const AppRoutes = () => {
           }
         />
 
-        {/* MyProperties page for property owners */}
         <Route
           path="/myproperties"
           element={
@@ -56,14 +58,13 @@ const AppRoutes = () => {
           }
         />
 
-        {/* For notifications, you might restrict it to admins only */}
         <Route
           path="/notifications"
           element={
             <PrivateRoute
               element={
                 <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['admin']}>
+                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
                     <Notifications />
                   </RoleProtectedRoute>
                 </ProtectedRoute>
@@ -72,7 +73,6 @@ const AppRoutes = () => {
           }
         />
 
-        {/* Other routes for property-related pages */}
         <Route
           path="/addproperty"
           element={
@@ -116,7 +116,7 @@ const AppRoutes = () => {
           }
         />
 
-        {/* Define an Unauthorized page for users who try to access a restricted route */}
+        {/* Unauthorized page for users who try to access a restricted route */}
         <Route path="/unauthorized" element={<div>Unauthorized Access</div>} />
       </Routes>
     </BrowserRouter>
