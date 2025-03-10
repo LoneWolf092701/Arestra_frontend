@@ -14,6 +14,9 @@ import { isAuthenticated } from './utils/auth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import RoleProtectedRoute from './components/common/RoleProtectedRoute';
 
+// User Pages
+import UserHome from './pages/UserPages/UserHome';
+
 const PrivateRoute = ({ element }) => {
   return isAuthenticated() ? element : <Navigate to="/login" />;
 };
@@ -115,6 +118,22 @@ const AppRoutes = () => {
             />
           }
         />
+
+        {/* User Pages */}
+        <Route
+          path="/user/home"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={['user']}>
+                    <UserHome />
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+          />
 
         {/* Unauthorized page for users who try to access a restricted route */}
         <Route path="/unauthorized" element={<div>Unauthorized Access</div>} />
