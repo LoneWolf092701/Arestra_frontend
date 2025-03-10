@@ -30,7 +30,7 @@ const Login = () => {
       // Save token and user role
       localStorage.setItem('token', data.token);
       localStorage.setItem('userRole', data.user.role);
-      navigate('/home');
+      navigate(data.user.role === "user" ? '/user/home' : data.user.role === "admin" ? '/admin/home' : '/home');
     } catch (err) {
       console.error(err);
       setError('Login failed. Check your credentials.');
