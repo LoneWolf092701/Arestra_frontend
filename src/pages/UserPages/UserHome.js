@@ -1,13 +1,19 @@
 import React, { useState } from 'react';
 import { Container, TextField, Button, Box, Typography } from '@mui/material';
 import CarouselComponent from '../../components/specific/CarouselComponent';
+import { useNavigate } from 'react-router-dom';
 
 const UserHome = () => {
   const [location, setLocation] = useState('');
+  const navigate = useNavigate();
   
   const handleSearch = () => {
     console.log('Searching for properties in:', location);
     
+  };
+  
+  const handleButtonClick = () => {
+    navigate('/user-allproperties');
   };
 
   return (
@@ -42,6 +48,9 @@ const UserHome = () => {
         />
         <Button variant="contained" color="primary" fullWidth onClick={handleSearch}>
           Search
+        </Button>
+        <Button variant="contained" color="primary" fullWidth onClick={handleButtonClick} sx={{mt:2}}>
+          All Properties
         </Button>
       </Container>
     </Box>

@@ -25,7 +25,7 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getProperties, updateProperty } from '../api/propertyApi';
+import { getProperties, getPropertyById, updateProperty } from '../api/propertyApi';
 import SkeletonLoader from '../components/specific/SkeletonLoader';
 import AppSnackbar from '../components/common/AppSnackbar';
 import { useForm, Controller, useFieldArray, get } from 'react-hook-form';
@@ -199,37 +199,38 @@ const UpdateProperty = () => {
 
   // Fetch property details 
   // set the form values via reset()
-  useEffect(() => {
-    const fetchProperty = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const data = await getProperties(token);
-        const prop = data.find((p) => p.id === parseInt(id));
-        if (prop) {
-          reset({
-            propertyType: prop.property_type || '',
-            unitType: prop.unit_type || '',
-            selectedAmenities: prop.amenities ? JSON.parse(prop.amenities) : [],
-            facilities: prop.facilities ? JSON.parse(prop.facilities) : { Bathroom: 0, Bedroom: 0 },
-            otherFacility: prop.other_facility || '',
-            address: prop.address || '',
-            roommates: prop.roommates ? JSON.parse(prop.roommates) : [],
-            rules: prop.rules ? JSON.parse(prop.rules) : [''],
-            contractPolicy: prop.contract_policy || '',
-            availableFrom: prop.available_from ? dayjs(prop.available_from) : null,
-            availableTo: prop.available_to ? dayjs(prop.available_to) : null,
-            priceRange: prop.price_range ? JSON.parse(prop.price_range) : [500, 2000],
-            billsInclusive: prop.bills_inclusive ? JSON.parse(prop.bills_inclusive) : []
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching property details:', error);
-      } finally {
-        setLoading(false);
+  
+useEffect(() => {
+  const fetchProperty = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const prop = await getPropertyById(id, token);
+      if (prop) {
+        reset({
+          propertyType: prop.property_type || '',
+          unitType: prop.unit_type || '',
+          selectedAmenities: prop.amenities ? JSON.parse(prop.amenities) : [],
+          facilities: prop.facilities ? JSON.parse(prop.facilities) : { Bathroom: 0, Bedroom: 0 },
+          otherFacility: prop.other_facility || '',
+          address: prop.address || '',
+          roommates: prop.roommates ? JSON.parse(prop.roommates) : [],
+          rules: prop.rules ? JSON.parse(prop.rules) : [''],
+          contractPolicy: prop.contract_policy || '',
+          availableFrom: prop.available_from ? dayjs(prop.available_from) : null,
+          availableTo: prop.available_to ? dayjs(prop.available_to) : null,
+          priceRange: prop.price_range ? JSON.parse(prop.price_range) : [500, 2000],
+          billsInclusive: prop.bills_inclusive ? JSON.parse(prop.bills_inclusive) : []
+        });
       }
-    };
-    fetchProperty();
-  }, [id, reset]);
+      console.log({prop});
+    } catch (error) {
+      console.error('Error fetching property details:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  fetchProperty();
+}, [id, reset]);
 
   // form submission
   const onSubmit = async (data) => {
@@ -382,7 +383,7 @@ const UpdateProperty = () => {
           <Typography variant="h6" gutterBottom>
             Add Photos of your place
           </Typography>
-          <ImageUpload onUpload={() => {}} />
+          {/* <ImageUpload onUpload={() => {}} /> */}
         </Box>
         <Divider sx={{ my: 2 }} />
 
@@ -391,10 +392,10 @@ const UpdateProperty = () => {
           <Typography variant="h6" gutterBottom>
             Add the Address
           </Typography>
-          <MapSearch
+          {/* <MapSearch
             address={watch('address')}
             setAddress={(addr) => setValue('address', addr)}
-          />
+          /> */}
           {errors.address && <Typography color="error">{errors.address.message}</Typography>}
         </Box>
         <Divider sx={{ my: 2 }} />

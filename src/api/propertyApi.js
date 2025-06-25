@@ -13,6 +13,7 @@ export const addPropertyDetails = async (propertyData, token) => {
   return response.data;
 };
 
+// to get all properties - property owner
 export const getProperties = async (token) => {
   const config = {
     headers: {
@@ -20,6 +21,29 @@ export const getProperties = async (token) => {
     }
   };
   const response = await axios.get(`${API_URL}/properties/details`, config);
+  return response.data;
+};
+
+// to get a peroperty by id - property owner
+export const getPropertyDetailsById = async (propertyId, token) => {
+  const config = {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+    },
+  };
+  const response = await axios.get(`${API_URL}/properties/details/${propertyId}`, config);
+  return response.data;
+};
+
+// to get all properties - user
+export const getAllProperties = async () => {
+  const response = await axios.get(`${API_URL}/properties/all`);
+  return response.data;
+};
+
+//to get property detail - user
+export const getPropertyById = async (propertyid) => {
+  const response = await axios.get(`${API_URL}/properties/all/${propertyid}`)
   return response.data;
 };
 

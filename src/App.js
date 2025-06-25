@@ -9,10 +9,20 @@ function App() {
   return (
     <ThemeProvider>
       <PropertyProvider>
-        <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            minHeight: '100vh',
+            // Smooth color changes when switching themes
+            transition: 'background-color 0.3s ease',
+          }}
+        >
+          {/* Main content area that grows to fill available space */}
           <Box sx={{ flexGrow: 1 }}>
             <AppRoutes />
           </Box>
+          
           <Footer />
         </Box>
       </PropertyProvider>

@@ -1,19 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Typography, IconButton, List, ListItem, ListItemText } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-
-const initialNotifications = [
-  { id: 1, message: "Your property has been approved." },
-  { id: 2, message: "New booking request received." },
-  { id: 3, message: "Payment has been successfully processed." },
-  { id: 4, message: "A tenant has sent you a message." }
-];
+import { getPropertyComplaints } from '../api/userInteractionApi';
 
 const Notifications = () => {
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    const fetchComplaints = async () => {
+      try {
+        const complaintsData = await getPropertyComplaints();
+        // Map the fetched complaints to the same notification shape.
+        const complaintNotifications = complaintsData.map(item => ({
+          id: `c-${item.id}`, // prefix id to avoid collisions in case needed
+          message: `Complaint on ${item.property_type} - ${item.unit_type}: ${item.complaint}`
+        }));
+        // Reset the notifications array with the new data
+        setNotifications(complaintNotifications);
+      } catch (error) {
+        console.error('Error fetching complaints:', error);
+      }
+    };
+    fetchComplaints();
+  }, []);
 
   const handleDelete = (id) => {
-    setNotifications(notifications.filter(notification => notification.id !== id));
+    setNotifications(prev => prev.filter(notification => notification.id !== id));
   };
 
   return (
@@ -22,7 +34,9 @@ const Notifications = () => {
         Notifications
       </Typography>
       {notifications.length === 0 ? (
-        <Typography variant="body1" align="center">No new notifications.</Typography>
+        <Typography variant="body1" align="center">
+          No new notifications.
+        </Typography>
       ) : (
         <List>
           {notifications.map(notification => (
