@@ -13,7 +13,9 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Rating
+  Rating,
+  Alert,
+  Divider
 } from '@mui/material';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import FavoriteIcon from '@mui/icons-material/Favorite';
@@ -23,9 +25,16 @@ import BathtubIcon from '@mui/icons-material/Bathtub';
 import PetsIcon from '@mui/icons-material/Pets';
 import LocalParkingIcon from '@mui/icons-material/LocalParking';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
+import CancelIcon from '@mui/icons-material/Cancel';
+import LoginIcon from '@mui/icons-material/Login';
 import { getPropertyById } from '../../api/propertyApi';
 import { isFavouriteStatus, setFavouriteStatus, submitComplaint } from '../../api/userInteractionApi';
+import { approveProperty, rejectProperty } from '../../api/adminAPI';
 import { useParams, useNavigate } from 'react-router-dom';
+import AppSnackbar from '../../components/common/AppSnackbar';
+import { isAuthenticated } from '../../utils/auth';
 
 // Helper function to format ISO dates to yyyy-MM-dd for date inputs.
 const formatDateForInput = (dateString) => {
@@ -52,25 +61,121 @@ const InfoPopup = ({ open, onClose, title, content }) => (
   </Dialog>
 );
 
+// Admin Rejection Dialog Component
+const RejectionDialog = ({ open, onClose, onConfirm, loading }) => {
+  const [rejectionReason, setRejectionReason] = useState('');
+
+  const handleConfirm = () => {
+    if (rejectionReason.trim()) {
+      onConfirm(rejectionReason);
+      setRejectionReason('');
+    }
+  };
+
+  const handleClose = () => {
+    setRejectionReason('');
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Reject Property Listing</DialogTitle>
+      <DialogContent>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          This property will be rejected and the owner will be notified with your reason.
+        </Alert>
+        <TextField
+          fullWidth
+          multiline
+          rows={4}
+          label="Rejection Reason"
+          value={rejectionReason}
+          onChange={(e) => setRejectionReason(e.target.value)}
+          placeholder="Please provide a clear reason for rejecting this property..."
+          required
+          sx={{ mt: 2 }}
+        />
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={handleClose} color="inherit">
+          Cancel
+        </Button>
+        <Button 
+          onClick={handleConfirm} 
+          color="error" 
+          variant="contained"
+          disabled={!rejectionReason.trim() || loading}
+        >
+          {loading ? 'Rejecting...' : 'Reject Property'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+// Login Required Dialog Component
+const LoginRequiredDialog = ({ open, onClose, onLogin, action }) => (
+  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <DialogTitle>Login Required</DialogTitle>
+    <DialogContent>
+      <Box sx={{ textAlign: 'center', py: 2 }}>
+        <LoginIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
+        <Typography variant="h6" gutterBottom>
+          Please log in to {action}
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          You need to be logged in to access this feature. Don't worry, you'll be brought back to this property after logging in.
+        </Typography>
+      </Box>
+    </DialogContent>
+    <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
+      <Button onClick={onClose} color="inherit">
+        Cancel
+      </Button>
+      <Button onClick={onLogin} variant="contained" startIcon={<LoginIcon />}>
+        Login
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
+
 const UserPropertyViewPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [property, setProperty] = useState(null);
   const [isFavourite, setIsFavourite] = useState(false);
-  //const [favouriteStatus, setFavouriteStatus] = useState(false);
   const [popupOpen, setPopupOpen] = useState(false);
   const [bookingDateFrom, setBookingDateFrom] = useState('');
   const [bookingDateTo, setBookingDateTo] = useState('');
   const [complaintText, setComplaintText] = useState('');
   const [popupTitle, setPopupTitle] = useState('');
   const [popupContent, setPopupContent] = useState('');
+  const [loginRequiredDialogOpen, setLoginRequiredDialogOpen] = useState(false);
+  const [loginAction, setLoginAction] = useState('');
+  
+  // Check authentication and user role
+  const authenticated = isAuthenticated();
+  const userRole = localStorage.getItem('userRole');
+  const isAdmin = userRole === 'admin';
+  const isUser = userRole === 'user';
+  
+  // Admin-specific states
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   useEffect(() => {
     const fetchPropertyDetails = async () => {
       try {
         const data = await getPropertyById(id);
-        const isFavouriteData = await isFavouriteStatus({ property_id: id });
-        setIsFavourite(isFavouriteData.isFavourite);
+        
+        // Only fetch favourite status for authenticated users
+        if (authenticated && isUser) {
+          const isFavouriteData = await isFavouriteStatus({ property_id: id });
+          setIsFavourite(isFavouriteData.isFavourite);
+        }
+        
         // Assume data is an array and we take the first item.
         if (data && data.length > 0) {
           const propertyData = data[0];
@@ -84,9 +189,31 @@ const UserPropertyViewPage = () => {
       }
     };
     fetchPropertyDetails();
-  }, [id]);
+  }, [id, authenticated, isUser]);
+
+  const handleLoginRequired = (action) => {
+    setLoginAction(action);
+    setLoginRequiredDialogOpen(true);
+  };
+
+  const handleLoginRedirect = () => {
+    // Store the current URL to return after login
+    const returnUrl = encodeURIComponent(window.location.pathname);
+    navigate(`/login?returnUrl=${returnUrl}`);
+  };
 
   const handleFavouriteToggle = async () => {
+    if (!authenticated) {
+      handleLoginRequired('add to favourites');
+      return;
+    }
+
+    if (!isUser) {
+      setSnackbarMessage('Only users can add properties to favourites');
+      setSnackbarOpen(true);
+      return;
+    }
+
     const newStatus = !isFavourite;
     setIsFavourite(newStatus);
     try {
@@ -109,9 +236,19 @@ const UserPropertyViewPage = () => {
   };
 
   const handleBook = () => {
-    alert(
-      `Booking request from ${bookingDateFrom} to ${bookingDateTo} for starting at $${property.price_range ? property.price_range[0] : 'N/A'}`
-    );
+    if (!authenticated) {
+      handleLoginRequired('book this property');
+      return;
+    }
+
+    if (!isUser) {
+      setSnackbarMessage('Only users can book properties');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // Navigate to booking page
+    navigate(`/user-bookproperty/${property.id}`);
   };
 
   const handleWhatsApp = () => {
@@ -121,14 +258,79 @@ const UserPropertyViewPage = () => {
   };
 
   const handleSendComplaint = async () => {
+    if (!authenticated) {
+      handleLoginRequired('send a complaint');
+      return;
+    }
+
+    if (!isUser) {
+      setSnackbarMessage('Only users can send complaints');
+      setSnackbarOpen(true);
+      return;
+    }
+
     try {
       await submitComplaint({ property_id: property.id, complaint: complaintText });
-      alert('Complaint sent!');
+      setSnackbarMessage('Complaint sent successfully!');
+      setSnackbarOpen(true);
       setComplaintText('');
     } catch (error) {
       console.error('Error sending complaint:', error);
-      alert('Failed to send complaint.');
+      setSnackbarMessage('Failed to send complaint.');
+      setSnackbarOpen(true);
     }
+  };
+
+  // Admin functions
+  const handleApproveProperty = async () => {
+    setAdminLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      await approveProperty(property.id, token);
+      setSnackbarMessage('Property approved successfully!');
+      setSnackbarOpen(true);
+      
+      // Navigate back to admin listings or refresh property data
+      setTimeout(() => {
+        navigate('/admin/new-listings');
+      }, 2000);
+    } catch (error) {
+      console.error('Error approving property:', error);
+      setSnackbarMessage('Error approving property');
+      setSnackbarOpen(true);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleRejectProperty = async (rejectionReason) => {
+    setAdminLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      await rejectProperty(property.id, rejectionReason, token);
+      setSnackbarMessage('Property rejected successfully');
+      setSnackbarOpen(true);
+      setRejectionDialogOpen(false);
+      
+      // Navigate back to admin listings
+      setTimeout(() => {
+        navigate('/admin/new-listings');
+      }, 2000);
+    } catch (error) {
+      console.error('Error rejecting property:', error);
+      setSnackbarMessage('Error rejecting property');
+      setSnackbarOpen(true);
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleCancelAdmin = () => {
+    navigate('/admin/new-listings');
+  };
+
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
   };
 
   if (!property) {
@@ -141,13 +343,60 @@ const UserPropertyViewPage = () => {
 
   return (
     <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
+      {/* Admin Controls Section */}
+      {authenticated && isAdmin && (
+        <Box sx={{ mb: 4, p: 3, backgroundColor: 'background.paper', borderRadius: 2, boxShadow: 1 }}>
+          <Typography variant="h6" gutterBottom color="primary">
+            Admin Controls
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Review this property listing and take appropriate action.
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+            <Button
+              variant="contained"
+              color="success"
+              startIcon={<CheckIcon />}
+              onClick={handleApproveProperty}
+              disabled={adminLoading}
+            >
+              {adminLoading ? 'Approving...' : 'Approve'}
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<CloseIcon />}
+              onClick={() => setRejectionDialogOpen(true)}
+              disabled={adminLoading}
+            >
+              Reject
+            </Button>
+            <Button
+              variant="outlined"
+              color="inherit"
+              startIcon={<CancelIcon />}
+              onClick={handleCancelAdmin}
+              disabled={adminLoading}
+            >
+              Cancel
+            </Button>
+          </Box>
+        </Box>
+      )}
+
+      {/* Property Details Section */}
       {/* Title, Favourite & Rating */}
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
         <Typography variant="h4">
           {property.property_type} - {property.unit_type}
         </Typography>
+        {/* Show favourite and rating only for authenticated users or as disabled for guests */}
         <Box display="flex" alignItems="center">
-          <IconButton onClick={handleFavouriteToggle} color="error">
+          <IconButton 
+            onClick={handleFavouriteToggle} 
+            color="error"
+            disabled={!authenticated || !isUser}
+          >
             {isFavourite ? <FavoriteIcon /> : <FavoriteBorderIcon />}
           </IconButton>
           <Rating name="read-only" value={property.rating || 0} readOnly />
@@ -288,70 +537,116 @@ const UserPropertyViewPage = () => {
       {/* Reusable Popup Component */}
       <InfoPopup open={popupOpen} onClose={closeDetailsPopup} title={popupTitle} content={popupContent} />
 
-      {/* Booking Section */}
-      <Box mb={2}>
-        <Typography variant="h6" gutterBottom>
-          Book This Property
-        </Typography>
-        <Grid container spacing={2} alignItems="center">
-          <Grid item xs={6}>
-            <TextField
-              label="From"
-              type="date"
-              InputLabelProps={{ shrink: true }}
-              fullWidth
-              value={bookingDateFrom}
-              onChange={(e) => setBookingDateFrom(e.target.value)}
-            />
-          </Grid>
-          <Grid item xs={6}>
-            <TextField
-              label="To"
-              type="date"
-              InputLabelProps={{ shrink: true }}
-              fullWidth
-              value={bookingDateTo}
-              onChange={(e) => setBookingDateTo(e.target.value)}
-            />
-          </Grid>
-        </Grid>
-        <Typography variant="body1" mt={2}>
-          Total Price: ${property.price_range ? property.price_range[0] : 'N/A'} (per booking period)
-        </Typography>
-        <Button variant="contained" color="primary" onClick={handleBook} sx={{ mt: 2 }}>
-          Request to Book
-        </Button>
-      </Box>
+      {/* Non-admin sections */}
+      {!isAdmin && (
+        <>
+          <Divider sx={{ my: 3 }} />
+          
+          {/* Booking Section */}
+          <Box mb={2}>
+            <Typography variant="h6" gutterBottom>
+              Book This Property
+            </Typography>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={6}>
+                <TextField
+                  label="From"
+                  type="date"
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                  value={bookingDateFrom}
+                  onChange={(e) => setBookingDateFrom(e.target.value)}
+                  disabled={!authenticated || !isUser}
+                />
+              </Grid>
+              <Grid item xs={6}>
+                <TextField
+                  label="To"
+                  type="date"
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                  value={bookingDateTo}
+                  onChange={(e) => setBookingDateTo(e.target.value)}
+                  disabled={!authenticated || !isUser}
+                />
+              </Grid>
+            </Grid>
+            <Typography variant="body1" mt={2}>
+              Total Price: ${property.price_range ? property.price_range[0] : 'N/A'} (per booking period)
+            </Typography>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={handleBook} 
+              sx={{ mt: 2 }}
+            >
+              {authenticated ? 'Request to Book' : 'Login to Book'}
+            </Button>
+          </Box>
 
-      {/* Message Landlord via WhatsApp */}
-      <Button
-        variant="contained"
-        color="success"
-        startIcon={<WhatsAppIcon />}
-        onClick={handleWhatsApp}
-        sx={{ mb: 2 }}
-      >
-        Message Landlord
-      </Button>
+          {/* Message Landlord via WhatsApp */}
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<WhatsAppIcon />}
+            onClick={handleWhatsApp}
+            sx={{ mb: 2 }}
+          >
+            Message Landlord
+          </Button>
 
-      {/* Complaint Section */}
-      <Box mb={4}>
-        <Typography variant="subtitle1" gutterBottom>
-          Write a Complaint
-        </Typography>
-        <TextField
-          label="Your Complaint"
-          variant="outlined"
-          multiline
-          rows={3}
-          fullWidth
-          value={complaintText}
-          onChange={(e) => setComplaintText(e.target.value)}
-        />
-        <Button variant="contained" color="error" onClick={handleSendComplaint} sx={{ mt: 2 }}>
-          Send Complaint
-        </Button>
-      </Box>
+          {/* Complaint Section */}
+          <Box mb={4}>
+            <Typography variant="subtitle1" gutterBottom>
+              Write a Complaint
+            </Typography>
+            <TextField
+              label="Your Complaint"
+              variant="outlined"
+              multiline
+              rows={3}
+              fullWidth
+              value={complaintText}
+              onChange={(e) => setComplaintText(e.target.value)}
+              disabled={!authenticated || !isUser}
+              placeholder={!authenticated ? "Login required to send complaints" : ""}
+            />
+            <Button 
+              variant="contained" 
+              color="error" 
+              onClick={handleSendComplaint} 
+              sx={{ mt: 2 }}
+              disabled={!authenticated || !isUser || !complaintText.trim()}
+            >
+              {authenticated ? 'Send Complaint' : 'Login to Send Complaint'}
+            </Button>
+          </Box>
+        </>
+      )}
+
+      {/* Login Required Dialog */}
+      <LoginRequiredDialog
+        open={loginRequiredDialogOpen}
+        onClose={() => setLoginRequiredDialogOpen(false)}
+        onLogin={handleLoginRedirect}
+        action={loginAction}
+      />
+
+      {/* Admin Rejection Dialog */}
+      <RejectionDialog
+        open={rejectionDialogOpen}
+        onClose={() => setRejectionDialogOpen(false)}
+        onConfirm={handleRejectProperty}
+        loading={adminLoading}
+      />
+
+      {/* Snackbar for notifications */}
+      <AppSnackbar
+        open={snackbarOpen}
+        message={snackbarMessage}
+        autoHideDuration={4000}
+        onClose={handleSnackbarClose}
+      />
     </Container>
   );
 };

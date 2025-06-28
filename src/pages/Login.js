@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Container, 
   Typography, 
@@ -11,7 +11,7 @@ import {
   Alert,
   CircularProgress 
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { loginApi } from '../api/loginApi';
 import RoleSelection from '../components/common/RoleSelection';
 import { useTheme } from '../contexts/ThemeContext';
@@ -24,15 +24,54 @@ const Login = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, isDark } = useTheme();
+
+  // Get return URL from query parameters
+  const queryParams = new URLSearchParams(location.search);
+  const returnUrl = queryParams.get('returnUrl');
+
+  useEffect(() => {
+    // If user is already logged in, redirect them appropriately
+    const token = localStorage.getItem('token');
+    const userRole = localStorage.getItem('userRole');
+    
+    if (token && userRole) {
+      handleSuccessfulLogin(userRole);
+    }
+  }, [returnUrl]);
 
   const handleRoleNext = () => {
     setStep(2);
   };
 
+  const handleSuccessfulLogin = (userRole) => {
+    if (returnUrl) {
+      // Decode the return URL and navigate back
+      const decodedReturnUrl = decodeURIComponent(returnUrl);
+      navigate(decodedReturnUrl);
+    } else {
+      // Default navigation based on role
+      switch (userRole) {
+        case 'user':
+          navigate('/user-home');
+          break;
+        case 'propertyowner':
+          navigate('/home');
+          break;
+        case 'admin':
+          navigate('/admin/home');
+          break;
+        default:
+          navigate('/user-home');
+      }
+    }
+  };
+
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
     
     try {
       const data = await loginApi({ username, password });
@@ -48,7 +87,14 @@ const Login = () => {
       // Save token and user role
       localStorage.setItem('token', data.token);
       localStorage.setItem('userRole', data.user.role);
-      navigate(data.user.role === "user" ? '/user-home' : data.user.role === "admin" ? '/admin/home' : '/home');
+      
+      // Set expiry to 8 hours from now
+      const expiryTime = Date.now() + 8 * 60 * 60 * 1000;
+      localStorage.setItem('tokenExpiry', expiryTime);
+      
+      // Handle successful login with potential redirect
+      handleSuccessfulLogin(data.user.role);
+      
     } catch (err) {
       console.error(err);
       setError('Login failed. Check your credentials.');
@@ -63,7 +109,7 @@ const Login = () => {
         minHeight: '100vh',
         // Creating a sophisticated background that adapts to the current theme
         background: isDark 
-          ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)`
+          ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 100%)`
           : `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}10 50%, ${theme.background} 100%)`,
         display: 'flex',
         alignItems: 'center',
@@ -119,6 +165,24 @@ const Login = () => {
             >
               Sign in to access your StayWise.lk account
             </Typography>
+
+            {/* Return URL Notice */}
+            {returnUrl && (
+              <Alert 
+                severity="info" 
+                sx={{ 
+                  mb: 3,
+                  backgroundColor: isDark ? `${theme.info}20` : `${theme.info}10`,
+                  color: theme.info,
+                  borderColor: theme.info,
+                  '& .MuiAlert-icon': {
+                    color: theme.info,
+                  },
+                }}
+              >
+                You'll be redirected back to the property page after login.
+              </Alert>
+            )}
 
             {/* Error Display with Theme-Appropriate Styling */}
             {error && (
@@ -335,6 +399,28 @@ const Login = () => {
             </Button>
           </Box>
         )}
+
+        {/* Guest Access Notice */}
+        <Box sx={{ textAlign: 'center', mt: 3 }}>
+          <Typography variant="body2" sx={{ color: theme.textSecondary, mb: 2 }}>
+            Just browsing? 
+          </Typography>
+          <Button
+            variant="outlined"
+            onClick={() => navigate('/user-home')}
+            sx={{
+              borderColor: theme.textSecondary,
+              color: theme.textSecondary,
+              '&:hover': {
+                borderColor: theme.primary,
+                color: theme.primary,
+                backgroundColor: `${theme.primary}05`,
+              },
+            }}
+          >
+            Continue as Guest
+          </Button>
+        </Box>
       </Container>
     </Box>
   );

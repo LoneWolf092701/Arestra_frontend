@@ -69,6 +69,9 @@ export const ThemeProvider = ({ children }) => {
       // Typography settings - ensuring consistent text styling
       typography: {
         fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+        allVariants: {
+          color: customTheme.textPrimary,
+        },
         h1: { color: customTheme.textPrimary },
         h2: { color: customTheme.textPrimary },
         h3: { color: customTheme.textPrimary },
@@ -77,6 +80,9 @@ export const ThemeProvider = ({ children }) => {
         h6: { color: customTheme.textPrimary },
         body1: { color: customTheme.textPrimary },
         body2: { color: customTheme.textSecondary },
+        subtitle1: { color: customTheme.textPrimary },
+        subtitle2: { color: customTheme.textSecondary },
+        caption: { color: customTheme.textSecondary },
       },
       
       // Component customizations - overriding default Material-UI styles

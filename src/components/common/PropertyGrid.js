@@ -12,7 +12,8 @@ import {
   Alert,
   Skeleton,
   Fade,
-  useMediaQuery
+  useMediaQuery,
+  IconButton
 } from '@mui/material';
 import ConfirmationDialog from '../common/ConfirmationDialog';
 import { getProperties, deleteProperty, getAllProperties } from '../../api/propertyApi';
@@ -25,7 +26,11 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PendingIcon from '@mui/icons-material/Pending';
 import CancelIcon from '@mui/icons-material/Cancel';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported';
 import { useTheme } from '../../contexts/ThemeContext';
+import { isFavouriteStatus, setFavouriteStatus } from '../../api/userInteractionApi';
 
 // Helper function for safely parsing JSON - remains unchanged but documented
 const safeParse = (str) => {
@@ -42,7 +47,8 @@ const PropertyGrid = ({
   filters, 
   isAdminPage, 
   showApprovedProperties,
-  showMyProperties 
+  showMyProperties,
+  appliedFilters 
 }) => {
   const [properties, setProperties] = useState([]);
   const [openDialog, setOpenDialog] = useState(false);
@@ -50,6 +56,7 @@ const PropertyGrid = ({
   const [filteredProperties, setFilteredProperties] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [favouriteStatuses, setFavouriteStatuses] = useState({});
   const navigate = useNavigate();
   
   // Enhanced theme integration with responsive design considerations
@@ -81,15 +88,75 @@ const PropertyGrid = ({
 
         setProperties(data);
         
-        const filtered = filters
-          ? data.filter((property) =>
+        // Apply filters
+        let filtered = data;
+        
+        // Apply type filter if provided
+        if (filters) {
+          filtered = data.filter((property) =>
               Array.isArray(filters)
                 ? filters.includes(property.property_type)
                 : property.property_type === filters
-            )
-          : data;
+            );
+        }
+
+        // Apply advanced filters if provided
+        if (appliedFilters) {
+          filtered = filtered.filter(property => {
+            // Price filter
+            if (appliedFilters.priceRange && property.price) {
+              const price = property.price;
+              if (price < appliedFilters.priceRange[0] || price > appliedFilters.priceRange[1]) {
+                return false;
+              }
+            }
+
+            // Rating filter
+            if (appliedFilters.starRating > 0 && property.rating) {
+              if (property.rating < appliedFilters.starRating) {
+                return false;
+              }
+            }
+
+            // Date availability filter
+            if (appliedFilters.availabilityDate && property.available_from) {
+              const availableDate = new Date(property.available_from);
+              const filterDate = new Date(appliedFilters.availabilityDate);
+              if (availableDate > filterDate) {
+                return false;
+              }
+            }
+
+            // Location filter
+            if (appliedFilters.location && property.address) {
+              if (!property.address.toLowerCase().includes(appliedFilters.location.toLowerCase())) {
+                return false;
+              }
+            }
+
+            return true;
+          });
+        }
             
         setFilteredProperties(filtered);
+
+        // Fetch favourite statuses for user pages
+        if (isUserPage && filtered.length > 0) {
+          const userRole = localStorage.getItem('userRole');
+          if (userRole === 'user') {
+            const statuses = {};
+            for (const property of filtered) {
+              try {
+                const favStatus = await isFavouriteStatus({ property_id: property.id });
+                statuses[property.id] = favStatus.isFavourite;
+              } catch (error) {
+                console.error('Error fetching favourite status:', error);
+                statuses[property.id] = false;
+              }
+            }
+            setFavouriteStatuses(statuses);
+          }
+        }
       } catch (error) {
         console.error('Error fetching properties:', error);
         setError('Failed to load properties. Please try again.');
@@ -99,7 +166,29 @@ const PropertyGrid = ({
     };
 
     fetchProperties();
-  }, [limit, filters, isUserPage, isAdminPage, showApprovedProperties]);
+  }, [limit, filters, isUserPage, isAdminPage, showApprovedProperties, appliedFilters]);
+
+  // Handle favourite toggle
+  const handleFavouriteToggle = async (propertyId, currentStatus) => {
+    const newStatus = !currentStatus;
+    
+    // Optimistically update UI
+    setFavouriteStatuses(prev => ({
+      ...prev,
+      [propertyId]: newStatus
+    }));
+
+    try {
+      await setFavouriteStatus({ property_id: propertyId, isFavourite: newStatus });
+    } catch (error) {
+      console.error('Error updating favourite status:', error);
+      // Revert on error
+      setFavouriteStatuses(prev => ({
+        ...prev,
+        [propertyId]: currentStatus
+      }));
+    }
+  };
 
   // Dialog handling functions remain the same
   const handleRemoveClick = (property) => {
@@ -132,9 +221,52 @@ const PropertyGrid = ({
     return date.toLocaleDateString();
   };
 
-  /**
-   * Advanced Status Chip Component with Theme Integration
-   */
+  // Enhanced No Image Component
+  const NoImagePlaceholder = ({ propertyType }) => (
+    <Box
+      sx={{
+        width: '100%',
+        height: 180,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.surfaceBackground,
+        border: `2px dashed ${theme.border}`,
+        borderRadius: 1,
+      }}
+    >
+      <ImageNotSupportedIcon 
+        sx={{ 
+          fontSize: 48, 
+          color: theme.textDisabled,
+          mb: 1
+        }} 
+      />
+      <Typography 
+        variant="body2" 
+        sx={{ 
+          color: theme.textDisabled,
+          textAlign: 'center',
+          fontWeight: 500
+        }}
+      >
+        No Image Available
+      </Typography>
+      <Typography 
+        variant="caption" 
+        sx={{ 
+          color: theme.textDisabled,
+          textAlign: 'center',
+          mt: 0.5
+        }}
+      >
+        {propertyType}
+      </Typography>
+    </Box>
+  );
+
+  // Advanced Status Chip Component with Theme Integration
   const getStatusChip = (property) => {
     const status = property.approval_status || 'unknown';
     
@@ -187,9 +319,7 @@ const PropertyGrid = ({
     );
   };
 
-  /**
-   * Advanced Action Button Generation with Theme-Aware Styling
-   */
+  // Updated Action Button Generation
   const getPropertyActions = (property) => {
     const status = property.approval_status || 'unknown';
     
@@ -233,7 +363,7 @@ const PropertyGrid = ({
           size="small" 
           variant="outlined"
           startIcon={<VisibilityIcon />}
-          onClick={() => window.open(`/user-viewproperty/${property.id}`, '_blank')}
+          onClick={() => navigate(`/user-viewproperty/${property.id}`)}
           sx={{
             ...baseButtonStyles,
             borderColor: theme.primary,
@@ -246,7 +376,7 @@ const PropertyGrid = ({
             },
           }}
         >
-          Preview
+          Review Property
         </Button>
       );
     }
@@ -280,7 +410,7 @@ const PropertyGrid = ({
             size="small"
             variant="outlined"
             startIcon={<VisibilityIcon />}
-            onClick={() => window.open(`/user-viewproperty/${property.id}`, '_blank')}
+            onClick={() => navigate(`/user-viewproperty/${property.id}`)}
             sx={{
               ...baseButtonStyles,
               borderColor: theme.success,
@@ -314,13 +444,12 @@ const PropertyGrid = ({
     );
   };
 
-  /**
-   * Advanced Property Card Component with Theme-Responsive Design
-   */
+  // Advanced Property Card Component with Theme-Responsive Design
   const renderPropertyCard = (property, index) => {
     const amenities = safeParse(property.amenities);
     const facilities = safeParse(property.facilities);
     const status = property.approval_status || 'unknown';
+    const isFavourite = favouriteStatuses[property.id] || false;
 
     return (
       <Fade in={true} timeout={300 + (index * 100)} key={property.id}>
@@ -357,17 +486,51 @@ const PropertyGrid = ({
           >
             {/* Property Image with Theme-Aware Overlay */}
             <Box sx={{ position: 'relative', overflow: 'hidden' }}>
-              <CardMedia
-                component="img"
-                height="180"
-                image={property.image || 'https://via.placeholder.com/400x180/e0e0e0/999999?text=Property+Image'}
-                alt={property.property_type}
-                className="property-image"
-                sx={{
-                  transition: 'transform 0.3s ease',
-                  objectFit: 'cover',
-                }}
-              />
+              {property.image ? (
+                <CardMedia
+                  component="img"
+                  height="180"
+                  image={property.image}
+                  alt={property.property_type}
+                  className="property-image"
+                  sx={{
+                    transition: 'transform 0.3s ease',
+                    objectFit: 'cover',
+                  }}
+                />
+              ) : (
+                <NoImagePlaceholder propertyType={property.property_type} />
+              )}
+              
+              {/* Favourite Button for User Pages */}
+              {isUserPage && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    zIndex: 3,
+                  }}
+                >
+                  <IconButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleFavouriteToggle(property.id, isFavourite);
+                    }}
+                    sx={{
+                      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                      color: isFavourite ? theme.error : theme.textDisabled,
+                      '&:hover': {
+                        backgroundColor: 'rgba(255, 255, 255, 1)',
+                        transform: 'scale(1.1)',
+                      },
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    {isFavourite ? <FavoriteIcon /> : <FavoriteBorderIcon />}
+                  </IconButton>
+                </Box>
+              )}
               
               {/* Status Badge with Theme Integration */}
               {!isUserPage && (
@@ -375,7 +538,7 @@ const PropertyGrid = ({
                   sx={{
                     position: 'absolute',
                     top: 12,
-                    right: 12,
+                    left: 12,
                     zIndex: 2,
                   }}
                 >
@@ -493,7 +656,7 @@ const PropertyGrid = ({
                 <Typography 
                   variant="body2" 
                   sx={{
-                    color: theme.textSecondary,
+                    color: theme.textPrimary,
                     fontSize: '0.875rem',
                   }}
                 >
@@ -632,18 +795,20 @@ const PropertyGrid = ({
   return (
     <Box sx={{ padding: '2rem' }}>
       {/* Page Header with Theme Integration */}
-      <Typography 
-        variant="h4" 
-        align="center" 
-        gutterBottom
-        sx={{
-          color: theme.textPrimary,
-          fontWeight: 600,
-          mb: 2,
-        }}
-      >
-        {getTitle()}
-      </Typography>
+      {!isUserPage && (
+        <Typography 
+          variant="h4" 
+          align="center" 
+          gutterBottom
+          sx={{
+            color: theme.textPrimary,
+            fontWeight: 600,
+            mb: 2,
+          }}
+        >
+          {getTitle()}
+        </Typography>
+      )}
 
       {/* Property Owner Summary */}
       {!isUserPage && !isAdminPage && renderList.length > 0 && (

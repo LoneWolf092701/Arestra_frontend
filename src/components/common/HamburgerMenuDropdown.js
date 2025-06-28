@@ -13,16 +13,19 @@ import ReviewsIcon from '@mui/icons-material/Reviews';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RequestPageIcon from '@mui/icons-material/RequestPage';
 import HistoryIcon from '@mui/icons-material/History';
+import LoginIcon from '@mui/icons-material/Login';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import SearchIcon from '@mui/icons-material/Search';
 import { useNavigate } from 'react-router-dom';
-import {ThemeContext} from '../../contexts/ThemeContext';
+import { ThemeContext } from '../../contexts/ThemeContext';
+import { isAuthenticated } from '../../utils/auth';
 
 const HamburgerMenuDropdown = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const navigate = useNavigate();
+  const authenticated = isAuthenticated();
   const roleValue = localStorage.getItem('userRole');
   const { toggleTheme } = useContext(ThemeContext);
-
-  console.log({roleValue});
 
   const handleMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -31,6 +34,34 @@ const HamburgerMenuDropdown = () => {
   const handleMenuClose = () => {
     setAnchorEl(null);
   };
+
+  // Guest/Non-authenticated Menu Options
+  const menuOptionsGuest = [
+    { 
+      label: 'Browse Properties', 
+      icon: <SearchIcon />, 
+      action: 'browse-properties',
+      description: 'View all available properties'
+    },
+    { 
+      label: 'Login', 
+      icon: <LoginIcon />, 
+      action: 'login',
+      description: 'Sign in to your account'
+    },
+    { 
+      label: 'Sign Up', 
+      icon: <PersonAddIcon />, 
+      action: 'signup',
+      description: 'Create a new account'
+    },
+    { 
+      label: 'Switch Theme', 
+      icon: <PaletteIcon />, 
+      action: 'theme',
+      description: 'Toggle between light and dark themes'
+    }
+  ];
 
   // Property Owner Menu Options
   // Property owners need to manage their listings, view booking requests, and track performance
@@ -88,6 +119,12 @@ const HamburgerMenuDropdown = () => {
   // User Menu Options  
   // End users need to browse properties, manage favorites, and track their bookings
   const menuOptionsUser = [
+    { 
+      label: 'Browse Properties', 
+      icon: <SearchIcon />, 
+      action: 'browse-properties',
+      description: 'View all available properties'
+    },
     { 
       label: 'Messages', 
       icon: <MessageIcon />, 
@@ -148,6 +185,12 @@ const HamburgerMenuDropdown = () => {
       description: 'Monitor all approved properties'
     },
     { 
+      label: 'Browse Properties', 
+      icon: <SearchIcon />, 
+      action: 'browse-properties',
+      description: 'View properties as users see them'
+    },
+    { 
       label: 'Messages', 
       icon: <MessageIcon />, 
       action: 'messages',
@@ -184,6 +227,20 @@ const HamburgerMenuDropdown = () => {
    */
   const handleMenuItemClick = (action) => {
     switch (action) {
+      // Public browsing - available to all users
+      case 'browse-properties':
+        navigate('/user-allproperties');
+        break;
+      
+      // Authentication actions
+      case 'login':
+        navigate('/login');
+        break;
+      
+      case 'signup':
+        navigate('/signup');
+        break;
+      
       // Property-related navigation
       case 'properties':
         navigate(roleValue === "propertyowner" ? '/myproperties' : '/user-allproperties');
@@ -191,7 +248,11 @@ const HamburgerMenuDropdown = () => {
       
       // Notification handling - routes to role-specific notification pages
       case 'notifications':
-        navigate(roleValue === "propertyowner" ? '/notifications' : '/user-notifications');
+        if (!authenticated) {
+          navigate('/login');
+        } else {
+          navigate(roleValue === "propertyowner" ? '/notifications' : '/user-notifications');
+        }
         break;
 
       // Theme switching - immediate UI change without navigation
@@ -201,7 +262,11 @@ const HamburgerMenuDropdown = () => {
       
       // User-specific navigation
       case 'favourites':
-        navigate('/user-favourites');
+        if (!authenticated) {
+          navigate('/login');
+        } else {
+          navigate('/user-favourites');
+        }
         break;
       
       // Admin-specific navigation - implements our new admin system
@@ -222,15 +287,28 @@ const HamburgerMenuDropdown = () => {
         // Clear all authentication data to ensure complete logout
         localStorage.removeItem('token');
         localStorage.removeItem('userRole');
-        navigate('/login');
+        localStorage.removeItem('tokenExpiry');
+        navigate('/user-home'); // Redirect to public home page after logout
+        break;
+      
+      // Account management
+      case 'account':
+        if (!authenticated) {
+          navigate('/login');
+        } else {
+          navigate('/profile');
+        }
         break;
       
       // Placeholder actions for future implementation
       case 'messages':
       case 'booking-requests':
       case 'transactions':
-      case 'account':
-        console.log(`${action} functionality coming soon`);
+        if (!authenticated) {
+          navigate('/login');
+        } else {
+          navigate('/profile');
+        }
         break;
       
       default:
@@ -245,6 +323,10 @@ const HamburgerMenuDropdown = () => {
    * Dynamic Menu Selection
    */
   const getMenuOptions = () => {
+    if (!authenticated) {
+      return menuOptionsGuest;
+    }
+
     switch (roleValue) {
       case "propertyowner":
         return menuOptionsOwner;
@@ -255,6 +337,7 @@ const HamburgerMenuDropdown = () => {
       default:
         // Fallback for undefined roles - basic options only
         return [
+          { label: 'Browse Properties', icon: <SearchIcon />, action: 'browse-properties' },
           { label: 'Switch Theme', icon: <PaletteIcon />, action: 'theme' },
           { label: 'Logout', icon: <LogoutIcon />, action: 'logout' }
         ];
@@ -274,7 +357,7 @@ const HamburgerMenuDropdown = () => {
         aria-haspopup="true"
         aria-expanded={Boolean(anchorEl)}
       >
-        <MenuIcon sx={{color:"#fff"}} />
+        <MenuIcon sx={{ color: "#fff" }} />
       </IconButton>
 
       {/* Dynamic menu with role-based content */}
@@ -304,14 +387,15 @@ const HamburgerMenuDropdown = () => {
       >
         {/* Role indicator at the top of the menu */}
         <MenuItem disabled sx={{ opacity: 0.6, fontWeight: 'bold' }}>
-          {roleValue === "propertyowner" && "Property Owner"}
-          {roleValue === "user" && "Tenant"}
-          {roleValue === "admin" && "Administrator"}
+          {!authenticated && "Guest User"}
+          {authenticated && roleValue === "propertyowner" && "Property Owner"}
+          {authenticated && roleValue === "user" && "Tenant"}
+          {authenticated && roleValue === "admin" && "Administrator"}
         </MenuItem>
         
         <Divider />
 
-        {/* Dynamic menu items based on user role */}
+        {/* Dynamic menu items based on user role and authentication status */}
         {currentMenuOptions.map((option, index) => (
           <MenuItem 
             key={index} 

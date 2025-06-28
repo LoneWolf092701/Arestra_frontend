@@ -14,12 +14,14 @@ import { isAuthenticated } from './utils/auth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import RoleProtectedRoute from './components/common/RoleProtectedRoute';
 
-// User Pages
+// User Pages - Now public
 import UserHome from './pages/UserPages/UserHome';
 import UserAllProperties from './pages/UserPages/UserAllProperties';
 import UserPropertyViewPage from './pages/UserPages/UserViewProperty';
 import UserBookingPage from "./pages/UserPages/UserBookingPage";
 import UserFavouriteProperties from './pages/UserPages/UserFavouriteProperties';
+
+import ProfilePage from './pages/ProfilePage';
 
 // Admin Pages
 import AdminHome from './pages/AdminPages/AdminHome';
@@ -36,11 +38,48 @@ const AppRoutes = () => {
     <BrowserRouter>
       <Header />
       <Routes>
-        {/* Public Routes - These don't require authentication */}
-        <Route path="/" element={<Navigate to="/login" />} />
+        {/* Public Routes - Redirect root to user home */}
+        <Route path="/" element={<Navigate to="/user-home" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup/>} />
         <Route path="/forgot-password" element={<ForgotPassword/>} />
+
+        {/* Public User Pages - No authentication required */}
+        <Route path="/user-home" element={<UserHome />} />
+        <Route path="/user-allproperties" element={<UserAllProperties />} />
+        <Route path="/user-viewproperty/:id" element={<UserPropertyViewPage />} />
+
+        {/* Booking requires authentication */}
+        <Route
+          path="/user-bookproperty/:id"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={["user"]}>
+                    <UserBookingPage/>
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
+
+        {/* User features that require authentication */}
+        <Route
+          path="/user-favourites"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={["user"]}>
+                    <UserFavouriteProperties/>
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
 
         {/* Property Owner Routes - Protected by role-based access control */}
         <Route
@@ -133,8 +172,7 @@ const AppRoutes = () => {
           }
         />
 
-        {/* Admin Routes - These implement our new admin management system
-            The admin role allows oversight of the entire platform */}
+        {/* Admin Routes */}
         <Route
           path="/admin/home"
           element={
@@ -150,8 +188,6 @@ const AppRoutes = () => {
           }
         />
 
-        {/* This route handles the property review process
-            Admins can see all pending property submissions here */}
         <Route
           path="/admin/new-listings"
           element={
@@ -167,8 +203,6 @@ const AppRoutes = () => {
           }
         />
 
-        {/* This route shows all approved properties for admin management
-            Admins can monitor what users see and remove inappropriate content */}
         <Route
           path="/admin/all-properties"
           element={
@@ -184,78 +218,23 @@ const AppRoutes = () => {
           }
         />
 
-        {/* User Routes - These represent the end-user experience
-            Users only see approved, high-quality property listings */}
+        {/* Profile Route - Available to all authenticated users */}
         <Route
-          path="/user-home"
+          path="/profile"
           element={
             <PrivateRoute
               element={
                 <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['user']}>
-                    <UserHome />
+                  <RoleProtectedRoute allowedRoles={['user', 'propertyowner', 'admin']}>
+                    <ProfilePage />
                   </RoleProtectedRoute>
                 </ProtectedRoute>
               }
             />
           }
-          />
+        />
 
-          <Route
-          path="/user-allproperties"
-          element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['user']}>
-                    <UserAllProperties />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }/>
-          }
-          />
-
-          <Route
-          path="/user-viewproperty/:id"
-          element={
-            <PrivateRoute
-            element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={['user']}>
-                  <UserPropertyViewPage/>
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            }/>
-          }
-          />
-
-          <Route
-          path="/user-bookproperty/:id"
-          element={
-            <PrivateRoute
-            element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={["user"]}>
-                  <UserBookingPage/>
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            }/>
-          }/>
-
-          <Route
-          path="user-favourites"
-          element={
-            <PrivateRoute
-            element={
-              <ProtectedRoute>
-                <RoleProtectedRoute allowedRoles={["user"]}>
-                  <UserFavouriteProperties/>
-                </RoleProtectedRoute>
-              </ProtectedRoute>
-            }/>
-          }/>
-
-        {/* Error Handling Route - This provides user feedback for unauthorized access attempts */}
+        {/* Error Handling Route */}
         <Route path="/unauthorized" element={<div>Unauthorized Access</div>} />
       </Routes>
     </BrowserRouter>
