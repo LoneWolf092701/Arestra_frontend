@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { 
   Container, 
   Grid, 
@@ -17,406 +17,461 @@ import {
   Select, 
   MenuItem,
   Drawer,
-  IconButton
+  IconButton,
+  Chip,
+  Switch,
+  FormControlLabel,
+  Divider,
+  Paper,
+  Alert
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
+import TuneIcon from '@mui/icons-material/Tune';
+import SortIcon from '@mui/icons-material/Sort';
+import ClearIcon from '@mui/icons-material/Clear';
 import { getAllProperties } from '../../api/propertyApi';
 import PropertyGrid from '../../components/common/PropertyGrid';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useNavigate } from 'react-router-dom';
+import { getPropertyStats, getUniqueFilterValues } from '../../utils/PropertyFilterUtils';
 
 const UserAllProperties = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [recommendedProperties, setRecommendedProperties] = useState([]);
   const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
   const [selectedTab, setSelectedTab] = useState(0);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
-  const { theme, isDark } = useTheme();
   
-  // Filter states
+  const [sortBy, setSortBy] = useState('');
+  const [sortOrder, setSortOrder] = useState('desc');
+  
+  const { theme, isDark } = useTheme();
+  const navigate = useNavigate();
+  
   const [filters, setFilters] = useState({
     priceRange: [0, 100000],
     starRating: 0,
     availabilityDate: '',
-    location: ''
+    location: '',
+    bedrooms: 0,
+    bathrooms: 0,
+    requiredAmenities: [],
+    isAvailable: true
   });
 
-  // Applied filters for actual filtering
   const [appliedFilters, setAppliedFilters] = useState({
     priceRange: [0, 100000],
     starRating: 0,
     availabilityDate: '',
-    location: ''
+    location: '',
+    bedrooms: 0,
+    bathrooms: 0,
+    requiredAmenities: [],
+    isAvailable: true
   });
 
-  const propertyTypes = ['All', 'Apartment', 'Villa', 'Flat', 'Room'];
+  const propertyTypes = ['All', 'Apartment', 'Villa', 'Flat', 'Room', 'House'];
+  
+  const sortOptions = [
+    { value: '', label: 'Default' },
+    { value: 'price', label: 'Price' },
+    { value: 'rating', label: 'Rating' },
+    { value: 'date', label: 'Availability Date' },
+    { value: 'newest', label: 'Recently Added' },
+    { value: 'bedrooms', label: 'Bedrooms' },
+    { value: 'popularity', label: 'Popularity' }
+  ];
 
+  const propertyStats = useMemo(() => {
+    return getPropertyStats(properties);
+  }, [properties]);
+
+  const filterOptions = useMemo(() => {
+    if (!properties.length) return { locations: [], amenities: [] };
+    
+    return {
+      locations: getUniqueFilterValues(properties, 'address')
+        .map(addr => {
+          const parts = addr.split(',');
+          return parts[parts.length - 1]?.trim() || addr;
+        })
+        .filter((city, index, arr) => arr.indexOf(city) === index)
+        .slice(0, 20),
+      
+      amenities: properties.reduce((acc, property) => {
+        try {
+          const amenities = JSON.parse(property.amenities || '[]');
+          amenities.forEach(amenity => {
+            if (amenity && !acc.includes(amenity)) {
+              acc.push(amenity);
+            }
+          });
+        } catch (error) {
+          // Handle invalid JSON gracefully
+        }
+        return acc;
+      }, []).slice(0, 15)
+    };
+  }, [properties]);
+
+  // Single API call to fetch all properties - no loops
   useEffect(() => {
     const fetchProperties = async () => {
+      setLoading(true);
+      setError(null);
+      
       try {
         const data = await getAllProperties();
         setProperties(data);
-        setRecommendedProperties(data.slice(0, 6)); // Top 6 properties for recommendations
+        
+        const prices = data.map(p => p.price).filter(p => p > 0);
+        if (prices.length > 0) {
+          const maxPrice = Math.max(...prices);
+          const defaultMax = Math.min(100000, maxPrice);
+          
+          setFilters(prev => ({
+            ...prev,
+            priceRange: [0, defaultMax]
+          }));
+          setAppliedFilters(prev => ({
+            ...prev,
+            priceRange: [0, defaultMax]
+          }));
+        }
+        
       } catch (error) {
         console.error('Error fetching properties:', error);
+        setError('Failed to load properties. Please try again.');
+      } finally {
+        setLoading(false);
       }
     };
+
     fetchProperties();
   }, []);
 
-  const handleSearch = () => {
-    console.log('Searching for properties with query:', searchQuery);
-    // Implement search functionality here
-  };
+  const handleTabChange = useCallback((event, newValue) => {
+    setSelectedTab(newValue);
+    
+    if (newValue === 0) {
+      setAppliedFilters(prev => ({ ...prev, propertyType: '' }));
+    } else {
+      const selectedType = propertyTypes[newValue];
+      setAppliedFilters(prev => ({ ...prev, propertyType: selectedType }));
+    }
+  }, [propertyTypes]);
 
-  const handleFilterChange = (filterName, value) => {
+  const handleSearch = useCallback((event) => {
+    if (event.key === 'Enter') {
+      // The PropertyGrid will handle the search filtering
+      event.preventDefault();
+    }
+  }, []);
+
+  const handleFilterChange = useCallback((filterType, value) => {
     setFilters(prev => ({
       ...prev,
-      [filterName]: value
+      [filterType]: value
     }));
-  };
+  }, []);
 
-  const applyFilters = () => {
+  const applyFilters = useCallback(() => {
     setAppliedFilters({ ...filters });
     setFilterDrawerOpen(false);
-  };
+  }, [filters]);
 
-  const clearFilters = () => {
-    const defaultFilters = {
+  const clearFilters = useCallback(() => {
+    const clearedFilters = {
       priceRange: [0, 100000],
       starRating: 0,
       availabilityDate: '',
-      location: ''
+      location: '',
+      bedrooms: 0,
+      bathrooms: 0,
+      requiredAmenities: [],
+      isAvailable: true
     };
-    setFilters(defaultFilters);
-    setAppliedFilters(defaultFilters);
-  };
+    setFilters(clearedFilters);
+    setAppliedFilters(clearedFilters);
+  }, []);
 
-  const getFilteredPropertiesForTab = () => {
-    const selectedType = propertyTypes[selectedTab];
-    const typeFilter = selectedType === 'All' ? null : selectedType;
-    return typeFilter;
-  };
+  const handleSortChange = useCallback((event) => {
+    setSortBy(event.target.value);
+  }, []);
+
+  const handleSortOrderChange = useCallback((event) => {
+    setSortOrder(event.target.value);
+  }, []);
+
+  const handleAmenityToggle = useCallback((amenity) => {
+    setFilters(prev => ({
+      ...prev,
+      requiredAmenities: prev.requiredAmenities.includes(amenity)
+        ? prev.requiredAmenities.filter(a => a !== amenity)
+        : [...prev.requiredAmenities, amenity]
+    }));
+  }, []);
+
+  const FilterDrawer = () => (
+    <Drawer
+      anchor="right"
+      open={filterDrawerOpen}
+      onClose={() => setFilterDrawerOpen(false)}
+      PaperProps={{
+        sx: { width: { xs: '100%', sm: 400 }, p: 2 }
+      }}
+    >
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6">Filter Properties</Typography>
+        <IconButton onClick={() => setFilterDrawerOpen(false)}>
+          <CloseIcon />
+        </IconButton>
+      </Box>
+
+      <Divider sx={{ mb: 2 }} />
+
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>Price Range</Typography>
+        <Slider
+          value={filters.priceRange}
+          onChange={(e, value) => handleFilterChange('priceRange', value)}
+          valueLabelDisplay="auto"
+          min={0}
+          max={200000}
+          step={1000}
+          valueLabelFormat={(value) => `LKR ${value.toLocaleString()}`}
+        />
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+          <Typography variant="body2">LKR {filters.priceRange[0].toLocaleString()}</Typography>
+          <Typography variant="body2">LKR {filters.priceRange[1].toLocaleString()}</Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>Minimum Rating</Typography>
+        <Rating
+          value={filters.starRating}
+          onChange={(e, value) => handleFilterChange('starRating', value || 0)}
+          size="large"
+        />
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <FormControl fullWidth>
+          <InputLabel>Location</InputLabel>
+          <Select
+            value={filters.location}
+            onChange={(e) => handleFilterChange('location', e.target.value)}
+            label="Location"
+          >
+            <MenuItem value="">All Locations</MenuItem>
+            {filterOptions.locations.map(location => (
+              <MenuItem key={location} value={location}>
+                {location}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <FormControl fullWidth sx={{ mb: 2 }}>
+          <InputLabel>Bedrooms</InputLabel>
+          <Select
+            value={filters.bedrooms}
+            onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
+            label="Bedrooms"
+          >
+            <MenuItem value={0}>Any</MenuItem>
+            <MenuItem value={1}>1+</MenuItem>
+            <MenuItem value={2}>2+</MenuItem>
+            <MenuItem value={3}>3+</MenuItem>
+            <MenuItem value={4}>4+</MenuItem>
+          </Select>
+        </FormControl>
+
+        <FormControl fullWidth>
+          <InputLabel>Bathrooms</InputLabel>
+          <Select
+            value={filters.bathrooms}
+            onChange={(e) => handleFilterChange('bathrooms', e.target.value)}
+            label="Bathrooms"
+          >
+            <MenuItem value={0}>Any</MenuItem>
+            <MenuItem value={1}>1+</MenuItem>
+            <MenuItem value={2}>2+</MenuItem>
+            <MenuItem value={3}>3+</MenuItem>
+            <MenuItem value={4}>4+</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <TextField
+          fullWidth
+          type="date"
+          label="Available From"
+          value={filters.availabilityDate}
+          onChange={(e) => handleFilterChange('availabilityDate', e.target.value)}
+          InputLabelProps={{ shrink: true }}
+        />
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>Amenities</Typography>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          {filterOptions.amenities.map(amenity => (
+            <Chip
+              key={amenity}
+              label={amenity}
+              clickable
+              color={filters.requiredAmenities.includes(amenity) ? 'primary' : 'default'}
+              onClick={() => handleAmenityToggle(amenity)}
+              variant={filters.requiredAmenities.includes(amenity) ? 'filled' : 'outlined'}
+            />
+          ))}
+        </Box>
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={filters.isAvailable}
+              onChange={(e) => handleFilterChange('isAvailable', e.target.checked)}
+            />
+          }
+          label="Available Only"
+        />
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
+        <Button
+          variant="outlined"
+          onClick={clearFilters}
+          startIcon={<ClearIcon />}
+          fullWidth
+        >
+          Clear
+        </Button>
+        <Button
+          variant="contained"
+          onClick={applyFilters}
+          startIcon={<TuneIcon />}
+          fullWidth
+        >
+          Apply Filters
+        </Button>
+      </Box>
+    </Drawer>
+  );
 
   return (
-    <Box sx={{ 
-      background: isDark 
-        ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)`
-        : `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}05 50%, ${theme.background} 100%)`,
-      minHeight: '100vh',
-      pt: 4
-    }}>
-      <Container maxWidth="lg">
-        {/* Hero Search Section */}
-        <Box sx={{ 
-          textAlign: 'center',
-          py: 6,
-          mb: 4,
-          background: isDark 
-            ? `linear-gradient(135deg, ${theme.surfaceBackground} 0%, ${theme.cardBackground} 100%)`
-            : `linear-gradient(135deg, ${theme.primary}10 0%, ${theme.secondary}05 100%)`,
-          borderRadius: 3,
-          border: `1px solid ${theme.border}`
-        }}>
-          <Typography variant="h4" gutterBottom sx={{ 
-            color: theme.textPrimary, 
-            fontWeight: 600,
-            mb: 2
-          }}>
-            Find Your Perfect Place
-          </Typography>
-          
-          <Typography variant="body1" sx={{ 
-            color: theme.textSecondary, 
-            mb: 4,
-            maxWidth: 600,
-            mx: 'auto'
-          }}>
-            Discover thousands of properties available for rent across Sri Lanka
-          </Typography>
+    <Container maxWidth="xl" sx={{ py: 3 }}>
+      <Typography variant="h4" component="h1" sx={{ mb: 3, fontWeight: 'bold' }}>
+        All Properties
+      </Typography>
 
-          {/* Property Type Tabs */}
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            gap: 1, 
-            mb: 4,
-            flexWrap: 'wrap'
-          }}>
-            {propertyTypes.map((type, index) => (
-              <Button
-                key={type}
-                variant={selectedTab === index ? "contained" : "outlined"}
-                onClick={() => setSelectedTab(index)}
-                sx={{
-                  px: 3,
-                  py: 1,
-                  borderRadius: 2,
-                  textTransform: 'none',
-                  fontWeight: selectedTab === index ? 600 : 500,
-                  backgroundColor: selectedTab === index ? theme.primary : 'transparent',
-                  borderColor: theme.primary,
-                  color: selectedTab === index 
-                    ? (isDark ? theme.textPrimary : '#FFFFFF') 
-                    : theme.primary,
-                  '&:hover': {
-                    backgroundColor: selectedTab === index 
-                      ? theme.secondary 
-                      : `${theme.primary}10`,
-                  },
-                  transition: 'all 0.2s ease'
-                }}
-              >
-                {type}
-              </Button>
-            ))}
-          </Box>
+      {propertyStats.total > 0 && (
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>Property Statistics</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="body2" color="text.secondary">Total Properties</Typography>
+              <Typography variant="h6">{propertyStats.total}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="body2" color="text.secondary">Average Price</Typography>
+              <Typography variant="h6">LKR {propertyStats.averagePrice.toLocaleString()}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="body2" color="text.secondary">Average Rating</Typography>
+              <Typography variant="h6">{propertyStats.averageRating.toFixed(1)}</Typography>
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <Typography variant="body2" color="text.secondary">Available Now</Typography>
+              <Typography variant="h6">{propertyStats.availableCount}</Typography>
+            </Grid>
+          </Grid>
+        </Paper>
+      )}
 
-          {/* Search Bar */}
-          <Box sx={{ 
-            display: 'flex', 
-            gap: 2, 
-            maxWidth: 600, 
-            mx: 'auto',
-            alignItems: 'center'
-          }}>
-            <TextField
-              label="Search by location"
-              variant="outlined"
-              fullWidth
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  backgroundColor: theme.inputBackground,
-                  '&:hover': {
-                    backgroundColor: isDark ? theme.surfaceBackground : theme.inputBackground,
-                  },
-                },
-              }}
-              InputProps={{
-                endAdornment: (
-                  <IconButton onClick={handleSearch} sx={{ color: theme.primary }}>
-                    <SearchIcon />
-                  </IconButton>
-                ),
-              }}
-            />
-            
-            <Button
-              variant="outlined"
-              startIcon={<FilterListIcon />}
-              onClick={() => setFilterDrawerOpen(true)}
-              sx={{
-                borderColor: theme.primary,
-                color: theme.primary,
-                '&:hover': {
-                  backgroundColor: `${theme.primary}10`,
-                },
-                py: 1.8,
-                px: 3,
-                whiteSpace: 'nowrap'
-              }}
-            >
-              Filters
-            </Button>
-          </Box>
-        </Box>
-
-        {/* Recommended Properties Section */}
-        <Box sx={{ mb: 6 }}>
-          <Typography variant="h5" gutterBottom sx={{ 
-            color: theme.textPrimary, 
-            fontWeight: 600,
-            mb: 3
-          }}>
-            Latest Listings
-          </Typography>
-          <PropertyGrid 
-            isUserPage={true} 
-            limit={6} 
-            filters={null}
-            appliedFilters={appliedFilters}
-          />
-        </Box>
-
-        {/* All Listings Section */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ 
-            color: theme.textPrimary, 
-            fontWeight: 600,
-            mb: 3
-          }}>
-            All Listings
-          </Typography>
-          <PropertyGrid 
-            isUserPage={true} 
-            filters={getFilteredPropertiesForTab()}
-            appliedFilters={appliedFilters}
-          />
-        </Box>
-
-        {/* Filter Drawer */}
-        <Drawer
-          anchor="right"
-          open={filterDrawerOpen}
-          onClose={() => setFilterDrawerOpen(false)}
-          PaperProps={{
-            sx: {
-              width: 350,
-              backgroundColor: theme.cardBackground,
-              color: theme.textPrimary
-            }
-          }}
+      <Paper sx={{ mb: 3 }}>
+        <Tabs
+          value={selectedTab}
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
-          <Box sx={{ p: 3 }}>
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              mb: 3 
-            }}>
-              <Typography variant="h6" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-                Filters
-              </Typography>
-              <IconButton 
-                onClick={() => setFilterDrawerOpen(false)}
-                sx={{ color: theme.textSecondary }}
-              >
-                <CloseIcon />
-              </IconButton>
-            </Box>
+          {propertyTypes.map((type, index) => (
+            <Tab key={type} label={type} />
+          ))}
+        </Tabs>
+      </Paper>
 
-            {/* Price Range Filter */}
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="subtitle1" gutterBottom sx={{ color: theme.textPrimary }}>
-                Price Range (LKR)
-              </Typography>
-              <Slider
-                value={filters.priceRange}
-                onChange={(event, newValue) => handleFilterChange('priceRange', newValue)}
-                valueLabelDisplay="auto"
-                min={0}
-                max={100000}
-                step={5000}
-                sx={{
-                  color: theme.primary,
-                  '& .MuiSlider-thumb': {
-                    backgroundColor: theme.primary,
-                  },
-                  '& .MuiSlider-track': {
-                    backgroundColor: theme.primary,
-                  },
-                }}
-              />
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-                <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                  LKR {filters.priceRange[0].toLocaleString()}
-                </Typography>
-                <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                  LKR {filters.priceRange[1].toLocaleString()}
-                </Typography>
-              </Box>
-            </Box>
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
+        <TextField
+          fullWidth
+          placeholder="Search properties by location, type, or amenities..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyPress={handleSearch}
+          InputProps={{
+            startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+          }}
+        />
+        
+        <FormControl sx={{ minWidth: 120 }}>
+          <InputLabel>Sort By</InputLabel>
+          <Select value={sortBy} onChange={handleSortChange} label="Sort By">
+            {sortOptions.map(option => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
-            {/* Star Rating Filter */}
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="subtitle1" gutterBottom sx={{ color: theme.textPrimary }}>
-                Minimum Rating
-              </Typography>
-              <Rating
-                value={filters.starRating}
-                onChange={(event, newValue) => handleFilterChange('starRating', newValue || 0)}
-                sx={{
-                  '& .MuiRating-iconFilled': {
-                    color: theme.accent,
-                  },
-                }}
-              />
-            </Box>
+        <FormControl sx={{ minWidth: 100 }}>
+          <InputLabel>Order</InputLabel>
+          <Select value={sortOrder} onChange={handleSortOrderChange} label="Order">
+            <MenuItem value="asc">Ascending</MenuItem>
+            <MenuItem value="desc">Descending</MenuItem>
+          </Select>
+        </FormControl>
 
-            {/* Availability Date Filter */}
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="subtitle1" gutterBottom sx={{ color: theme.textPrimary }}>
-                Available From
-              </Typography>
-              <TextField
-                type="date"
-                fullWidth
-                value={filters.availabilityDate}
-                onChange={(e) => handleFilterChange('availabilityDate', e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    backgroundColor: theme.inputBackground,
-                  },
-                }}
-              />
-            </Box>
+        <Button
+          variant="outlined"
+          onClick={() => setFilterDrawerOpen(true)}
+          startIcon={<FilterListIcon />}
+          sx={{ minWidth: 120 }}
+        >
+          Filters
+        </Button>
+      </Box>
 
-            {/* Location Filter */}
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="subtitle1" gutterBottom sx={{ color: theme.textPrimary }}>
-                Location
-              </Typography>
-              <FormControl fullWidth>
-                <InputLabel sx={{ color: theme.textSecondary }}>Select Location</InputLabel>
-                <Select
-                  value={filters.location}
-                  onChange={(e) => handleFilterChange('location', e.target.value)}
-                  sx={{
-                    backgroundColor: theme.inputBackground,
-                    '& .MuiSelect-select': {
-                      color: theme.textPrimary,
-                    },
-                  }}
-                >
-                  <MenuItem value="">All Locations</MenuItem>
-                  <MenuItem value="colombo">Colombo</MenuItem>
-                  <MenuItem value="kandy">Kandy</MenuItem>
-                  <MenuItem value="galle">Galle</MenuItem>
-                  <MenuItem value="jaffna">Jaffna</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
 
-            {/* Action Buttons */}
-            <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
-              <Button
-                variant="outlined"
-                fullWidth
-                onClick={clearFilters}
-                sx={{
-                  borderColor: theme.textSecondary,
-                  color: theme.textSecondary,
-                  '&:hover': {
-                    backgroundColor: `${theme.textSecondary}10`,
-                  },
-                }}
-              >
-                Clear All
-              </Button>
-              <Button
-                variant="contained"
-                fullWidth
-                onClick={applyFilters}
-                sx={{
-                  backgroundColor: theme.primary,
-                  color: isDark ? theme.textPrimary : '#FFFFFF',
-                  '&:hover': {
-                    backgroundColor: theme.secondary,
-                  },
-                }}
-              >
-                Apply Filters
-              </Button>
-            </Box>
-          </Box>
-        </Drawer>
-      </Container>
-    </Box>
+      <PropertyGrid
+        searchQuery={searchQuery}
+        filters={filters}
+        appliedFilters={appliedFilters}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        isUserPage={true}
+      />
+
+      <FilterDrawer />
+    </Container>
   );
 };
 

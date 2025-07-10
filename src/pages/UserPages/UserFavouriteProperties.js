@@ -12,7 +12,10 @@ import {
   IconButton, 
   Alert,
   Skeleton,
-  Fade
+  Fade,
+  Rating,
+  Chip,
+  CircularProgress
 } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -20,325 +23,294 @@ import HotelIcon from '@mui/icons-material/Hotel';
 import BathtubIcon from '@mui/icons-material/Bathtub';
 import PeopleIcon from '@mui/icons-material/People';
 import ImageNotSupportedIcon from '@mui/icons-material/ImageNotSupported';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import { getFavouriteProperties, setFavouriteStatus } from '../../api/userInteractionApi';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
+import AppSnackbar, { useSnackbar } from '../../components/common/AppSnackbar';
 
 // Helper function for safely parsing JSON
-const safeParse = (str) => {
+const safeParse = (str, defaultValue = {}) => {
   try {
-    return JSON.parse(str);
+    return str ? JSON.parse(str) : defaultValue;
   } catch (error) {
-    return [];
+    return defaultValue;
   }
 };
 
 const UserFavouriteProperties = () => {
   const [favouriteProperties, setFavouriteProperties] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [removingFavorites, setRemovingFavorites] = useState(new Set());
   const navigate = useNavigate();
   const { theme, isDark } = useTheme();
+  const { showSnackbar, snackbarProps } = useSnackbar();
+
+  // Helper function to get image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return '/placeholder-image.jpg';
+    if (imagePath.startsWith('http')) return imagePath;
+    return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${imagePath}`;
+  };
 
   useEffect(() => {
     const fetchFavouriteProperties = async () => {
       setLoading(true);
       setError(null);
       try {
-        const data = await getFavouriteProperties();
-        setFavouriteProperties(data);
+        const response = await getFavouriteProperties();
+        // The backend returns { properties: [...], pagination: {...} }
+        setFavouriteProperties(response.properties || []);
       } catch (error) {
         console.error('Error fetching favourite properties:', error);
-        setError('Failed to load favourite properties. Please try again.');
+        setError(error.message || 'Failed to load favourite properties. Please try again.');
       } finally {
         setLoading(false);
       }
     };
+
     fetchFavouriteProperties();
   }, []);
 
-  const handleRemoveFromFavourites = async (propertyId) => {
+  const handleRemoveFromFavorites = async (propertyId) => {
+    if (removingFavorites.has(propertyId)) return;
+
+    setRemovingFavorites(prev => new Set(prev).add(propertyId));
+
     try {
       await setFavouriteStatus({ property_id: propertyId, isFavourite: false });
-      setFavouriteProperties(prev => prev.filter(property => property.id !== propertyId));
+      
+      // Remove property from the list
+      setFavouriteProperties(prev => 
+        prev.filter(property => property.id !== propertyId)
+      );
+      
+      showSnackbar('Removed from favorites successfully!', 'success');
     } catch (error) {
-      console.error('Error removing from favourites:', error);
+      console.error('Error removing from favorites:', error);
+      showSnackbar('Failed to remove from favorites. Please try again.', 'error');
+    } finally {
+      setRemovingFavorites(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(propertyId);
+        return newSet;
+      });
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
+  const handleViewProperty = (propertyId) => {
+    navigate(`/user-view-property/${propertyId}`);
   };
 
-  // Enhanced No Image Component
-  const NoImagePlaceholder = ({ propertyType }) => (
-    <Box
-      sx={{
-        width: '100%',
-        height: 180,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: theme.surfaceBackground,
-        border: `2px dashed ${theme.border}`,
-        borderRadius: 1,
-      }}
-    >
-      <ImageNotSupportedIcon 
-        sx={{ 
-          fontSize: 48, 
-          color: theme.textDisabled,
-          mb: 1
-        }} 
-      />
-      <Typography 
-        variant="body2" 
-        sx={{ 
-          color: theme.textDisabled,
-          textAlign: 'center',
-          fontWeight: 500
-        }}
-      >
-        No Image Available
-      </Typography>
-      <Typography 
-        variant="caption" 
-        sx={{ 
-          color: theme.textDisabled,
-          textAlign: 'center',
-          mt: 0.5
-        }}
-      >
-        {propertyType}
-      </Typography>
-    </Box>
-  );
-
   const renderPropertyCard = (property, index) => {
-    const amenities = safeParse(property.amenities);
-    const facilities = safeParse(property.facilities);
+    const images = safeParse(property.images, []);
+    const facilities = safeParse(property.facilities, {});
+    const isRemoving = removingFavorites.has(property.id);
 
     return (
-      <Fade in={true} timeout={300 + (index * 100)} key={property.id}>
+      <Fade in={true} timeout={500 + index * 100} key={property.id}>
         <Grid item xs={12} sm={6} md={4}>
           <Card 
             sx={{ 
               height: '100%',
               display: 'flex',
               flexDirection: 'column',
-              backgroundColor: theme.cardBackground,
-              borderRadius: 3,
-              border: `1px solid ${theme.border}`,
-              boxShadow: theme.shadows.light,
-              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              transition: 'all 0.3s ease',
+              cursor: 'pointer',
               position: 'relative',
-              overflow: 'hidden',
-              
               '&:hover': {
-                transform: 'translateY(-8px)',
-                boxShadow: theme.shadows.heavy,
-                borderColor: theme.primary,
-                
-                background: isDark 
-                  ? `linear-gradient(135deg, ${theme.cardBackground} 0%, ${theme.surfaceBackground} 100%)`
-                  : `linear-gradient(135deg, ${theme.cardBackground} 0%, ${theme.primary}05 100%)`,
-                
-                '& .property-image': {
-                  transform: 'scale(1.05)',
-                },
+                transform: 'translateY(-4px)',
+                boxShadow: isDark ? 
+                  `0 8px 25px ${theme.shadowColor}` : 
+                  '0 8px 25px rgba(0,0,0,0.15)',
               },
+              backgroundColor: isDark ? theme.cardBackground : '#FFFFFF',
+              border: `1px solid ${theme.border}`,
             }}
+            onClick={() => handleViewProperty(property.id)}
           >
             {/* Property Image */}
-            <Box sx={{ position: 'relative', overflow: 'hidden' }}>
-              {property.image ? (
+            <Box sx={{ position: 'relative' }}>
+              {images.length > 0 ? (
                 <CardMedia
                   component="img"
-                  height="180"
-                  image={property.image}
-                  alt={property.property_type}
-                  className="property-image"
-                  sx={{
-                    transition: 'transform 0.3s ease',
-                    objectFit: 'cover',
-                  }}
+                  height="200"
+                  image={getImageUrl(images[0])}
+                  alt={`${property.property_type} in ${property.address}`}
+                  sx={{ objectFit: 'cover' }}
                 />
               ) : (
-                <NoImagePlaceholder propertyType={property.property_type} />
-              )}
-              
-              {/* Favourite Button */}
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: 12,
-                  right: 12,
-                  zIndex: 3,
-                }}
-              >
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleRemoveFromFavourites(property.id);
-                  }}
+                <Box
                   sx={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                    color: theme.error,
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 1)',
-                      transform: 'scale(1.1)',
-                    },
-                    transition: 'all 0.2s ease',
+                    height: 200,
+                    backgroundColor: theme.surfaceBackground,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: theme.textDisabled,
                   }}
                 >
-                  <FavoriteIcon />
-                </IconButton>
-              </Box>
+                  <ImageNotSupportedIcon sx={{ fontSize: 40 }} />
+                </Box>
+              )}
               
-              {/* Gradient Overlay */}
-              <Box
+              {/* Favorite Button */}
+              <IconButton
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleRemoveFromFavorites(property.id);
+                }}
+                disabled={isRemoving}
                 sx={{
                   position: 'absolute',
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: '50%',
-                  background: isDark 
-                    ? 'linear-gradient(transparent, rgba(0,0,0,0.7))'
-                    : 'linear-gradient(transparent, rgba(0,0,0,0.3))',
-                  pointerEvents: 'none',
+                  top: 8,
+                  right: 8,
+                  backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 1)',
+                  },
+                  color: 'red',
+                }}
+              >
+                {isRemoving ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  <FavoriteIcon />
+                )}
+              </IconButton>
+
+              {/* Property Type Chip */}
+              <Chip
+                label={property.property_type}
+                size="small"
+                sx={{
+                  position: 'absolute',
+                  bottom: 8,
+                  left: 8,
+                  backgroundColor: theme.primary,
+                  color: isDark ? theme.textPrimary : '#FFFFFF',
+                  fontWeight: 'bold',
                 }}
               />
             </Box>
 
-            {/* Property Information */}
-            <CardContent sx={{ flexGrow: 1, p: 3 }}>
+            {/* Property Details */}
+            <CardContent sx={{ flexGrow: 1, p: 2 }}>
+              {/* Title and Location */}
               <Typography 
                 variant="h6" 
-                component="h3"
-                sx={{
+                sx={{ 
+                  fontWeight: 'bold',
                   color: theme.textPrimary,
-                  fontWeight: 600,
                   mb: 1,
-                  lineHeight: 1.3,
-                }}
-              >
-                {property.property_type} - {property.unit_type}
-              </Typography>
-
-              <Typography 
-                variant="body2" 
-                sx={{
-                  color: theme.textSecondary,
-                  mb: 2,
                   display: '-webkit-box',
                   WebkitLineClamp: 2,
                   WebkitBoxOrient: 'vertical',
                   overflow: 'hidden',
-                  lineHeight: 1.4,
                 }}
               >
-                <strong>Address:</strong> {property.address}
+                {property.property_type} - {property.unit_type}
               </Typography>
-
-              <Typography 
-                variant="body2" 
-                sx={{
-                  color: theme.textSecondary,
-                  mb: 2,
-                }}
-              >
-                <strong>Available:</strong> {formatDate(property.available_from)} – {formatDate(property.available_to)}
-              </Typography>
-
-              {/* Price Information */}
-              {property.price && (
-                <Typography 
-                  variant="h6" 
-                  sx={{
-                    color: theme.primary,
-                    fontWeight: 600,
-                    mb: 2,
-                  }}
-                >
-                  LKR {property.price.toLocaleString()}/month
-                </Typography>
-              )}
-
-              {/* Property Features */}
-              <Box 
-                sx={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  mb: 2,
-                  p: 2,
-                  backgroundColor: isDark ? theme.surfaceBackground : `${theme.primary}05`,
-                  borderRadius: 2,
-                  border: `1px solid ${theme.border}`,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <HotelIcon sx={{ color: theme.primary, fontSize: 20 }} />
-                  <Typography variant="body2" sx={{ color: theme.textPrimary, fontWeight: 500 }}>
-                    {facilities?.Bedroom || 0} Bed
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <BathtubIcon sx={{ color: theme.primary, fontSize: 20 }} />
-                  <Typography variant="body2" sx={{ color: theme.textPrimary, fontWeight: 500 }}>
-                    {facilities?.Bathroom || 0} Bath
-                  </Typography>
-                </Box>
-                
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <PeopleIcon sx={{ color: theme.primary, fontSize: 20 }} />
-                  <Typography variant="body2" sx={{ color: theme.textPrimary, fontWeight: 500 }}>
-                    {safeParse(property.roommates)?.length || 0} Mate
-                  </Typography>
-                </Box>
-              </Box>
-
-              {/* Amenities Preview */}
-              {amenities?.length > 0 && (
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <LocationOnIcon sx={{ color: theme.textSecondary, mr: 0.5, fontSize: 18 }} />
                 <Typography 
                   variant="body2" 
-                  sx={{
+                  sx={{ 
                     color: theme.textSecondary,
-                    fontSize: '0.875rem',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 1,
+                    WebkitBoxOrient: 'vertical',
+                    overflow: 'hidden',
                   }}
                 >
-                  <strong>Amenities:</strong> {amenities.slice(0, 3).join(', ')}
-                  {amenities.length > 3 && ` +${amenities.length - 3} more`}
+                  {property.address}
                 </Typography>
+              </Box>
+
+              {/* Price */}
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <AttachMoneyIcon sx={{ color: theme.primary, mr: 0.5, fontSize: 20 }} />
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    color: theme.primary,
+                  }}
+                >
+                  LKR {parseFloat(property.price || 0).toLocaleString()}/month
+                </Typography>
+              </Box>
+
+              {/* Rating */}
+              {property.rating && property.rating > 0 && (
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Rating 
+                    value={parseFloat(property.rating)} 
+                    readOnly 
+                    size="small" 
+                    precision={0.5}
+                  />
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      ml: 1, 
+                      color: theme.textSecondary 
+                    }}
+                  >
+                    ({property.total_ratings || 0})
+                  </Typography>
+                </Box>
               )}
+
+              {/* Facilities */}
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                {facilities.Bedroom && (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <HotelIcon sx={{ color: theme.textSecondary, mr: 0.5, fontSize: 16 }} />
+                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                      {facilities.Bedroom}
+                    </Typography>
+                  </Box>
+                )}
+                {facilities.Bathroom && (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <BathtubIcon sx={{ color: theme.textSecondary, mr: 0.5, fontSize: 16 }} />
+                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                      {facilities.Bathroom}
+                    </Typography>
+                  </Box>
+                )}
+                {facilities.MaxPeople && (
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <PeopleIcon sx={{ color: theme.textSecondary, mr: 0.5, fontSize: 16 }} />
+                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                      {facilities.MaxPeople}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
             </CardContent>
-            
+
             {/* Action Buttons */}
-            <CardActions sx={{ p: 3, pt: 0 }}>
-              <Button 
-                size="small" 
+            <CardActions sx={{ p: 2, pt: 0 }}>
+              <Button
                 variant="contained"
+                fullWidth
                 startIcon={<VisibilityIcon />}
-                onClick={() => navigate(`/user-viewproperty/${property.id}`)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleViewProperty(property.id);
+                }}
                 sx={{
-                  borderRadius: 2,
-                  textTransform: 'none',
-                  fontWeight: 500,
                   backgroundColor: theme.primary,
                   color: isDark ? theme.textPrimary : '#FFFFFF',
                   '&:hover': {
                     backgroundColor: theme.secondary,
-                    transform: 'translateY(-1px)',
-                    boxShadow: theme.shadows.medium,
                   },
-                  transition: 'all 0.2s ease',
                 }}
-                fullWidth
               >
                 View Details
               </Button>
@@ -349,66 +321,37 @@ const UserFavouriteProperties = () => {
     );
   };
 
-  // Loading state
-  if (loading) {
-    return (
-      <Box sx={{ 
-        background: isDark 
-          ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)`
-          : `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}05 50%, ${theme.background} 100%)`,
-        minHeight: '100vh',
-        py: 4
-      }}>
-        <Container maxWidth="lg">
-          <Typography 
-            variant="h4" 
-            align="center" 
-            gutterBottom
-            sx={{ color: theme.textPrimary, mb: 4 }}
-          >
-            Loading Favourite Properties...
-          </Typography>
-          <Grid container spacing={3}>
-            {[...Array(6)].map((_, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
-                <Card sx={{ backgroundColor: theme.cardBackground, border: `1px solid ${theme.border}` }}>
-                  <Skeleton 
-                    variant="rectangular" 
-                    height={180} 
-                    sx={{ backgroundColor: theme.surfaceBackground }}
-                  />
-                  <CardContent>
-                    <Skeleton 
-                      variant="text" 
-                      height={32} 
-                      sx={{ backgroundColor: theme.surfaceBackground, mb: 1 }}
-                    />
-                    <Skeleton 
-                      variant="text" 
-                      height={20} 
-                      sx={{ backgroundColor: theme.surfaceBackground, mb: 1 }}
-                    />
-                    <Skeleton 
-                      variant="text" 
-                      height={20} 
-                      width="60%" 
-                      sx={{ backgroundColor: theme.surfaceBackground }}
-                    />
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-    );
-  }
+  // Loading skeleton
+  const renderLoadingSkeleton = () => (
+    <Grid container spacing={3}>
+      {[...Array(6)].map((_, index) => (
+        <Grid item xs={12} sm={6} md={4} key={index}>
+          <Card>
+            <Skeleton variant="rectangular" height={200} />
+            <CardContent>
+              <Skeleton variant="text" height={30} />
+              <Skeleton variant="text" height={20} width="60%" />
+              <Skeleton variant="text" height={25} width="40%" />
+              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                <Skeleton variant="text" height={20} width={30} />
+                <Skeleton variant="text" height={20} width={30} />
+                <Skeleton variant="text" height={20} width={30} />
+              </Box>
+            </CardContent>
+            <CardActions>
+              <Skeleton variant="rectangular" height={36} width="100%" />
+            </CardActions>
+          </Card>
+        </Grid>
+      ))}
+    </Grid>
+  );
 
   return (
-    <Box sx={{ 
-      background: isDark 
-        ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)`
-        : `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}05 50%, ${theme.background} 100%)`,
+    <Box sx={{
+      background: isDark ? 
+        `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)` :
+        `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}05 50%, ${theme.background} 100%)`,
       minHeight: '100vh',
       py: 4
     }}>
@@ -455,8 +398,10 @@ const UserFavouriteProperties = () => {
           </Alert>
         )}
 
-        {/* Properties Grid */}
-        {favouriteProperties.length > 0 ? (
+        {/* Content */}
+        {loading ? (
+          renderLoadingSkeleton()
+        ) : favouriteProperties.length > 0 ? (
           <>
             <Typography 
               variant="h6" 
@@ -530,6 +475,9 @@ const UserFavouriteProperties = () => {
             </Button>
           </Box>
         )}
+
+        {/* Snackbar for notifications */}
+        <AppSnackbar {...snackbarProps} />
       </Container>
     </Box>
   );

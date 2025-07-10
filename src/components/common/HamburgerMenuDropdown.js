@@ -1,31 +1,57 @@
-import React, { useState, useContext } from 'react';
-import { Menu, MenuItem, IconButton, Divider, ListItemIcon, ListItemText } from '@mui/material';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Divider,
+  Typography,
+  Box,
+  Badge
+} from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
-import MessageIcon from '@mui/icons-material/Message';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import HomeIcon from '@mui/icons-material/Home';
+import PersonIcon from '@mui/icons-material/Person';
 import FavoriteIcon from '@mui/icons-material/Favorite';
-import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 import LogoutIcon from '@mui/icons-material/Logout';
-import PaletteIcon from '@mui/icons-material/Palette';
+import AddHomeIcon from '@mui/icons-material/AddHome';
+import BusinessIcon from '@mui/icons-material/Business';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import ReviewsIcon from '@mui/icons-material/Reviews';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import RequestPageIcon from '@mui/icons-material/RequestPage';
-import HistoryIcon from '@mui/icons-material/History';
-import LoginIcon from '@mui/icons-material/Login';
-import PersonAddIcon from '@mui/icons-material/PersonAdd';
-import SearchIcon from '@mui/icons-material/Search';
+import PendingActionsIcon from '@mui/icons-material/PendingActions';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import BookmarkIcon from '@mui/icons-material/Bookmark';
+import MessageIcon from '@mui/icons-material/Message';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
 import { useNavigate } from 'react-router-dom';
-import { ThemeContext } from '../../contexts/ThemeContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import { isAuthenticated } from '../../utils/auth';
 
 const HamburgerMenuDropdown = () => {
   const [anchorEl, setAnchorEl] = useState(null);
+  const [notificationCount, setNotificationCount] = useState(0);
   const navigate = useNavigate();
+  const { toggleTheme, isDark } = useTheme();
+  const menuRef = useRef(null);
+
   const authenticated = isAuthenticated();
   const roleValue = localStorage.getItem('userRole');
-  const { toggleTheme } = useContext(ThemeContext);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setAnchorEl(null);
+      }
+    };
+
+    if (anchorEl) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [anchorEl]);
 
   const handleMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -35,218 +61,48 @@ const HamburgerMenuDropdown = () => {
     setAnchorEl(null);
   };
 
-  // Guest/Non-authenticated Menu Options
-  const menuOptionsGuest = [
-    { 
-      label: 'Browse Properties', 
-      icon: <SearchIcon />, 
-      action: 'browse-properties',
-      description: 'View all available properties'
-    },
-    { 
-      label: 'Login', 
-      icon: <LoginIcon />, 
-      action: 'login',
-      description: 'Sign in to your account'
-    },
-    { 
-      label: 'Sign Up', 
-      icon: <PersonAddIcon />, 
-      action: 'signup',
-      description: 'Create a new account'
-    },
-    { 
-      label: 'Switch Theme', 
-      icon: <PaletteIcon />, 
-      action: 'theme',
-      description: 'Toggle between light and dark themes'
-    }
-  ];
-
-  // Property Owner Menu Options
-  // Property owners need to manage their listings, view booking requests, and track performance
-  const menuOptionsOwner = [
-    { 
-      label: 'Messages', 
-      icon: <MessageIcon />, 
-      action: 'messages',
-      description: 'Communication with potential tenants'
-    },
-    { 
-      label: 'Notifications', 
-      icon: <NotificationsIcon />, 
-      action: 'notifications',
-      description: 'Alerts about property inquiries and updates'
-    },
-    { 
-      label: 'Properties', 
-      icon: <HomeIcon />, 
-      action: 'properties',
-      description: 'Manage your property listings'
-    },
-    { 
-      label: 'Booking Request', 
-      icon: <RequestPageIcon />, 
-      action: 'booking-requests',
-      description: 'Review and respond to booking requests'
-    },
-    { 
-      label: 'Transaction History', 
-      icon: <HistoryIcon />, 
-      action: 'transactions',
-      description: 'View payment and booking history'
-    },
-    { 
-      label: 'Account', 
-      icon: <AccountCircleIcon />, 
-      action: 'account',
-      description: 'Manage your account settings'
-    },
-    { 
-      label: 'Switch Theme', 
-      icon: <PaletteIcon />, 
-      action: 'theme',
-      description: 'Toggle between light and dark themes'
-    },
-    { 
-      label: 'Logout', 
-      icon: <LogoutIcon />, 
-      action: 'logout',
-      description: 'Sign out of your account'
-    }
-  ];
-
-  // User Menu Options  
-  // End users need to browse properties, manage favorites, and track their bookings
-  const menuOptionsUser = [
-    { 
-      label: 'Browse Properties', 
-      icon: <SearchIcon />, 
-      action: 'browse-properties',
-      description: 'View all available properties'
-    },
-    { 
-      label: 'Messages', 
-      icon: <MessageIcon />, 
-      action: 'messages',
-      description: 'Chat with property owners'
-    },
-    { 
-      label: 'Notifications', 
-      icon: <NotificationsIcon />, 
-      action: 'notifications',
-      description: 'Important updates and alerts'
-    },
-    { 
-      label: 'Favourites', 
-      icon: <FavoriteIcon />, 
-      action: 'favourites',
-      description: 'Your saved properties'
-    },
-    { 
-      label: 'Account', 
-      icon: <AccountCircleIcon />, 
-      action: 'account',
-      description: 'Manage your profile and preferences'
-    },
-    { 
-      label: 'Switch Theme', 
-      icon: <PaletteIcon />, 
-      action: 'theme',
-      description: 'Customize your viewing experience'
-    },
-    { 
-      label: 'Logout', 
-      icon: <LogoutIcon />, 
-      action: 'logout',
-      description: 'Sign out securely'
-    }
-  ];
-
-  // Admin Menu Options
-  // Admins need comprehensive platform management capabilities
-  const menuOptionsAdmin = [
-    { 
-      label: 'Dashboard', 
-      icon: <AdminPanelSettingsIcon />, 
-      action: 'admin-home',
-      description: 'Admin overview and statistics'
-    },
-    { 
-      label: 'Review New Listings', 
-      icon: <ReviewsIcon />, 
-      action: 'review-listings',
-      description: 'Approve or reject pending property submissions'
-    },
-    { 
-      label: 'All Properties', 
-      icon: <VisibilityIcon />, 
-      action: 'all-properties',
-      description: 'Monitor all approved properties'
-    },
-    { 
-      label: 'Browse Properties', 
-      icon: <SearchIcon />, 
-      action: 'browse-properties',
-      description: 'View properties as users see them'
-    },
-    { 
-      label: 'Messages', 
-      icon: <MessageIcon />, 
-      action: 'messages',
-      description: 'Platform-wide communication management'
-    },
-    { 
-      label: 'Notifications', 
-      icon: <NotificationsIcon />, 
-      action: 'notifications',
-      description: 'System alerts and admin notifications'
-    },
-    { 
-      label: 'Account', 
-      icon: <AccountCircleIcon />, 
-      action: 'account',
-      description: 'Admin account settings'
-    },
-    { 
-      label: 'Switch Theme', 
-      icon: <PaletteIcon />, 
-      action: 'theme',
-      description: 'Interface appearance settings'
-    },
-    { 
-      label: 'Logout', 
-      icon: <LogoutIcon />, 
-      action: 'logout',
-      description: 'Secure admin logout'
-    }
-  ];
-
-  /**
-   * Navigation Handler Function
-   */
   const handleMenuItemClick = (action) => {
+    handleMenuClose();
+    
     switch (action) {
-      // Public browsing - available to all users
-      case 'browse-properties':
-        navigate('/user-allproperties');
+      case 'home':
+        if (!authenticated) {
+          navigate('/user-home');
+        } else {
+          switch (roleValue) {
+            case 'user':
+              navigate('/user-home');
+              break;
+            case 'propertyowner':
+              navigate('/home');
+              break;
+            case 'admin':
+              navigate('/admin/home');
+              break;
+            default:
+              navigate('/user-home');
+          }
+        }
         break;
-      
-      // Authentication actions
-      case 'login':
-        navigate('/login');
-        break;
-      
-      case 'signup':
-        navigate('/signup');
-        break;
-      
-      // Property-related navigation
+
       case 'properties':
-        navigate(roleValue === "propertyowner" ? '/myproperties' : '/user-allproperties');
+        if (!authenticated) {
+          navigate('/user-allproperties');
+        } else {
+          navigate(roleValue === "propertyowner" ? '/myproperties' : '/user-allproperties');
+        }
         break;
       
-      // Notification handling - routes to role-specific notification pages
+      case 'add-property':
+        if (!authenticated) {
+          navigate('/login');
+        } else if (roleValue === "propertyowner") {
+          navigate('/addproperty');
+        } else {
+          navigate('/login');
+        }
+        break;
+      
       case 'notifications':
         if (!authenticated) {
           navigate('/login');
@@ -255,43 +111,60 @@ const HamburgerMenuDropdown = () => {
         }
         break;
 
-      // Theme switching - immediate UI change without navigation
       case 'theme':
         toggleTheme();
         break;
       
-      // User-specific navigation
       case 'favourites':
         if (!authenticated) {
           navigate('/login');
-        } else {
+        } else if (roleValue === 'user') {
           navigate('/user-favourites');
+        } else {
+          navigate('/login');
         }
         break;
       
-      // Admin-specific navigation - implements our new admin system
       case 'admin-home':
-        navigate('/admin/home');
+        if (roleValue === 'admin') {
+          navigate('/admin/home');
+        }
         break;
       
       case 'review-listings':
-        navigate('/admin/new-listings');
+        if (roleValue === 'admin') {
+          navigate('/admin/new-listings');
+        }
         break;
       
       case 'all-properties':
-        navigate('/admin/all-properties');
+        if (roleValue === 'admin') {
+          navigate('/admin/all-properties');
+        }
+        break;
+
+      case 'booking-requests':
+        if (!authenticated) {
+          navigate('/login');
+        } else if (roleValue === "propertyowner") {
+          navigate('/bookings');
+        } else if (roleValue === "user") {
+          navigate('/user-bookings');
+        } else {
+          navigate('/login');
+        }
         break;
       
-      // Security-critical logout functionality
       case 'logout':
-        // Clear all authentication data to ensure complete logout
         localStorage.removeItem('token');
         localStorage.removeItem('userRole');
+        localStorage.removeItem('userId');
         localStorage.removeItem('tokenExpiry');
-        navigate('/user-home'); // Redirect to public home page after logout
+        localStorage.clear();
+        navigate('/user-home');
+        window.location.reload();
         break;
       
-      // Account management
       case 'account':
         if (!authenticated) {
           navigate('/login');
@@ -300,121 +173,292 @@ const HamburgerMenuDropdown = () => {
         }
         break;
       
-      // Placeholder actions for future implementation
       case 'messages':
-      case 'booking-requests':
+        if (!authenticated) {
+          navigate('/login');
+        } else {
+          navigate('/messages');
+        }
+        break;
+        
       case 'transactions':
         if (!authenticated) {
           navigate('/login');
         } else {
-          navigate('/profile');
+          navigate('/transactions');
         }
         break;
       
       default:
-        console.log(`Unhandled menu action: ${action}`);
+        console.warn('Unknown menu action:', action);
     }
-    
-    // Always close the menu after handling the action
-    handleMenuClose();
   };
 
-  /**
-   * Dynamic Menu Selection
-   */
-  const getMenuOptions = () => {
+  const getMenuItems = () => {
+    const baseItems = [
+      {
+        label: 'Home',
+        icon: <HomeIcon />,
+        action: 'home',
+        show: true
+      },
+      {
+        label: 'Theme',
+        icon: isDark ? <Brightness7Icon /> : <Brightness4Icon />,
+        action: 'theme',
+        show: true
+      }
+    ];
+
     if (!authenticated) {
-      return menuOptionsGuest;
+      return [
+        ...baseItems,
+        {
+          label: 'All Properties',
+          icon: <ViewListIcon />,
+          action: 'properties',
+          show: true
+        }
+      ];
     }
 
+    const authenticatedItems = [
+      {
+        label: 'Account',
+        icon: <PersonIcon />,
+        action: 'account',
+        show: true
+      },
+      {
+        label: 'Messages',
+        icon: <MessageIcon />,
+        action: 'messages',
+        show: true
+      },
+      {
+        label: 'Transactions',
+        icon: <AccountBalanceWalletIcon />,
+        action: 'transactions',
+        show: true
+      }
+    ];
+
     switch (roleValue) {
-      case "propertyowner":
-        return menuOptionsOwner;
-      case "user":
-        return menuOptionsUser;
-      case "admin":
-        return menuOptionsAdmin;
-      default:
-        // Fallback for undefined roles - basic options only
+      case 'user':
         return [
-          { label: 'Browse Properties', icon: <SearchIcon />, action: 'browse-properties' },
-          { label: 'Switch Theme', icon: <PaletteIcon />, action: 'theme' },
-          { label: 'Logout', icon: <LogoutIcon />, action: 'logout' }
+          ...baseItems,
+          {
+            label: 'All Properties',
+            icon: <ViewListIcon />,
+            action: 'properties',
+            show: true
+          },
+          {
+            label: 'Favourites',
+            icon: <FavoriteIcon />,
+            action: 'favourites',
+            show: true
+          },
+          {
+            label: 'My Bookings',
+            icon: <BookmarkIcon />,
+            action: 'booking-requests',
+            show: true
+          },
+          {
+            label: 'Notifications',
+            icon: notificationCount > 0 ? (
+              <Badge badgeContent={notificationCount} color="error">
+                <NotificationsIcon />
+              </Badge>
+            ) : (
+              <NotificationsIcon />
+            ),
+            action: 'notifications',
+            show: true
+          },
+          { divider: true },
+          ...authenticatedItems,
+          { divider: true },
+          {
+            label: 'Logout',
+            icon: <LogoutIcon />,
+            action: 'logout',
+            show: true
+          }
+        ];
+
+      case 'propertyowner':
+        return [
+          ...baseItems,
+          {
+            label: 'My Properties',
+            icon: <BusinessIcon />,
+            action: 'properties',
+            show: true
+          },
+          {
+            label: 'Add Property',
+            icon: <AddHomeIcon />,
+            action: 'add-property',
+            show: true
+          },
+          {
+            label: 'Booking Requests',
+            icon: <PendingActionsIcon />,
+            action: 'booking-requests',
+            show: true
+          },
+          {
+            label: 'Notifications',
+            icon: notificationCount > 0 ? (
+              <Badge badgeContent={notificationCount} color="error">
+                <NotificationsIcon />
+              </Badge>
+            ) : (
+              <NotificationsIcon />
+            ),
+            action: 'notifications',
+            show: true
+          },
+          { divider: true },
+          ...authenticatedItems,
+          { divider: true },
+          {
+            label: 'Logout',
+            icon: <LogoutIcon />,
+            action: 'logout',
+            show: true
+          }
+        ];
+
+      case 'admin':
+        return [
+          ...baseItems,
+          {
+            label: 'Admin Dashboard',
+            icon: <AdminPanelSettingsIcon />,
+            action: 'admin-home',
+            show: true
+          },
+          {
+            label: 'Review New Listings',
+            icon: <PendingActionsIcon />,
+            action: 'review-listings',
+            show: true
+          },
+          {
+            label: 'All Properties',
+            icon: <ViewListIcon />,
+            action: 'all-properties',
+            show: true
+          },
+          { divider: true },
+          ...authenticatedItems,
+          { divider: true },
+          {
+            label: 'Logout',
+            icon: <LogoutIcon />,
+            action: 'logout',
+            show: true
+          }
+        ];
+
+      default:
+        return [
+          ...authenticatedItems,
+          { divider: true },
+          {
+            label: 'Logout',
+            icon: <LogoutIcon />,
+            action: 'logout',
+            show: true
+          }
         ];
     }
   };
 
-  const currentMenuOptions = getMenuOptions();
+  const menuItems = getMenuItems();
 
   return (
     <>
-      {/* Menu trigger button with accessible design */}
       <IconButton
         edge="start"
         color="inherit"
         aria-label="menu"
         onClick={handleMenuOpen}
-        aria-haspopup="true"
-        aria-expanded={Boolean(anchorEl)}
+        sx={{ 
+          mr: 2,
+          '&:hover': {
+            backgroundColor: 'rgba(255, 255, 255, 0.1)'
+          }
+        }}
       >
-        <MenuIcon sx={{ color: "#fff" }} />
+        <MenuIcon />
       </IconButton>
-
-      {/* Dynamic menu with role-based content */}
-      <Menu 
-        anchorEl={anchorEl} 
-        open={Boolean(anchorEl)} 
+      
+      <Menu
+        ref={menuRef}
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
         onClose={handleMenuClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
+        PaperProps={{
+          sx: {
+            minWidth: 200,
+            mt: 1,
+            '& .MuiMenuItem-root': {
+              px: 2,
+              py: 1,
+              '&:hover': {
+                backgroundColor: 'action.hover'
+              }
+            }
+          }
         }}
         transformOrigin={{
           vertical: 'top',
-          horizontal: 'right',
+          horizontal: 'left'
         }}
-        PaperProps={{
-          elevation: 3,
-          sx: {
-            minWidth: 220,
-            mt: 1.5,
-            '& .MuiMenuItem-root': {
-              px: 2,
-              py: 1.5,
-            },
-          },
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left'
         }}
       >
-        {/* Role indicator at the top of the menu */}
-        <MenuItem disabled sx={{ opacity: 0.6, fontWeight: 'bold' }}>
-          {!authenticated && "Guest User"}
-          {authenticated && roleValue === "propertyowner" && "Property Owner"}
-          {authenticated && roleValue === "user" && "Tenant"}
-          {authenticated && roleValue === "admin" && "Administrator"}
-        </MenuItem>
-        
-        <Divider />
+        {authenticated && (
+          <>
+            <Box sx={{ px: 2, py: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                {roleValue === 'propertyowner' ? 'Property Owner' : 
+                 roleValue === 'admin' ? 'Administrator' : 'User'}
+              </Typography>
+            </Box>
+            <Divider />
+          </>
+        )}
 
-        {/* Dynamic menu items based on user role and authentication status */}
-        {currentMenuOptions.map((option, index) => (
-          <MenuItem 
-            key={index} 
-            onClick={() => handleMenuItemClick(option.action)}
-            sx={{
-              '&:hover': {
-                backgroundColor: 'action.hover',
-              }
-            }}
-          >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              {option.icon}
-            </ListItemIcon>
-            <ListItemText 
-              primary={option.label}
-              primaryTypographyProps={{ fontSize: '0.875rem' }}
-            />
-          </MenuItem>
-        ))}
+        {menuItems.map((item, index) => {
+          if (item.divider) {
+            return <Divider key={`divider-${index}`} />;
+          }
+
+          if (!item.show) return null;
+
+          return (
+            <MenuItem
+              key={item.action || index}
+              onClick={() => handleMenuItemClick(item.action)}
+              sx={{
+                minHeight: 48,
+                gap: 1
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText primary={item.label} />
+            </MenuItem>
+          );
+        })}
       </Menu>
     </>
   );

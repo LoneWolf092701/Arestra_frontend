@@ -24,7 +24,7 @@ const AddProperty = () => {
   console.log({propertyType});
   console.log(localStorage.getItem('propertyType'));
 
-  // Enhanced property types with detailed descriptions for tooltips
+  // Property types with detailed descriptions for tooltips
   const propertyTypes = [
     { 
       label: 'Apartment', 

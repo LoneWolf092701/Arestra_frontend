@@ -224,7 +224,7 @@ const Login = () => {
                   alignItems: 'center' 
                 }}
               >
-                {/* Username Input with Enhanced Theming */}
+                {/* Username Input with Theming */}
                 <TextField
                   label="Username"
                   variant="outlined"

@@ -184,14 +184,14 @@ const Footer = () => {
         </Box>
 
         {/* Footer Bottom Section */}
-        {/* <Divider 
+        <Divider 
           sx={{ 
             borderColor: isDark ? theme.border : 'rgba(255,255,255,0.2)',
             transition: 'border-color 0.3s ease',
           }} 
-        /> */}
+        />
         
-        {/* <Box
+        <Box
           sx={{
             py: 3,
             display: 'flex',
@@ -239,7 +239,7 @@ const Footer = () => {
               </Link>
             ))}
           </Box>
-        </Box> */}
+        </Box>
       </Container>
     </Box>
   );

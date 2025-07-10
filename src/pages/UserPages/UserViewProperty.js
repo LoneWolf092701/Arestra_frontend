@@ -1,654 +1,1038 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Container,
   Typography,
   Box,
-  Grid,
-  Card,
-  CardMedia,
-  IconButton,
   Button,
+  Card,
+  CardContent,
+  Grid,
+  IconButton,
+  Rating,
+  TextField,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
-  Rating,
-  Alert,
-  Divider
+  Divider,
+  CircularProgress,
+  Skeleton,
+  Paper,
+  Avatar,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Chip,
+  LinearProgress,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import VerifiedUserIcon from '@mui/icons-material/VerifiedUser';
-import HotelIcon from '@mui/icons-material/Hotel';
-import BathtubIcon from '@mui/icons-material/Bathtub';
-import PetsIcon from '@mui/icons-material/Pets';
-import LocalParkingIcon from '@mui/icons-material/LocalParking';
-import WhatsAppIcon from '@mui/icons-material/WhatsApp';
-import CheckIcon from '@mui/icons-material/Check';
-import CloseIcon from '@mui/icons-material/Close';
-import CancelIcon from '@mui/icons-material/Cancel';
-import LoginIcon from '@mui/icons-material/Login';
-import { getPropertyById } from '../../api/propertyApi';
-import { isFavouriteStatus, setFavouriteStatus, submitComplaint } from '../../api/userInteractionApi';
-import { approveProperty, rejectProperty } from '../../api/adminAPI';
+import {
+  Favorite as FavoriteIcon,
+  FavoriteBorder as FavoriteBorderIcon,
+  WhatsApp as WhatsAppIcon,
+  Login as LoginIcon,
+  Send as SendIcon,
+  LocationOn as LocationOnIcon,
+  Bed as BedIcon,
+  Bathtub as BathtubIcon,
+  Home as HomeIcon,
+  People as PeopleIcon,
+  Person as PersonIcon,
+  CalendarToday as CalendarIcon,
+  AttachMoney as MoneyIcon,
+  SquareFoot as SquareFootIcon,
+  Visibility as VisibilityIcon,
+  Star as StarIcon,
+  StarBorder as StarBorderIcon,
+  Event as EventIcon,
+  Description as DescriptionIcon,
+  ExpandMore as ExpandMoreIcon,
+  VerifiedUser as VerifiedUserIcon,
+  AccessTime as AccessTimeIcon,
+  Assignment as AssignmentIcon
+} from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
-import AppSnackbar from '../../components/common/AppSnackbar';
+import { getPropertyById, incrementPropertyViews } from '../../api/propertyApi';
+import { 
+  setFavouriteStatus, 
+  isFavouriteStatus, 
+  submitComplaint,
+  submitPropertyRating,
+  getPropertyRating 
+} from '../../api/userInteractionApi';
 import { isAuthenticated } from '../../utils/auth';
+import { useTheme } from '../../contexts/ThemeContext';
+import AppSnackbar, { useSnackbar } from '../../components/common/AppSnackbar';
 
-// Helper function to format ISO dates to yyyy-MM-dd for date inputs.
-const formatDateForInput = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  const year = date.getFullYear();
-  const month = (`0${date.getMonth() + 1}`).slice(-2);
-  const day = (`0${date.getDate()}`).slice(-2);
-  return `${year}-${month}-${day}`;
-};
-
-// Popup Component for Rules, Contract Details & Cancellation Policy
-const InfoPopup = ({ open, onClose, title, content }) => (
-  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle>{title}</DialogTitle>
-    <DialogContent dividers>
-      <Typography variant="body2">{content || 'No details provided.'}</Typography>
-    </DialogContent>
-    <DialogActions>
-      <Button onClick={onClose} variant="contained" color="primary">
-        Close
-      </Button>
-    </DialogActions>
-  </Dialog>
-);
-
-// Admin Rejection Dialog Component
-const RejectionDialog = ({ open, onClose, onConfirm, loading }) => {
-  const [rejectionReason, setRejectionReason] = useState('');
-
-  const handleConfirm = () => {
-    if (rejectionReason.trim()) {
-      onConfirm(rejectionReason);
-      setRejectionReason('');
-    }
-  };
-
-  const handleClose = () => {
-    setRejectionReason('');
-    onClose();
-  };
-
-  return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Reject Property Listing</DialogTitle>
-      <DialogContent>
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          This property will be rejected and the owner will be notified with your reason.
-        </Alert>
-        <TextField
-          fullWidth
-          multiline
-          rows={4}
-          label="Rejection Reason"
-          value={rejectionReason}
-          onChange={(e) => setRejectionReason(e.target.value)}
-          placeholder="Please provide a clear reason for rejecting this property..."
-          required
-          sx={{ mt: 2 }}
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose} color="inherit">
-          Cancel
-        </Button>
-        <Button 
-          onClick={handleConfirm} 
-          color="error" 
-          variant="contained"
-          disabled={!rejectionReason.trim() || loading}
-        >
-          {loading ? 'Rejecting...' : 'Reject Property'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
-// Login Required Dialog Component
 const LoginRequiredDialog = ({ open, onClose, onLogin, action }) => (
   <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle>Login Required</DialogTitle>
+    <DialogTitle sx={{ textAlign: 'center', pb: 1 }}>
+      Login Required
+    </DialogTitle>
     <DialogContent>
       <Box sx={{ textAlign: 'center', py: 2 }}>
-        <LoginIcon sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
+        <LoginIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
         <Typography variant="h6" gutterBottom>
-          Please log in to {action}
+          Please login to {action}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          You need to be logged in to access this feature. Don't worry, you'll be brought back to this property after logging in.
+          Don't worry, you'll be brought back to this property after logging in.
         </Typography>
       </Box>
     </DialogContent>
-    <DialogActions sx={{ justifyContent: 'center', pb: 3 }}>
-      <Button onClick={onClose} color="inherit">
-        Cancel
-      </Button>
-      <Button onClick={onLogin} variant="contained" startIcon={<LoginIcon />}>
+    <DialogActions>
+      <Button onClick={onClose}>Cancel</Button>
+      <Button variant="contained" onClick={onLogin}>
         Login
       </Button>
     </DialogActions>
   </Dialog>
 );
 
-const UserPropertyViewPage = () => {
+const UserViewProperty = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { theme, isDark } = useTheme();
+  const { showSnackbar, snackbarProps } = useSnackbar();
+
+  // Property and user state
   const [property, setProperty] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // User interaction states
   const [isFavourite, setIsFavourite] = useState(false);
-  const [popupOpen, setPopupOpen] = useState(false);
-  const [bookingDateFrom, setBookingDateFrom] = useState('');
-  const [bookingDateTo, setBookingDateTo] = useState('');
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [userRating, setUserRating] = useState(0);
+  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  
+  // Booking states
+  const [checkInDate, setCheckInDate] = useState('');
+  const [checkOutDate, setCheckOutDate] = useState('');
+  
+  // UI states
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [complaintText, setComplaintText] = useState('');
-  const [popupTitle, setPopupTitle] = useState('');
-  const [popupContent, setPopupContent] = useState('');
+  const [complaintSubmitting, setComplaintSubmitting] = useState(false);
   const [loginRequiredDialogOpen, setLoginRequiredDialogOpen] = useState(false);
   const [loginAction, setLoginAction] = useState('');
-  
-  // Check authentication and user role
+
+  // Authentication checks
   const authenticated = isAuthenticated();
   const userRole = localStorage.getItem('userRole');
-  const isAdmin = userRole === 'admin';
   const isUser = userRole === 'user';
-  
-  // Admin-specific states
-  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [snackbarOpen, setSnackbarOpen] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState('');
 
+  // Helper function to get image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return '/placeholder-image.jpg';
+    if (imagePath.startsWith('http')) return imagePath;
+    return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${imagePath}`;
+  };
+
+  // Parse JSON safely
+  const safeParse = (jsonString, defaultValue = {}) => {
+    try {
+      return jsonString ? JSON.parse(jsonString) : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  };
+
+  // Format date for display
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Not specified';
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch {
+      return 'Invalid date';
+    }
+  };
+
+  // Format relative time (for created_at)
+  const formatRelativeTime = (dateString) => {
+    if (!dateString) return 'Unknown';
+    try {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffInDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
+      
+      if (diffInDays === 0) return 'Today';
+      if (diffInDays === 1) return 'Yesterday';
+      if (diffInDays < 30) return `${diffInDays} days ago`;
+      if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} months ago`;
+      return `${Math.floor(diffInDays / 365)} years ago`;
+    } catch {
+      return 'Unknown';
+    }
+  };
+
+  // Memoized property details
+  const facilities = useMemo(() => safeParse(property?.facilities), [property]);
+  const amenities = useMemo(() => safeParse(property?.amenities, []), [property]);
+  const images = useMemo(() => safeParse(property?.images, []), [property]);
+  const ratingDistribution = useMemo(() => safeParse(property?.rating_distribution), [property]);
+  const roommates = useMemo(() => safeParse(property?.roommates), [property]);
+  const rules = useMemo(() => safeParse(property?.rules, []), [property]);
+  const billsInclusive = useMemo(() => safeParse(property?.bills_inclusive, []), [property]);
+
+  // Fetch property data and user interactions
   useEffect(() => {
-    const fetchPropertyDetails = async () => {
+    const fetchPropertyData = async () => {
+      if (!id || isNaN(id)) {
+        setError('Invalid property ID');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
       try {
-        const data = await getPropertyById(id);
+        const propertyData = await getPropertyById(id);
+        setProperty(propertyData);
         
-        // Only fetch favourite status for authenticated users
+        // Increment view count
+        await incrementPropertyViews(id);
+        
+        // Check favorite status if user is authenticated
         if (authenticated && isUser) {
-          const isFavouriteData = await isFavouriteStatus({ property_id: id });
-          setIsFavourite(isFavouriteData.isFavourite);
+          try {
+            const favStatus = await isFavouriteStatus({ property_id: parseInt(id) });
+            setIsFavourite(favStatus.isFavourite || false);
+          } catch (error) {
+            console.error('Error checking favorite status:', error);
+            setIsFavourite(false);
+          }
         }
         
-        // Assume data is an array and we take the first item.
-        if (data && data.length > 0) {
-          const propertyData = data[0];
-          setProperty(propertyData);
-          // Set the booking dates to the already booked dates from the API.
-          setBookingDateFrom(formatDateForInput(propertyData.available_from));
-          setBookingDateTo(formatDateForInput(propertyData.available_to));
+        // Load user's rating if authenticated
+        if (authenticated && isUser) {
+          try {
+            const ratingData = await getPropertyRating({ property_id: parseInt(id) });
+            if (ratingData && ratingData.rating !== null) {
+              setUserRating(ratingData.rating);
+            }
+          } catch (error) {
+            console.error('Error loading user rating:', error);
+            setUserRating(0);
+          }
         }
+        
       } catch (error) {
-        console.error('Error fetching property details:', error);
+        console.error('Error fetching property:', error);
+        setError('Failed to load property details. Please try again.');
+      } finally {
+        setLoading(false);
       }
     };
-    fetchPropertyDetails();
+
+    fetchPropertyData();
   }, [id, authenticated, isUser]);
 
-  const handleLoginRequired = (action) => {
-    setLoginAction(action);
-    setLoginRequiredDialogOpen(true);
-  };
+  // Calculate rating statistics for detailed display
+ const ratingStats = useMemo(() => {
+  // First, check if we have valid rating data
+  if (!ratingDistribution || !property?.total_ratings) {
+    return { breakdown: [], hasRatings: false };
+  }
 
-  const handleLoginRedirect = () => {
-    // Store the current URL to return after login
-    const returnUrl = encodeURIComponent(window.location.pathname);
-    navigate(`/login?returnUrl=${returnUrl}`);
-  };
+  const totalRatings = parseInt(property.total_ratings) || 0;
+  
+  // If no total ratings, return empty state
+  if (totalRatings === 0) {
+    return { breakdown: [], hasRatings: false };
+  }
+  console.log('Rating Distribution:', ratingDistribution);
 
-  const handleFavouriteToggle = async () => {
+  // Create the breakdown array with proper data conversion
+  // Note: We're handling the database field names exactly as they come
+  const breakdown = [
+    { 
+      stars: 5, 
+      count: parseInt(ratingDistribution.five_star) || 0,
+      label: 'five_star'
+    },
+    { 
+      stars: 4, 
+      count: parseInt(ratingDistribution.four_star) || 0,
+      label: 'four_star'
+    },
+    { 
+      stars: 3, 
+      count: parseInt(ratingDistribution.three_star) || 0,
+      label: 'three_star'
+    },
+    { 
+      stars: 2, 
+      count: parseInt(ratingDistribution.two_star) || 0,
+      label: 'two_star'
+    },
+    { 
+      stars: 1, 
+      count: parseInt(ratingDistribution.one_star) || 0,
+      label: 'one_star'
+    }
+  ].map(item => ({
+    ...item,
+    // Calculate percentage with proper rounding
+    percentage: totalRatings > 0 ? Math.round((item.count / totalRatings) * 100) : 0
+  }));
+
+  console.log('Rating Breakdown:', breakdown);
+
+  // Debug logging to help troubleshoot (remove in production)
+  console.log('Rating Distribution Debug:', {
+    totalRatings,
+    ratingDistribution,
+    breakdown
+  });
+
+  return { breakdown, hasRatings: totalRatings > 0 };
+}, [ratingDistribution, property?.total_ratings, property]);
+
+  const handleFavouriteToggle = useCallback(async () => {
     if (!authenticated) {
-      handleLoginRequired('add to favourites');
+      setLoginAction('add properties to favorites');
+      setLoginRequiredDialogOpen(true);
       return;
     }
 
     if (!isUser) {
-      setSnackbarMessage('Only users can add properties to favourites');
-      setSnackbarOpen(true);
+      showSnackbar('Only users can add properties to favorites', 'warning');
       return;
     }
 
+    if (favoriteLoading) return;
+
+    setFavoriteLoading(true);
+    const originalStatus = isFavourite;
     const newStatus = !isFavourite;
+    
+    // Optimistically update UI
     setIsFavourite(newStatus);
+
     try {
-      await setFavouriteStatus({ property_id: property.id, isFavourite: newStatus });
+      await setFavouriteStatus({ property_id: parseInt(id), isFavourite: newStatus });
+      showSnackbar(
+        newStatus ? 'Added to favorites!' : 'Removed from favorites',
+        'success'
+      );
+      
     } catch (error) {
       console.error('Error updating favourite status:', error);
-      // Optionally revert UI if API call fails.
-      setIsFavourite(!newStatus);
+      
+      // Revert on error
+      setIsFavourite(originalStatus);
+      showSnackbar('Failed to update favorites. Please try again.', 'error');
+    } finally {
+      setFavoriteLoading(false);
     }
-  };
+  }, [authenticated, isUser, isFavourite, favoriteLoading, id, showSnackbar]);
 
-  const openDetailsPopup = (title, content) => {
-    setPopupTitle(title);
-    setPopupContent(content);
-    setPopupOpen(true);
-  };
-
-  const closeDetailsPopup = () => {
-    setPopupOpen(false);
-  };
-
-  const handleBook = () => {
+  const handleRatingSubmit = useCallback(async () => {
     if (!authenticated) {
-      handleLoginRequired('book this property');
+      setLoginAction('rate properties');
+      setLoginRequiredDialogOpen(true);
       return;
     }
 
     if (!isUser) {
-      setSnackbarMessage('Only users can book properties');
-      setSnackbarOpen(true);
+      showSnackbar('Only users can rate properties', 'warning');
       return;
     }
 
-    // Navigate to booking page
-    navigate(`/user-bookproperty/${property.id}`);
-  };
-
-  const handleWhatsApp = () => {
-    const phone = '1234567890'; // Landlord's phone number
-    const text = encodeURIComponent(`Hello, I am interested in your property: ${property.property_type} - ${property.unit_type}`);
-    window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
-  };
-
-  const handleSendComplaint = async () => {
-    if (!authenticated) {
-      handleLoginRequired('send a complaint');
+    if (userRating === 0) {
+      showSnackbar('Please select a rating', 'warning');
       return;
     }
 
-    if (!isUser) {
-      setSnackbarMessage('Only users can send complaints');
-      setSnackbarOpen(true);
-      return;
-    }
+    setRatingSubmitting(true);
 
     try {
-      await submitComplaint({ property_id: property.id, complaint: complaintText });
-      setSnackbarMessage('Complaint sent successfully!');
-      setSnackbarOpen(true);
+      const response = await submitPropertyRating(parseInt(id), {
+        rating: userRating
+      });
+      
+      showSnackbar(
+        response.is_update ? 'Rating updated successfully!' : 'Rating submitted successfully!', 
+        'success'
+      );
+      
+      // Update property rating display if response includes updated property rating
+      if (property && response.property_rating) {
+        const updatedProperty = {
+          ...property,
+          rating: parseFloat(response.property_rating.average),
+          total_ratings: response.property_rating.total_count
+        };
+        setProperty(updatedProperty);
+      }
+      
+    } catch (error) {
+      console.error('Error submitting rating:', error);
+      showSnackbar(error.message || 'Failed to submit rating. Please try again.', 'error');
+    } finally {
+      setRatingSubmitting(false);
+    }
+  }, [authenticated, isUser, userRating, id, property, showSnackbar]);
+
+  const handleComplaintSubmit = useCallback(async () => {
+    if (!authenticated) {
+      setLoginAction('report issues');
+      setLoginRequiredDialogOpen(true);
+      return;
+    }
+
+    if (!complaintText.trim()) {
+      showSnackbar('Please enter a complaint message', 'warning');
+      return;
+    }
+
+    if (complaintText.trim().length < 10) {
+      showSnackbar('Complaint must be at least 10 characters long', 'warning');
+      return;
+    }
+
+    setComplaintSubmitting(true);
+
+    try {
+      await submitComplaint(parseInt(id), complaintText.trim());
+      showSnackbar('Complaint submitted successfully!', 'success');
       setComplaintText('');
-    } catch (error) {
-      console.error('Error sending complaint:', error);
-      setSnackbarMessage('Failed to send complaint.');
-      setSnackbarOpen(true);
-    }
-  };
-
-  // Admin functions
-  const handleApproveProperty = async () => {
-    setAdminLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      await approveProperty(property.id, token);
-      setSnackbarMessage('Property approved successfully!');
-      setSnackbarOpen(true);
+      setReportDialogOpen(false);
       
-      // Navigate back to admin listings or refresh property data
-      setTimeout(() => {
-        navigate('/admin/new-listings');
-      }, 2000);
     } catch (error) {
-      console.error('Error approving property:', error);
-      setSnackbarMessage('Error approving property');
-      setSnackbarOpen(true);
+      console.error('Error submitting complaint:', error);
+      showSnackbar(error.message || 'Failed to submit complaint. Please try again.', 'error');
     } finally {
-      setAdminLoading(false);
+      setComplaintSubmitting(false);
+    }
+  }, [authenticated, complaintText, id, showSnackbar]);
+
+  const handleBookingRequest = () => {
+    if (!authenticated) {
+      setLoginAction('book properties');
+      setLoginRequiredDialogOpen(true);
+      return;
+    }
+
+    if (!isUser) {
+      showSnackbar('Only users can book properties', 'warning');
+      return;
+    }
+
+    // Navigate to booking page with property ID and dates
+    const bookingUrl = `/user-bookproperty/${id}`;
+    if (checkInDate && checkOutDate) {
+      navigate(`${bookingUrl}?checkIn=${checkInDate}&checkOut=${checkOutDate}`);
+    } else {
+      navigate(bookingUrl);
     }
   };
 
-  const handleRejectProperty = async (rejectionReason) => {
-    setAdminLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      await rejectProperty(property.id, rejectionReason, token);
-      setSnackbarMessage('Property rejected successfully');
-      setSnackbarOpen(true);
-      setRejectionDialogOpen(false);
-      
-      // Navigate back to admin listings
-      setTimeout(() => {
-        navigate('/admin/new-listings');
-      }, 2000);
-    } catch (error) {
-      console.error('Error rejecting property:', error);
-      setSnackbarMessage('Error rejecting property');
-      setSnackbarOpen(true);
-    } finally {
-      setAdminLoading(false);
+  const handleWhatsAppContact = () => {
+    if (property?.phone) {
+      const phoneNumber = property.phone.replace(/[^0-9]/g, '');
+      const message = `Hi! I'm interested in your property: ${property.property_type} - ${property.unit_type} at ${property.address}. Can we discuss more details?`;
+      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+    } else {
+      showSnackbar('Contact number not available', 'warning');
     }
   };
 
-  const handleCancelAdmin = () => {
-    navigate('/admin/new-listings');
+  const handleLoginRequired = () => {
+    localStorage.setItem('redirectAfterLogin', window.location.pathname);
+    navigate('/login');
   };
 
-  const handleSnackbarClose = () => {
-    setSnackbarOpen(false);
-  };
+  // Get today's date for minimum date validation
+  const today = new Date().toISOString().split('T')[0];
 
+  // Loading state
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Grid container spacing={4}>
+          <Grid item xs={12} md={8}>
+            <Skeleton variant="rectangular" height={400} sx={{ mb: 2 }} />
+            <Skeleton variant="text" height={40} />
+            <Skeleton variant="text" height={30} />
+            <Skeleton variant="text" height={100} />
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <Skeleton variant="rectangular" height={300} />
+          </Grid>
+        </Grid>
+      </Container>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
+        <Typography variant="h5" color="error" gutterBottom>
+          {error}
+        </Typography>
+        <Button variant="contained" onClick={() => navigate(-1)}>
+          Go Back
+        </Button>
+      </Container>
+    );
+  }
+
+  // Property not found
   if (!property) {
     return (
-      <Typography variant="h4" align="center" gutterBottom>
-        Loading...
-      </Typography>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
+        <Typography variant="h5" gutterBottom>
+          Property not found
+        </Typography>
+        <Button variant="contained" onClick={() => navigate(-1)}>
+          Go Back
+        </Button>
+      </Container>
     );
   }
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      {/* Admin Controls Section */}
-      {authenticated && isAdmin && (
-        <Box sx={{ mb: 4, p: 3, backgroundColor: 'background.paper', borderRadius: 2, boxShadow: 1 }}>
-          <Typography variant="h6" gutterBottom color="primary">
-            Admin Controls
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Review this property listing and take appropriate action.
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-            <Button
-              variant="contained"
-              color="success"
-              startIcon={<CheckIcon />}
-              onClick={handleApproveProperty}
-              disabled={adminLoading}
-            >
-              {adminLoading ? 'Approving...' : 'Approve'}
-            </Button>
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={<CloseIcon />}
-              onClick={() => setRejectionDialogOpen(true)}
-              disabled={adminLoading}
-            >
-              Reject
-            </Button>
-            <Button
-              variant="outlined"
-              color="inherit"
-              startIcon={<CancelIcon />}
-              onClick={handleCancelAdmin}
-              disabled={adminLoading}
-            >
-              Cancel
-            </Button>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Grid container spacing={4}>
+        {/* Main Content */}
+        <Grid item xs={12} md={8}>
+          {/* Property Images */}
+          <Box sx={{ mb: 3 }}>
+            {images.length > 0 ? (
+              <Box
+                component="img"
+                src={getImageUrl(images[0])}
+                alt={`${property.property_type} in ${property.address}`}
+                sx={{
+                  width: '100%',
+                  height: 400,
+                  objectFit: 'cover',
+                  borderRadius: 2
+                }}
+              />
+            ) : (
+              <Box
+                sx={{
+                  width: '100%',
+                  height: 400,
+                  bgcolor: 'grey.200',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: 2,
+                  border: '2px dashed',
+                  borderColor: 'grey.400'
+                }}
+              >
+                <Typography variant="h6" color="text.secondary">
+                  No images available
+                </Typography>
+              </Box>
+            )}
           </Box>
-        </Box>
-      )}
 
-      {/* Property Details Section */}
-      {/* Title, Favourite & Rating */}
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-        <Typography variant="h4">
-          {property.property_type} - {property.unit_type}
-        </Typography>
-        {/* Show favourite and rating only for authenticated users or as disabled for guests */}
-        <Box display="flex" alignItems="center">
-          <IconButton 
-            onClick={handleFavouriteToggle} 
-            color="error"
-            disabled={!authenticated || !isUser}
-          >
-            {isFavourite ? <FavoriteIcon /> : <FavoriteBorderIcon />}
-          </IconButton>
-          <Rating name="read-only" value={property.rating || 0} readOnly />
-        </Box>
-      </Box>
+          {/* Property Title and Details */}
+          <Box sx={{ mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                  <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+                    {property.property_type} - {property.unit_type}
+                  </Typography>
+                  {property.featured === 1 && (
+                    <Chip
+                      icon={<VerifiedUserIcon />}
+                      label="Featured"
+                      color="primary"
+                      variant="outlined"
+                      size="small"
+                    />
+                  )}
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <LocationOnIcon sx={{ color: 'text.secondary', mr: 1 }} />
+                  <Typography variant="body1" color="text.secondary">
+                    {property.address}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Rating value={parseFloat(property.rating) || 0} readOnly precision={0.5} />
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                      ({property.total_ratings || 0} reviews)
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <VisibilityIcon sx={{ color: 'text.secondary', mr: 0.5, fontSize: 18 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      {property.views_count || 0} views
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <AccessTimeIcon sx={{ color: 'text.secondary', mr: 0.5, fontSize: 18 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      Listed {formatRelativeTime(property.created_at)}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Box>
+              
+              {authenticated && isUser && (
+                <IconButton
+                  onClick={handleFavouriteToggle}
+                  disabled={favoriteLoading}
+                  sx={{ 
+                    color: isFavourite ? 'red' : 'grey.400',
+                    '&:hover': { color: 'red' }
+                  }}
+                >
+                  {favoriteLoading ? (
+                    <CircularProgress size={24} />
+                  ) : isFavourite ? (
+                    <FavoriteIcon />
+                  ) : (
+                    <FavoriteBorderIcon />
+                  )}
+                </IconButton>
+              )}
+            </Box>
 
-      {/* Address & Verification */}
-      <Box display="flex" alignItems="center" mb={2}>
-        <Typography variant="subtitle1" color="textSecondary">
-          {property.address || 'Address not provided'}
-        </Typography>
-        <Box ml={2} display="flex" alignItems="center">
-          <VerifiedUserIcon color="primary" />
-          <Typography variant="subtitle2" ml={0.5}>
-            Trusted landlord
-          </Typography>
-        </Box>
-      </Box>
+            <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 3 }}>
+              LKR {parseFloat(property.price || 0).toLocaleString()}.00
+            </Typography>
 
-      {/* Images Grid */}
-      {property.images && property.images.length > 0 ? (
-        <Grid container spacing={1} mb={2}>
-          {property.images.map((img, index) => (
-            <Grid item xs={6} sm={4} key={index}>
-              <CardMedia component="img" image={img} alt={`Property image ${index + 1}`} />
+            {/* Additional Property Description */}
+            {property.other_facility && (
+              <Box sx={{ mb: 3 }}>
+                <Card sx={{ p: 2, bgcolor: 'primary', color: 'white' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <DescriptionIcon sx={{ mr: 1 }} />
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      Property Highlights
+                    </Typography>
+                  </Box>
+                  <Typography variant="body1">
+                    {property.other_facility}
+                  </Typography>
+                </Card>
+              </Box>
+            )}
+
+            {/* Property Features Grid */}
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+              <Grid item xs={3}>
+                <Box sx={{ textAlign: 'center' }}>
+                  <BedIcon sx={{ fontSize: 32, color: 'primary.main', mb: 1 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {facilities.Bedroom || 'N/A'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Bedrooms
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={3}>
+                <Box sx={{ textAlign: 'center' }}>
+                  <BathtubIcon sx={{ fontSize: 32, color: 'primary.main', mb: 1 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {facilities.Bathroom || 'N/A'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Bathrooms
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={3}>
+                <Box sx={{ textAlign: 'center' }}>
+                  <SquareFootIcon sx={{ fontSize: 32, color: 'primary.main', mb: 1 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    N/A
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Sq Ft
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={3}>
+                <Box sx={{ textAlign: 'center' }}>
+                  <PeopleIcon sx={{ fontSize: 32, color: 'primary.main', mb: 1 }} />
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {facilities.MaxPeople || 'N/A'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Max Guests
+                  </Typography>
+                </Box>
+              </Grid>
             </Grid>
-          ))}
-        </Grid>
-      ) : (
-        <CardMedia
-          component="img"
-          height="200"
-          image="https://via.placeholder.com/600x400"
-          alt="Placeholder"
-          sx={{ mb: 2 }}
-        />
-      )}
 
-      {/* Price */}
-      <Typography variant="h5" color="primary" mb={2}>
-        Starting at ${property.price_range ? property.price_range[0] : 'N/A'}
-      </Typography>
+            {/* Availability and Contract Information */}
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+              <Grid item xs={12} md={6}>
+                <Card sx={{ p: 2, height: '100%' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <EventIcon sx={{ color: 'primary.main', mr: 1 }} />
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      Availability
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Available from: {formatDate(property.available_from)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Available until: {formatDate(property.available_to)}
+                  </Typography>
+                </Card>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Card sx={{ p: 2, height: '100%' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <AssignmentIcon sx={{ color: 'primary.main', mr: 1 }} />
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      Contract Terms
+                    </Typography>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    {property.contract_policy || 'Contact owner for lease terms'}
+                  </Typography>
+                </Card>
+              </Grid>
+            </Grid>
 
-      {/* 4 Cards for Details */}
-      <Grid container spacing={2} mb={2}>
-        <Grid item xs={3}>
-          <Card sx={{ textAlign: 'center', p: 1 }}>
-            <HotelIcon color="action" />
-            <Typography variant="body2">{property.facilities?.Bedroom || 0} Beds</Typography>
-          </Card>
+            {/* Detailed Rating Breakdown */}
+            {ratingStats.hasRatings && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                  Rating Breakdown
+                </Typography>
+                <Card sx={{ p: 3 }}>
+                  {/* Detailed breakdown */}
+                  {ratingStats.breakdown.map((item) => (
+                    <Box key={item.stars} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      {/* Star rating label */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 80 }}>
+                        <Typography variant="body2" sx={{ mr: 1 }}>
+                          {item.stars}
+                        </Typography>
+                        <StarIcon sx={{ fontSize: 16, color: '#ffc107' }} />
+                      </Box>
+
+                      {/* Progress bar container */}
+                      <Box sx={{ flex: 1, mx: 2 }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={item.percentage}
+                          sx={{ 
+                            height: 12, 
+                            borderRadius: 2,
+                            backgroundColor: 'rgba(0,0,0,0.1)',
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 2,
+                              backgroundColor: item.percentage > 0 ? '#ffc107' : 'transparent'
+                            }
+                          }}
+                        />
+                      </Box>
+
+                      {/* Count and percentage display */}
+                      <Box sx={{ minWidth: 60, textAlign: 'right' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {item.count}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          ({item.percentage}%)
+                        </Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Card>
+              </Box>
+            )}
+
+            {/* Additional Information Sections */}
+            {(roommates || rules.length > 0 || billsInclusive.length > 0) && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                  Additional Information
+                </Typography>
+                
+                {roommates && (
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                        Roommate Information
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Typography variant="body2">
+                        {JSON.stringify(roommates, null, 2)}
+                      </Typography>
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+
+                {rules.length > 0 && (
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                        House Rules
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Box>
+                        {rules.map((rule, index) => (
+                          <Typography key={index} variant="body2" sx={{ mb: 1 }}>
+                            • {rule}
+                          </Typography>
+                        ))}
+                      </Box>
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+
+                {billsInclusive.length > 0 && (
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                        Bills Included
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Box>
+                        {billsInclusive.map((bill, index) => (
+                          <Chip key={index} label={bill} sx={{ mr: 1, mb: 1 }} />
+                        ))}
+                      </Box>
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+              </Box>
+            )}
+
+            {/* Pricing Details */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                Pricing Details
+              </Typography>
+              <TableContainer component={Paper} sx={{ boxShadow: 1 }}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Item</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Details</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    <TableRow>
+                      <TableCell>Monthly Rent</TableCell>
+                      <TableCell align="right">LKR {parseFloat(property.price || 0).toLocaleString()}.00</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+
+            {/* User Rating Section */}
+            {authenticated && isUser && (
+              <Box sx={{ mt: 4 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                  Rate This Property
+                </Typography>
+                <Card sx={{ p: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="body1" sx={{ mr: 2 }}>
+                      Your Rating:
+                    </Typography>
+                    <Rating
+                      value={userRating}
+                      onChange={(event, newValue) => setUserRating(newValue || 0)}
+                      size="large"
+                    />
+                  </Box>
+                  <Button
+                    variant="contained"
+                    onClick={handleRatingSubmit}
+                    disabled={ratingSubmitting || userRating === 0}
+                    startIcon={ratingSubmitting ? <CircularProgress size={20} /> : null}
+                  >
+                    {ratingSubmitting ? 'Submitting...' : 'Submit Rating'}
+                  </Button>
+                </Card>
+              </Box>
+            )}
+          </Box>
         </Grid>
-        <Grid item xs={3}>
-          <Card sx={{ textAlign: 'center', p: 1 }}>
-            <BathtubIcon color="action" />
-            <Typography variant="body2">{property.facilities?.Bathroom || 0} Baths</Typography>
-          </Card>
-        </Grid>
-        <Grid item xs={3}>
-          <Card sx={{ textAlign: 'center', p: 1 }}>
-            <PetsIcon color="action" />
-            <Typography variant="body2">
-              {property.petsAllowed ? 'Allowed' : 'Not Allowed'}
-            </Typography>
-          </Card>
-        </Grid>
-        <Grid item xs={3}>
-          <Card sx={{ textAlign: 'center', p: 1 }}>
-            <LocalParkingIcon color="action" />
-            <Typography variant="body2">
-              {property.parkingAvailable ? 'Available' : 'Not Available'}
-            </Typography>
-          </Card>
+
+        {/* Sidebar */}
+        <Grid item xs={12} md={4}>
+          <Box sx={{ position: 'sticky', top: 20 }}>
+            {/* Contact Information */}
+            <Card sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                  Contact Information
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
+                    <PersonIcon />
+                  </Avatar>
+                  <Box>
+                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                      {property.owner_username || 'Property Owner'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Property Owner
+                    </Typography>
+                  </Box>
+                </Box>
+                
+                <Button
+                  variant="contained"
+                  color="success"
+                  fullWidth
+                  startIcon={<WhatsAppIcon />}
+                  onClick={handleWhatsAppContact}
+                  sx={{ mb: 2 }}
+                >
+                  Contact
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Book This Property */}
+            <Card sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                  Book This Property
+                </Typography>
+                
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    Check-in Date
+                  </Typography>
+                  <TextField
+                    type="date"
+                    fullWidth
+                    value={checkInDate}
+                    onChange={(e) => setCheckInDate(e.target.value)}
+                    inputProps={{ min: today }}
+                    placeholder="dd/mm/yyyy"
+                  />
+                </Box>
+                
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    Check-out Date
+                  </Typography>
+                  <TextField
+                    type="date"
+                    fullWidth
+                    value={checkOutDate}
+                    onChange={(e) => setCheckOutDate(e.target.value)}
+                    inputProps={{ min: checkInDate || today }}
+                    placeholder="dd/mm/yyyy"
+                  />
+                </Box>
+
+                <Button
+                  variant="contained"
+                  fullWidth
+                  onClick={handleBookingRequest}
+                  startIcon={<CalendarIcon />}
+                  sx={{ mb: 2 }}
+                >
+                  Request Booking
+                </Button>
+                
+                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+                  You won't be charged yet. The property owner will review your request.
+                </Typography>
+              </CardContent>
+            </Card>
+
+            {/* Report an Issue */}
+            <Card>
+              <CardContent>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                  Report an Issue
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Found something wrong with this listing? Let us know.
+                </Typography>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  onClick={() => setReportDialogOpen(true)}
+                >
+                  Report Issue
+                </Button>
+              </CardContent>
+            </Card>
+          </Box>
         </Grid>
       </Grid>
-
-      {/* Accommodation Details */}
-      {property.accommodationDetails && (
-        <>
-          <Typography variant="subtitle1" gutterBottom>
-            Accommodation Details
-          </Typography>
-          <Typography variant="body2" mb={2}>
-            {property.accommodationDetails}
-          </Typography>
-        </>
-      )}
-
-      {/* Offered Amenities */}
-      {property.amenities && property.amenities.length > 0 && (
-        <>
-          <Typography variant="subtitle1" gutterBottom>
-            Offered Amenities
-          </Typography>
-          <Grid container spacing={1} mb={2}>
-            {property.amenities.map((amenity, index) => (
-              <Grid item xs={6} key={index}>
-                <Typography variant="body2">• {amenity}</Typography>
-              </Grid>
-            ))}
-          </Grid>
-        </>
-      )}
-
-      {/* Roommate Details */}
-      {property.roommateDetails && (
-        <>
-          <Typography variant="subtitle1" gutterBottom>
-            Roommate Details
-          </Typography>
-          <Typography variant="body2" mb={2}>
-            {property.roommateDetails}
-          </Typography>
-        </>
-      )}
-
-       {/* Rules, Contract Policy, and Cancellation Policy Buttons */}
-      <Box mt={3} mb={2}>
-        <Typography variant="h6">Property Rules</Typography>
-        <Button variant="outlined" onClick={() => openDetailsPopup('Rules', property.rules?.join(', ') || 'No rules specified.')}>
-          View Rules
-        </Button>
-      </Box>
-
-      <Box mb={2}>
-        <Typography variant="h6">Contract Policy</Typography>
-        <Button variant="outlined" onClick={() => openDetailsPopup('Contract Policy', property.contract_policy || 'No contract policy available.')}>
-          View Contract Policy
-        </Button>
-      </Box>
-
-      <Box mb={2}>
-        <Typography variant="h6">Cancellation Policy</Typography>
-        <Button variant="outlined" onClick={() => openDetailsPopup('Cancellation Policy', property.cancellation_policy || 'No cancellation policy available.')}>
-          View Cancellation Policy
-        </Button>
-      </Box>
-
-      {/* Reusable Popup Component */}
-      <InfoPopup open={popupOpen} onClose={closeDetailsPopup} title={popupTitle} content={popupContent} />
-
-      {/* Non-admin sections */}
-      {!isAdmin && (
-        <>
-          <Divider sx={{ my: 3 }} />
-          
-          {/* Booking Section */}
-          <Box mb={2}>
-            <Typography variant="h6" gutterBottom>
-              Book This Property
-            </Typography>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={6}>
-                <TextField
-                  label="From"
-                  type="date"
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                  value={bookingDateFrom}
-                  onChange={(e) => setBookingDateFrom(e.target.value)}
-                  disabled={!authenticated || !isUser}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <TextField
-                  label="To"
-                  type="date"
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                  value={bookingDateTo}
-                  onChange={(e) => setBookingDateTo(e.target.value)}
-                  disabled={!authenticated || !isUser}
-                />
-              </Grid>
-            </Grid>
-            <Typography variant="body1" mt={2}>
-              Total Price: ${property.price_range ? property.price_range[0] : 'N/A'} (per booking period)
-            </Typography>
-            <Button 
-              variant="contained" 
-              color="primary" 
-              onClick={handleBook} 
-              sx={{ mt: 2 }}
-            >
-              {authenticated ? 'Request to Book' : 'Login to Book'}
-            </Button>
-          </Box>
-
-          {/* Message Landlord via WhatsApp */}
-          <Button
-            variant="contained"
-            color="success"
-            startIcon={<WhatsAppIcon />}
-            onClick={handleWhatsApp}
-            sx={{ mb: 2 }}
-          >
-            Message Landlord
-          </Button>
-
-          {/* Complaint Section */}
-          <Box mb={4}>
-            <Typography variant="subtitle1" gutterBottom>
-              Write a Complaint
-            </Typography>
-            <TextField
-              label="Your Complaint"
-              variant="outlined"
-              multiline
-              rows={3}
-              fullWidth
-              value={complaintText}
-              onChange={(e) => setComplaintText(e.target.value)}
-              disabled={!authenticated || !isUser}
-              placeholder={!authenticated ? "Login required to send complaints" : ""}
-            />
-            <Button 
-              variant="contained" 
-              color="error" 
-              onClick={handleSendComplaint} 
-              sx={{ mt: 2 }}
-              disabled={!authenticated || !isUser || !complaintText.trim()}
-            >
-              {authenticated ? 'Send Complaint' : 'Login to Send Complaint'}
-            </Button>
-          </Box>
-        </>
-      )}
 
       {/* Login Required Dialog */}
       <LoginRequiredDialog
         open={loginRequiredDialogOpen}
         onClose={() => setLoginRequiredDialogOpen(false)}
-        onLogin={handleLoginRedirect}
+        onLogin={handleLoginRequired}
         action={loginAction}
       />
 
-      {/* Admin Rejection Dialog */}
-      <RejectionDialog
-        open={rejectionDialogOpen}
-        onClose={() => setRejectionDialogOpen(false)}
-        onConfirm={handleRejectProperty}
-        loading={adminLoading}
-      />
+      {/* Report Issue Dialog */}
+      <Dialog
+        open={reportDialogOpen}
+        onClose={() => setReportDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Report an Issue</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            multiline
+            rows={4}
+            placeholder="Describe the issue you found with this property..."
+            value={complaintText}
+            onChange={(e) => setComplaintText(e.target.value)}
+            sx={{ mt: 1 }}
+          />
+          <Typography variant="caption" color="text.secondary">
+            Minimum 10 characters required
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReportDialogOpen(false)}>Cancel</Button>
+          <Button 
+            variant="contained"
+            onClick={handleComplaintSubmit}
+            disabled={complaintSubmitting || complaintText.trim().length < 10}
+            startIcon={complaintSubmitting ? <CircularProgress size={20} /> : <SendIcon />}
+          >
+            {complaintSubmitting ? 'Submitting...' : 'Submit Report'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar for notifications */}
-      <AppSnackbar
-        open={snackbarOpen}
-        message={snackbarMessage}
-        autoHideDuration={4000}
-        onClose={handleSnackbarClose}
-      />
+      <AppSnackbar {...snackbarProps} />
     </Container>
   );
 };
 
-export default UserPropertyViewPage;
+export default UserViewProperty;

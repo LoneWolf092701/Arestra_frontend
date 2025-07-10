@@ -43,52 +43,13 @@ const Header = () => {
       default:
         console.warn('Unknown user role:', roleValue);
         navigate('/user-home');
-        break;
     }
   };
 
-  /**
-   * Dynamic Avatar Generation Based on User Role
-   * This function creates role-specific avatars with theme-aware colors
-   * Notice how we use theme colors for consistency with the overall design
-   */
-  const getAvatarSrc = () => {
-    if (!authenticated) {
-      // Guest user avatar
-      return `https://via.placeholder.com/40/${theme.textDisabled.substring(1)}/white?text=G`;
-    }
-
-    // Base URL for generating colored avatars with initials
-    const baseUrl = 'https://via.placeholder.com/40';
-    
+  const getPageTitle = () => {
     switch (roleValue) {
       case 'admin':
-        // Using theme secondary color for admin identification
-        return `${baseUrl}/${theme.secondary.substring(1)}/white?text=A`;
-      case 'propertyowner':
-        // Using theme primary color for property owners
-        return `${baseUrl}/${theme.primary.substring(1)}/white?text=O`;
-      case 'user':
-        // Using theme accent color for regular users
-        return `${baseUrl}/${theme.accent.substring(1)}/white?text=U`;
-      default:
-        // Fallback for unknown roles
-        return `${baseUrl}/757575/white?text=?`;
-    }
-  };
-
-  /**
-   * Role-Based Tooltip Generation
-   * Provides contextual information about the user's current role and capabilities
-   */
-  const getAvatarTitle = () => {
-    if (!authenticated) {
-      return 'Guest User - Login to access more features';
-    }
-
-    switch (roleValue) {
-      case 'admin':
-        return 'Admin Dashboard - Full platform management';
+        return 'Admin Dashboard - Manage the platform';
       case 'propertyowner':
         return 'Property Owner Dashboard - Manage your listings';
       case 'user':
@@ -102,7 +63,6 @@ const Header = () => {
     if (!authenticated) {
       navigate('/login');
     } else {
-      // Future enhancement: could open user profile menu
       navigate('/profile');
     }
   };
@@ -112,18 +72,13 @@ const Header = () => {
       position="static"
       elevation={0}
       sx={{ 
-        // The borderBottom uses theme colors for consistency
         borderBottom: `1px solid ${theme.border}`,
-        // Material-UI automatically handles the background color based on our theme
         background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.primary}dd 100%)`,
-        // Smooth transitions make theme changes feel polished and professional
         transition: 'all 0.3s ease',
       }}
     >
       <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', py: 1 }}>
-        {/* 
-          Logo Section with Smart Navigation
-        */}
+        {/* Logo Section with Smart Navigation */}
         <Box
           component="img"
           src={logo}
@@ -133,11 +88,9 @@ const Header = () => {
             height: '68px',
             objectFit: 'contain',
             cursor: 'pointer',
-            // Hover effects that work with both light and dark themes
             transition: 'transform 0.2s ease-in-out, filter 0.2s ease-in-out',
             '&:hover': {
               transform: 'scale(1.05)',
-              // Slight brightness adjustment on hover, adapting to theme
               filter: isDark ? 'brightness(1.1)' : 'brightness(0.95)',
             }
           }}
@@ -145,9 +98,7 @@ const Header = () => {
           title={authenticated ? `Go to ${roleValue || 'user'} dashboard` : 'Go to home page'}
         />
 
-        {/* 
-          Navigation Controls Section
-        */}
+        {/* Navigation Controls Section */}
         {!isAuthPage ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {/* Theme Toggle Button */}
@@ -156,7 +107,6 @@ const Header = () => {
                 onClick={toggleTheme}
                 sx={{
                   color: 'white',
-                  // Visual feedback for theme toggle interaction
                   '&:hover': {
                     backgroundColor: 'rgba(255, 255, 255, 0.1)',
                     transform: 'rotate(180deg)',
@@ -164,7 +114,6 @@ const Header = () => {
                   transition: 'all 0.3s ease',
                 }}
               >
-                {/* Icon changes based on current theme state */}
                 {isDark ? <Brightness7Icon /> : <Brightness4Icon />}
               </IconButton>
             </Tooltip>
@@ -172,38 +121,47 @@ const Header = () => {
             {/* Show different content for authenticated vs non-authenticated users */}
             {authenticated ? (
               <>
-                {/* Hamburger Menu with Role-Based Options */}
+                {/* Hamburger Menu for Authenticated Users */}
                 <HamburgerMenuDropdown />
                 
-                {/* User Avatar with Role-Based Styling */}
-                <Tooltip title={getAvatarTitle()}>
-                  <Avatar
-                    alt={`${roleValue || 'User'} Avatar`}
-                    src={getAvatarSrc()}
+                {/* User Avatar/Profile Access */}
+                <Tooltip title={getPageTitle()}>
+                  <IconButton
+                    onClick={handleAvatarClick}
                     sx={{ 
-                      cursor: 'pointer',
-                      transition: 'all 0.2s ease-in-out',
+                      p: 0,
+                      ml: 1,
                       '&:hover': {
                         transform: 'scale(1.1)',
-                        // Theme-aware glow effect on hover
-                        boxShadow: `0 0 0 3px ${theme.accent}40`,
                       },
-                      // Role-specific border colors using theme properties
-                      border: '2px solid',
-                      borderColor: roleValue === 'admin' ? theme.secondary : 
-                                 roleValue === 'propertyowner' ? theme.primary : 
-                                 roleValue === 'user' ? theme.accent : 'transparent',
+                      transition: 'transform 0.2s ease-in-out',
                     }}
-                    onClick={handleAvatarClick}
-                  />
+                  >
+                    <Avatar 
+                      sx={{ 
+                        width: 40, 
+                        height: 40,
+                        bgcolor: theme.accent,
+                        color: 'white',
+                        fontWeight: 600,
+                        border: `2px solid rgba(255, 255, 255, 0.2)`,
+                      }}
+                    >
+                      {roleValue === 'admin' ? 'A' : 
+                       roleValue === 'propertyowner' ? 'P' : 'U'}
+                    </Avatar>
+                  </IconButton>
                 </Tooltip>
               </>
             ) : (
               <>
-                {/* Login and Sign Up buttons for non-authenticated users */}
+                {/* Hamburger Menu for Non-Authenticated Users */}
+                <HamburgerMenuDropdown />
+                
+                {/* Login and Signup Buttons for Non-Authenticated Users */}
                 <Button
-                  variant="outlined"
                   startIcon={<LoginIcon />}
+                  variant="outlined"
                   onClick={() => navigate('/login')}
                   sx={{
                     color: 'white',
@@ -212,73 +170,33 @@ const Header = () => {
                       borderColor: 'white',
                       backgroundColor: 'rgba(255, 255, 255, 0.1)',
                     },
-                    transition: 'all 0.2s ease',
+                    ml: 1,
                   }}
                 >
                   Login
                 </Button>
                 
                 <Button
-                  variant="contained"
                   startIcon={<PersonAddIcon />}
+                  variant="contained"
                   onClick={() => navigate('/signup')}
                   sx={{
-                    backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                    color: theme.primary,
+                    backgroundColor: theme.accent,
+                    color: 'white',
                     '&:hover': {
-                      backgroundColor: 'white',
+                      backgroundColor: theme.secondary,
                       transform: 'translateY(-1px)',
-                      boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
                     },
-                    transition: 'all 0.2s ease',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                    transition: 'all 0.2s ease-in-out',
                   }}
                 >
                   Sign Up
                 </Button>
-                
-                {/* Guest Avatar */}
-                <Tooltip title={getAvatarTitle()}>
-                  <Avatar
-                    alt="Guest User"
-                    src={getAvatarSrc()}
-                    sx={{ 
-                      cursor: 'pointer',
-                      opacity: 0.8,
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        opacity: 1,
-                        transform: 'scale(1.05)',
-                      },
-                    }}
-                    onClick={handleAvatarClick}
-                  />
-                </Tooltip>
               </>
             )}
           </Box>
-        ) : (
-          /* 
-            Authentication pages - minimal header
-          */
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {/* Theme toggle available even on auth pages */}
-            <Tooltip title={`Switch to ${isDark ? 'light' : 'dark'} theme`}>
-              <IconButton
-                onClick={toggleTheme}
-                sx={{
-                  color: 'white',
-                  '&:hover': {
-                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                    transform: 'rotate(180deg)',
-                  },
-                  transition: 'all 0.3s ease',
-                }}
-              >
-                {isDark ? <Brightness7Icon /> : <Brightness4Icon />}
-              </IconButton>
-            </Tooltip>
-          </Box>
-        )}
+        ) : null}
       </Toolbar>
     </AppBar>
   );

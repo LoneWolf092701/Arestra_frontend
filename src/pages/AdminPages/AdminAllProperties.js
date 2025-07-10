@@ -290,7 +290,7 @@ const AdminAllProperties = () => {
                   <CardMedia
                     component="img"
                     height="140"
-                    image={property.image || 'https://via.placeholder.com/300x200'}
+                    // image={property.image || 'https://via.placeholder.com/300x200'}
                     alt={property.property_type}
                   />
                   <CardContent sx={{ flexGrow: 1 }}>

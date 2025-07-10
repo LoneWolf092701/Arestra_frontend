@@ -13,6 +13,7 @@ import Header from './components/common/Header';
 import { isAuthenticated } from './utils/auth';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import RoleProtectedRoute from './components/common/RoleProtectedRoute';
+import PropertyOwnerBookings from './pages/PropertyOwnerBookings';
 
 // User Pages - Now public
 import UserHome from './pages/UserPages/UserHome';
@@ -20,6 +21,7 @@ import UserAllProperties from './pages/UserPages/UserAllProperties';
 import UserPropertyViewPage from './pages/UserPages/UserViewProperty';
 import UserBookingPage from "./pages/UserPages/UserBookingPage";
 import UserFavouriteProperties from './pages/UserPages/UserFavouriteProperties';
+import UserNotifications from './pages/UserPages/UserNotifications';
 
 import ProfilePage from './pages/ProfilePage';
 
@@ -49,6 +51,37 @@ const AppRoutes = () => {
         <Route path="/user-allproperties" element={<UserAllProperties />} />
         <Route path="/user-viewproperty/:id" element={<UserPropertyViewPage />} />
 
+        {/* Property View Routes for Authenticated Users */}
+        <Route
+          path="/propertyowner-viewproperty/:id"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
+                    <UserPropertyViewPage />
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
+
+        <Route
+          path="/admin-viewproperty/:id"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={['admin']}>
+                    <UserPropertyViewPage />
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
+
         {/* Booking requires authentication */}
         <Route
           path="/user-bookproperty/:id"
@@ -74,6 +107,70 @@ const AppRoutes = () => {
                 <ProtectedRoute>
                   <RoleProtectedRoute allowedRoles={["user"]}>
                     <UserFavouriteProperties/>
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
+
+        {/* User notifications route */}
+        <Route
+          path="/user-notifications"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={["user"]}>
+                    <UserNotifications/>
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
+
+        {/* User bookings route */}
+        <Route
+          path="/user-bookings"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={["user"]}>
+                    <div>User Bookings Page - Coming Soon</div>
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
+
+        {/* Messages route */}
+        <Route
+          path="/messages"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={['user', 'propertyowner', 'admin']}>
+                    <div>Messages Page - Coming Soon</div>
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
+
+        {/* Transactions route */}
+        <Route
+          path="/transactions"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={['user', 'propertyowner', 'admin']}>
+                    <div>Transactions Page - Coming Soon</div>
                   </RoleProtectedRoute>
                 </ProtectedRoute>
               }
@@ -165,6 +262,22 @@ const AppRoutes = () => {
                 <ProtectedRoute>
                   <RoleProtectedRoute allowedRoles={['propertyowner']}>
                     <UpdateProperty />
+                  </RoleProtectedRoute>
+                </ProtectedRoute>
+              }
+            />
+          }
+        />
+
+        {/* Property Owner Bookings Route */}
+        <Route
+          path="/bookings"
+          element={
+            <PrivateRoute
+              element={
+                <ProtectedRoute>
+                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
+                    <PropertyOwnerBookings />
                   </RoleProtectedRoute>
                 </ProtectedRoute>
               }
