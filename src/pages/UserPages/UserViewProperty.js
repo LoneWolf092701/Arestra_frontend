@@ -136,12 +136,34 @@ const UserViewProperty = () => {
 
   // Parse JSON safely
   const safeParse = (jsonString, defaultValue = {}) => {
-    try {
-      return jsonString ? JSON.parse(jsonString) : defaultValue;
-    } catch {
-      return defaultValue;
+  // Add debugging to see what we're actually receiving
+  console.log('SafeParse input:', jsonString);
+  console.log('SafeParse input type:', typeof jsonString);
+  
+  try {
+    // If it's already an object, return it as-is
+    if (typeof jsonString === 'object' && jsonString !== null) {
+      console.log('Input is already an object:', jsonString);
+      return jsonString;
     }
-  };
+    
+    // If it's a string, try to parse it
+    if (typeof jsonString === 'string' && jsonString.trim() !== '') {
+      const parsed = JSON.parse(jsonString);
+      console.log('Successfully parsed JSON:', parsed);
+      return parsed;
+    }
+    
+    // If it's empty string, null, or undefined
+    console.log('Input is empty, null, or undefined, returning default:', defaultValue);
+    return defaultValue;
+    
+  } catch (error) {
+    console.error('JSON parse error:', error);
+    console.log('Returning default value:', defaultValue);
+    return defaultValue;
+  }
+};
 
   // Format date for display
   const formatDate = (dateString) => {

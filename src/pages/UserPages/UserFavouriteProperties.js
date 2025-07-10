@@ -101,7 +101,7 @@ const UserFavouriteProperties = () => {
   };
 
   const handleViewProperty = (propertyId) => {
-    navigate(`/user-view-property/${propertyId}`);
+    navigate(`/user-viewproperty/${propertyId}`);
   };
 
   const renderPropertyCard = (property, index) => {
