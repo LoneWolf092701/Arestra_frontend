@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Container,
   Stepper,
@@ -35,6 +35,7 @@ import PaymentIcon from '@mui/icons-material/Payment';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { getPropertyById } from '../../api/propertyApi';
+import { getUserProfile } from '../../api/profileApi';
 
 const UserBookingPage = () => {
   const [activeStep, setActiveStep] = useState(0);
@@ -43,6 +44,9 @@ const UserBookingPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Ref for first field focus - simple approach
+  const firstFieldRef = useRef(null);
+
   // Property and booking state
   const [property, setProperty] = useState(null);
   const [bookingRequest, setBookingRequest] = useState(null);
@@ -50,14 +54,17 @@ const UserBookingPage = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Get dates from URL parameters if coming from property view
+  // Get dates from URL parameters - fix parameter reading
   const urlParams = new URLSearchParams(location.search);
-  const [bookingDates, setBookingDates] = useState({
-    checkIn: urlParams.get('from') || '',
-    checkOut: urlParams.get('to') || ''
+  const [bookingDates, setBookingDates] = useState(() => {
+    // Check both possible parameter names for compatibility
+    const checkIn = urlParams.get('checkIn') || urlParams.get('from') || '';
+    const checkOut = urlParams.get('checkOut') || urlParams.get('to') || '';
+    
+    return { checkIn, checkOut };
   });
 
-  // Form states
+  // Form states - start with empty form, will be populated from API
   const [personalDetails, setPersonalDetails] = useState({
     firstName: '',
     lastName: '',
@@ -84,14 +91,16 @@ const UserBookingPage = () => {
 
   const steps = ["Booking Overview", "Personal Details", "Waiting for Approval", "Payment & Documents"];
 
-  // Calculate price details
+  console.log("Property:", property);
+  // Calculate pricing using property data from API
   const calculatePricing = () => {
-    if (!property || !bookingDates.checkIn || !bookingDates.checkOut) {
+    if (!property || !property.price) {
       return { monthlyRent: 0, serviceFee: 300, total: 300 };
     }
 
-    const monthlyRent = property.price || 0;
-    const serviceFee = 300;
+    // Use actual property price from database
+    const monthlyRent = parseFloat(property.price) || 0;
+    const serviceFee = 300; // Standard service fee
     const total = monthlyRent + serviceFee;
 
     return { monthlyRent, serviceFee, total };
@@ -99,64 +108,147 @@ const UserBookingPage = () => {
 
   const pricing = calculatePricing();
 
-  // Load property and check for existing booking request
-  useEffect(() => {
-    const loadPropertyAndBooking = async () => {
-      try {
-        setLoading(true);
-        
-        // Load property details
-        const propertyData = await getPropertyById(id);
-        if (propertyData && propertyData.length > 0) {
-          setProperty(propertyData[0]);
-        }
+  // Load user profile data to pre-populate form - fixed API call
+  const loadUserProfile = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No token found, using empty form');
+        return;
+      }
 
-        // Check for existing booking request
-        const token = localStorage.getItem('token');
-        if (token) {
-          const response = await fetch('/api/bookings/user-requests', {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (response.ok) {
-            const requests = await response.json();
-            const existingRequest = requests.find(req => 
-              req.property_id === parseInt(id) && 
-              ['pending', 'approved', 'payment_pending', 'payment_submitted'].includes(req.status)
-            );
-            
-            if (existingRequest) {
-              setBookingRequest(existingRequest);
-              // Set appropriate step based on request status
-              switch (existingRequest.status) {
-                case 'pending':
-                  setActiveStep(2); // Waiting for approval
-                  break;
-                case 'approved':
-                  setActiveStep(3); // Can submit payment
-                  break;
-                case 'payment_submitted':
-                  setActiveStep(3); // Payment submitted, waiting for confirmation
-                  break;
-                default:
-                  setActiveStep(0);
-              }
-            }
+      console.log('Loading user profile...');
+      const userProfile = await getUserProfile(token);
+      console.log('User profile loaded:', userProfile);
+
+      // Map profile data to form fields correctly
+      setPersonalDetails(prev => ({
+        ...prev,
+        firstName: userProfile.firstName || '',
+        lastName: userProfile.lastName || '',
+        email: userProfile.email || '',
+        mobileNumber: userProfile.phone || '',
+        birthdate: userProfile.birthdate || '',
+        gender: userProfile.gender || '',
+        nationality: userProfile.nationality || ''
+        // Keep existing values for occupation, field, destination, relocationDetails
+      }));
+
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      // Continue with empty form if profile loading fails
+    }
+  };
+
+  // Load property details using API call - fixed property loading
+  const loadPropertyDetails = async () => {
+    try {
+      console.log('Loading property details for ID:', id);
+      const propertyData = await getPropertyById(id);
+      console.log('Property data received:', propertyData);
+
+      if (propertyData) {
+        setProperty(propertyData);
+      } else {
+        setError('Property not found');
+      }
+    } catch (error) {
+      console.error('Error loading property:', error);
+      setError('Failed to load property details');
+    }
+  };
+
+  // Check for existing booking request
+  const checkExistingBooking = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch('/api/bookings/user-requests', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const requests = await response.json();
+        const existingRequest = requests.find(req => 
+          req.property_id === parseInt(id) && 
+          ['pending', 'approved', 'payment_pending', 'payment_submitted'].includes(req.status)
+        );
+        
+        if (existingRequest) {
+          setBookingRequest(existingRequest);
+          // Set appropriate step based on request status
+          switch (existingRequest.status) {
+            case 'pending':
+              setActiveStep(2);
+              break;
+            case 'approved':
+              setActiveStep(3);
+              break;
+            case 'payment_submitted':
+              setActiveStep(3);
+              break;
+            default:
+              setActiveStep(0);
           }
         }
+      }
+    } catch (error) {
+      console.error('Error checking existing booking:', error);
+    }
+  };
+
+  // Main data loading effect
+  useEffect(() => {
+    const loadAllData = async () => {
+      setLoading(true);
+      
+      try {
+        // Load property details first (required)
+        await loadPropertyDetails();
+        
+        // Load user profile (optional, for pre-filling form)
+        await loadUserProfile();
+        
+        // Check for existing booking requests
+        await checkExistingBooking();
+        
       } catch (error) {
-        console.error('Error loading data:', error);
+        console.error('Error in data loading:', error);
         setError('Failed to load booking information');
       } finally {
         setLoading(false);
       }
     };
 
-    loadPropertyAndBooking();
+    loadAllData();
   }, [id]);
 
+  // Simple focus management - only focus first field when step changes
+  useEffect(() => {
+    if (activeStep === 1 && firstFieldRef.current) {
+      // Add small delay to ensure component is rendered
+      setTimeout(() => {
+        firstFieldRef.current.focus();
+      }, 150);
+    }
+  }, [activeStep]);
+
+  // Layout wrapper component
+  const BookingLayout = ({ children }) => (
+    <Grid container spacing={4}>
+      <Grid item xs={12} md={8}>
+        {children}
+      </Grid>
+      <Grid item xs={12} md={4}>
+        <BookingSummary />
+      </Grid>
+    </Grid>
+  );
+
+  // Booking summary with proper property price display
   const BookingSummary = () => (
     <Card 
       variant="outlined" 
@@ -169,10 +261,10 @@ const UserBookingPage = () => {
     >
       <CardContent sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-          {property?.property_type} - {property?.unit_type}
+          {property?.property_type || 'Property'} - {property?.unit_type || 'Unit'}
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {property?.address}
+          {property?.address || 'Address not available'}
         </Typography>
 
         <Box sx={{ mb: 3 }}>
@@ -213,26 +305,38 @@ const UserBookingPage = () => {
           </Grid>
         </Box>
 
-        <Alert severity="info" sx={{ mb: 3, fontSize: '0.875rem' }}>
-          Payment is required only after owner approval
-        </Alert>
+        <Divider sx={{ my: 2 }} />
 
         <Box>
           <Typography variant="subtitle2" sx={{ color: theme.textPrimary, mb: 2 }}>
-            Price Breakdown
+            Pricing Details
           </Typography>
+          
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="body2">Monthly Rent</Typography>
-            <Typography variant="body2">LKR {pricing.monthlyRent.toLocaleString()}</Typography>
+            <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+              Monthly Rent
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.textPrimary }}>
+              LKR {pricing.monthlyRent.toLocaleString()}
+            </Typography>
           </Box>
+          
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="body2">Service Fee</Typography>
-            <Typography variant="body2">LKR {pricing.serviceFee.toLocaleString()}</Typography>
+            <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+              Service Fee
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.textPrimary }}>
+              LKR {pricing.serviceFee.toLocaleString()}
+            </Typography>
           </Box>
-          <Divider sx={{ my: 1 }} />
+          
+          <Divider sx={{ mb: 2 }} />
+          
           <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Total Amount</Typography>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            <Typography variant="subtitle2" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
+              Total
+            </Typography>
+            <Typography variant="subtitle2" sx={{ color: theme.primary, fontWeight: 600 }}>
               LKR {pricing.total.toLocaleString()}
             </Typography>
           </Box>
@@ -241,74 +345,70 @@ const UserBookingPage = () => {
     </Card>
   );
 
-  const BookingLayout = ({ children }) => (
-    <Grid container spacing={4}>
-      <Grid item xs={12} md={7}>
-        {children}
-      </Grid>
-      <Grid item xs={12} md={5}>
-        <BookingSummary />
-      </Grid>
-    </Grid>
-  );
-
   // Step 0: Booking Overview
   const BookingOverview = () => (
     <BookingLayout>
       <Card variant="outlined" sx={{ backgroundColor: theme.cardBackground }}>
         <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-            Booking Process Overview
-          </Typography>
-          
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
-              Step 1: Submit Your Request
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+            <InfoIcon sx={{ color: theme.primary, mr: 2, fontSize: 32 }} />
+            <Typography variant="h5" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
+              How the Booking Process Works
             </Typography>
-            <Box sx={{ pl: 2 }}>
-              <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-                • Complete your personal details and booking information
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-                • Submit your booking request to the property owner
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
-                • No payment required at this stage
-              </Typography>
-            </Box>
-
-            <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
-              Step 2: Wait for Owner Approval
-            </Typography>
-            <Box sx={{ pl: 2 }}>
-              <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-                • The property owner will review your request
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-                • You'll receive a notification once they respond
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
-                • If approved, payment account details will be provided
-              </Typography>
-            </Box>
-
-            <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
-              Step 3: Submit Payment & Documents
-            </Typography>
-            <Box sx={{ pl: 2 }}>
-              <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-                • Make payment to the provided account details
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-                • Upload payment receipt and verification documents
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
-                • Wait for final confirmation from the owner
-              </Typography>
-            </Box>
           </Box>
 
-          <Alert severity="success" sx={{ mb: 3 }}>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            <Typography variant="body2">
+              Please review the booking process below before proceeding with your request.
+            </Typography>
+          </Alert>
+
+          <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
+            Step 1: Submit Booking Request
+          </Typography>
+          <Box sx={{ pl: 2, mb: 3 }}>
+            <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
+              • Complete your personal details and booking information
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
+              • Submit your booking request to the property owner
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
+              • No payment required at this stage
+            </Typography>
+          </Box>
+
+          <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
+            Step 2: Wait for Owner Approval
+          </Typography>
+          <Box sx={{ pl: 2, mb: 3 }}>
+            <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
+              • The property owner will review your request
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
+              • You'll receive a notification once they respond
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
+              • If approved, payment account details will be provided
+            </Typography>
+          </Box>
+
+          <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
+            Step 3: Submit Payment & Documents
+          </Typography>
+          <Box sx={{ pl: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
+              • Make payment to the provided account details
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
+              • Upload payment receipt and verification documents
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
+              • Wait for final confirmation from the owner
+            </Typography>
+          </Box>
+
+          <Alert severity="success" sx={{ mt: 3 }}>
             <Typography variant="body2">
               Your booking will be confirmed once the owner verifies your payment. 
               This process typically takes 1-2 business days.
@@ -319,13 +419,16 @@ const UserBookingPage = () => {
     </BookingLayout>
   );
 
-  // Step 1: Personal Details Form
+  // Step 1: Personal Details Form - using normal TextField components
   const PersonalDetailsForm = () => (
     <BookingLayout>
       <Card variant="outlined" sx={{ backgroundColor: theme.cardBackground }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
             Personal Details
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 3, color: theme.textSecondary }}>
+            Please provide your personal information for the booking request.
           </Typography>
 
           {error && (
@@ -340,6 +443,7 @@ const UserBookingPage = () => {
                 label="First Name *"
                 variant="outlined"
                 fullWidth
+                // ref={firstFieldRef}
                 value={personalDetails.firstName}
                 onChange={(e) => setPersonalDetails(prev => ({...prev, firstName: e.target.value}))}
                 required
@@ -355,39 +459,40 @@ const UserBookingPage = () => {
                 required
               />
             </Grid>
-
-            <Grid item xs={12}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 label="Email Address *"
-                variant="outlined"
                 type="email"
+                variant="outlined"
                 fullWidth
                 value={personalDetails.email}
                 onChange={(e) => setPersonalDetails(prev => ({...prev, email: e.target.value}))}
                 required
               />
             </Grid>
-
-            <Grid item xs={12} sm={4}>
-              <TextField
-                label="Country Code"
-                variant="outlined"
-                fullWidth
-                value={personalDetails.countryCode}
-                onChange={(e) => setPersonalDetails(prev => ({...prev, countryCode: e.target.value}))}
-              />
+            <Grid item xs={12} sm={6}>
+              <Grid container spacing={1}>
+                <Grid item xs={4}>
+                  <TextField
+                    label="Code"
+                    variant="outlined"
+                    fullWidth
+                    value={personalDetails.countryCode}
+                    onChange={(e) => setPersonalDetails(prev => ({...prev, countryCode: e.target.value}))}
+                  />
+                </Grid>
+                <Grid item xs={8}>
+                  <TextField
+                    label="Mobile Number *"
+                    variant="outlined"
+                    fullWidth
+                    value={personalDetails.mobileNumber}
+                    onChange={(e) => setPersonalDetails(prev => ({...prev, mobileNumber: e.target.value}))}
+                    required
+                  />
+                </Grid>
+              </Grid>
             </Grid>
-            <Grid item xs={12} sm={8}>
-              <TextField
-                label="Mobile Number *"
-                variant="outlined"
-                fullWidth
-                value={personalDetails.mobileNumber}
-                onChange={(e) => setPersonalDetails(prev => ({...prev, mobileNumber: e.target.value}))}
-                required
-              />
-            </Grid>
-
             <Grid item xs={12} sm={6}>
               <TextField
                 label="Date of Birth *"
@@ -400,9 +505,8 @@ const UserBookingPage = () => {
                 required
               />
             </Grid>
-
             <Grid item xs={12} sm={6}>
-              <FormControl component="fieldset" sx={{ mt: 1 }}>
+              <FormControl component="fieldset" fullWidth>
                 <FormLabel component="legend" sx={{ color: theme.textPrimary }}>Gender *</FormLabel>
                 <RadioGroup
                   row
@@ -415,7 +519,6 @@ const UserBookingPage = () => {
                 </RadioGroup>
               </FormControl>
             </Grid>
-
             <Grid item xs={12} sm={6}>
               <TextField
                 label="Nationality *"
@@ -436,10 +539,9 @@ const UserBookingPage = () => {
                 required
               />
             </Grid>
-
             <Grid item xs={12} sm={6}>
               <TextField
-                label="Field of Work/Study *"
+                label="Field of Work *"
                 variant="outlined"
                 fullWidth
                 value={personalDetails.field}
@@ -449,19 +551,17 @@ const UserBookingPage = () => {
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField
-                label="Destination (University/Workplace)"
+                label="Destination/Purpose"
                 variant="outlined"
                 fullWidth
-                placeholder="Optional"
                 value={personalDetails.destination}
                 onChange={(e) => setPersonalDetails(prev => ({...prev, destination: e.target.value}))}
               />
             </Grid>
-
             <Grid item xs={12}>
               <TextField
-                label="Tell us about yourself"
-                placeholder="Why are you relocating? Any additional information that might help the owner..."
+                label="Additional Information"
+                placeholder="Any additional information that might help the owner..."
                 variant="outlined"
                 multiline
                 rows={4}
@@ -486,6 +586,7 @@ const UserBookingPage = () => {
                     value={bookingDates.checkIn}
                     onChange={(e) => setBookingDates(prev => ({...prev, checkIn: e.target.value}))}
                     required
+                    inputProps={{ min: new Date().toISOString().split('T')[0] }}
                   />
                 </Grid>
                 <Grid item xs={6}>
@@ -498,6 +599,7 @@ const UserBookingPage = () => {
                     value={bookingDates.checkOut}
                     onChange={(e) => setBookingDates(prev => ({...prev, checkOut: e.target.value}))}
                     required
+                    inputProps={{ min: bookingDates.checkIn || new Date().toISOString().split('T')[0] }}
                   />
                 </Grid>
               </Grid>
@@ -525,175 +627,112 @@ const UserBookingPage = () => {
           </Typography>
 
           {bookingRequest && (
-            <Box sx={{ 
-              p: 3, 
-              backgroundColor: theme.surfaceBackground, 
-              borderRadius: 2,
-              textAlign: 'left',
-              mb: 3
-            }}>
-              <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
-                Request Details
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Request ID:</strong> #{bookingRequest.id}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Submitted:</strong> {new Date(bookingRequest.created_at).toLocaleDateString()}
-              </Typography>
-              <Typography variant="body2" sx={{ mb: 1 }}>
-                <strong>Status:</strong> {bookingRequest.status?.toUpperCase()}
-              </Typography>
+            <Alert severity="info" sx={{ mb: 3 }}>
               <Typography variant="body2">
-                <strong>Check-in:</strong> {bookingRequest.check_in_date} | <strong>Check-out:</strong> {bookingRequest.check_out_date}
+                Request ID: #{bookingRequest.id} | 
+                Submitted: {new Date(bookingRequest.created_at).toLocaleDateString()}
               </Typography>
-            </Box>
+            </Alert>
           )}
 
-          <Alert severity="info">
-            You will receive a notification once the owner responds to your request. 
-            If approved, you'll be able to proceed to the payment step.
-          </Alert>
+          <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+            You'll receive a notification once the owner responds to your request.
+          </Typography>
         </CardContent>
       </Card>
     </BookingLayout>
   );
 
-  // Step 3: Payment Form (only shown after approval)
-  const PaymentForm = () => {
-    const canSubmitPayment = bookingRequest?.status === 'approved';
-    const paymentSubmitted = bookingRequest?.status === 'payment_submitted';
-
-    return (
-      <BookingLayout>
-        <Card variant="outlined" sx={{ backgroundColor: theme.cardBackground }}>
-          <CardContent sx={{ p: 4 }}>
-            <Typography variant="h5" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-              Payment & Documents
-            </Typography>
-
-            {paymentSubmitted ? (
-              <Box sx={{ textAlign: 'center', py: 4 }}>
-                <CheckCircleIcon sx={{ fontSize: 80, color: theme.success, mb: 3 }} />
-                <Typography variant="h6" gutterBottom sx={{ color: theme.success }}>
-                  Payment Submitted Successfully
+  // Step 3: Payment Form
+  const PaymentForm = () => (
+    <BookingLayout>
+      <Card variant="outlined" sx={{ backgroundColor: theme.cardBackground }}>
+        <CardContent sx={{ p: 4 }}>
+          <Typography variant="h5" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
+            Payment & Documents
+          </Typography>
+          
+          {bookingRequest?.status === 'approved' ? (
+            <>
+              <Alert severity="success" sx={{ mb: 3 }}>
+                <Typography variant="body2">
+                  Congratulations! Your booking request has been approved.
                 </Typography>
-                <Typography variant="body1" sx={{ color: theme.textSecondary, mb: 3 }}>
-                  Your payment and documents have been submitted. The property owner will verify 
-                  your payment and confirm your booking.
+              </Alert>
+
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" sx={{ mb: 2 }}>Payment Instructions</Typography>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  Please make payment to the following account details:
                 </Typography>
-                <Alert severity="success">
-                  You will receive a final confirmation once the owner verifies your payment.
+                <Alert severity="info">
+                  <Typography variant="body2">
+                    Payment account details will be provided by the property owner.
+                  </Typography>
                 </Alert>
               </Box>
-            ) : canSubmitPayment ? (
-              <>
-                {/* Payment Account Information */}
-                {bookingRequest?.payment_account_info && (
-                  <Alert severity="success" sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
-                      Payment Account Details:
-                    </Typography>
-                    <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }}>
-                      {bookingRequest.payment_account_info}
-                    </Typography>
-                  </Alert>
-                )}
 
-                {/* Upload Payment Proof */}
-                <Box sx={{ mb: 4 }}>
-                  <Typography variant="h6" gutterBottom sx={{ color: theme.textPrimary }}>
-                    Upload Payment Proof
-                  </Typography>
-                  <Box sx={{ 
-                    p: 3, 
-                    border: `2px dashed ${theme.border}`,
-                    borderRadius: 2,
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      backgroundColor: theme.hover
-                    }
-                  }}>
-                    <UploadFileIcon sx={{ fontSize: 48, color: theme.textSecondary, mb: 2 }} />
-                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                      Upload payment receipt (JPG, PNG, or PDF - Max 5MB)
-                    </Typography>
-                    <Button variant="outlined" sx={{ mt: 2 }}>
-                      Browse Files
+              <Grid container spacing={3}>
+                <Grid item xs={12}>
+                  <Box sx={{ border: `2px dashed ${theme.border}`, p: 3, borderRadius: 1, textAlign: 'center' }}>
+                    <UploadFileIcon sx={{ fontSize: 48, color: theme.textSecondary, mb: 1 }} />
+                    <Typography variant="body2" sx={{ mb: 1 }}>Upload Payment Receipt</Typography>
+                    <Button variant="outlined" component="label">
+                      Choose File
+                      <input type="file" hidden accept="image/*,application/pdf" 
+                        onChange={(e) => setPaymentDetails(prev => ({...prev, paymentProof: e.target.files[0]}))}
+                      />
                     </Button>
+                    {paymentDetails.paymentProof && (
+                      <Typography variant="body2" sx={{ mt: 1, color: theme.primary }}>
+                        {paymentDetails.paymentProof.name}
+                      </Typography>
+                    )}
                   </Box>
-                </Box>
+                </Grid>
 
-                {/* Verification Documents */}
-                <Box sx={{ mb: 4 }}>
-                  <Typography variant="h6" gutterBottom sx={{ color: theme.textPrimary }}>
-                    Verification Document
-                  </Typography>
-                  
-                  <FormControl fullWidth sx={{ mb: 3 }}>
-                    <TextField
-                      select
-                      label="Document Type"
-                      value={paymentDetails.verificationDocument}
-                      onChange={(e) => setPaymentDetails(prev => ({...prev, verificationDocument: e.target.value}))}
-                      SelectProps={{ native: true }}
-                    >
-                      <option value="">Select Document Type</option>
-                      <option value="nic">National Identity Card</option>
-                      <option value="passport">Passport</option>
-                      <option value="license">Driving License</option>
-                    </TextField>
-                  </FormControl>
-
-                  <Box sx={{ 
-                    p: 3, 
-                    border: `2px dashed ${theme.border}`,
-                    borderRadius: 2,
-                    textAlign: 'center',
-                    cursor: 'pointer',
-                    '&:hover': {
-                      backgroundColor: theme.hover
-                    }
-                  }}>
-                    <UploadFileIcon sx={{ fontSize: 48, color: theme.textSecondary, mb: 2 }} />
-                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                      Upload verification document
-                    </Typography>
-                    <Button variant="outlined" sx={{ mt: 2 }}>
-                      Browse Files
+                <Grid item xs={12}>
+                  <Box sx={{ border: `2px dashed ${theme.border}`, p: 3, borderRadius: 1, textAlign: 'center' }}>
+                    <UploadFileIcon sx={{ fontSize: 48, color: theme.textSecondary, mb: 1 }} />
+                    <Typography variant="body2" sx={{ mb: 1 }}>Upload Verification Document</Typography>
+                    <Button variant="outlined" component="label">
+                      Choose File
+                      <input type="file" hidden accept="image/*,application/pdf"
+                        onChange={(e) => setPaymentDetails(prev => ({...prev, verificationFile: e.target.files[0]}))}
+                      />
                     </Button>
+                    {paymentDetails.verificationFile && (
+                      <Typography variant="body2" sx={{ mt: 1, color: theme.primary }}>
+                        {paymentDetails.verificationFile.name}
+                      </Typography>
+                    )}
                   </Box>
-                </Box>
+                </Grid>
 
-                {/* Terms and Conditions */}
-                <Box sx={{ mb: 3 }}>
+                <Grid item xs={12}>
                   <FormControlLabel
                     control={
                       <Checkbox
                         checked={paymentDetails.agreeTerms}
                         onChange={(e) => setPaymentDetails(prev => ({...prev, agreeTerms: e.target.checked}))}
-                        color="primary"
                       />
                     }
-                    label={
-                      <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                        I agree with the Terms & Conditions and confirm the payment information is accurate
-                      </Typography>
-                    }
+                    label="I agree to the terms and conditions and confirm that all information provided is accurate."
                   />
-                </Box>
-              </>
-            ) : (
-              <Alert severity="warning">
-                Payment can only be submitted after the property owner approves your booking request.
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-      </BookingLayout>
-    );
-  };
+                </Grid>
+              </Grid>
+            </>
+          ) : (
+            <Alert severity="warning">
+              <Typography variant="body2">
+                Please wait for the property owner to approve your request before proceeding with payment.
+              </Typography>
+            </Alert>
+          )}
+        </CardContent>
+      </Card>
+    </BookingLayout>
+  );
 
   const getStepContent = (step) => {
     switch (step) {
@@ -761,7 +800,18 @@ const UserBookingPage = () => {
           },
           body: JSON.stringify({
             property_id: parseInt(id),
-            ...personalDetails,
+            first_name: personalDetails.firstName,
+            last_name: personalDetails.lastName,
+            email: personalDetails.email,
+            country_code: personalDetails.countryCode,
+            mobile_number: personalDetails.mobileNumber,
+            birthdate: personalDetails.birthdate,
+            gender: personalDetails.gender,
+            nationality: personalDetails.nationality,
+            occupation: personalDetails.occupation,
+            field: personalDetails.field,
+            destination: personalDetails.destination,
+            relocation_details: personalDetails.relocationDetails,
             check_in_date: bookingDates.checkIn,
             check_out_date: bookingDates.checkOut
           })
@@ -787,7 +837,7 @@ const UserBookingPage = () => {
         setSubmitting(false);
       }
     } else if (activeStep === 3) {
-      // Submit payment (implement file upload logic here)
+      // Submit payment
       if (!paymentDetails.agreeTerms) {
         setError('Please agree to the terms and conditions');
         return;
@@ -870,7 +920,7 @@ const UserBookingPage = () => {
                       fontWeight: activeStep === index ? 600 : 400,
                     },
                     '& .MuiStepIcon-root': {
-                      color: activeStep >= index ? theme.primary : theme.textDisabled,
+                      color: activeStep >= index ? theme.primary : theme.textSecondary,
                     },
                   }}
                 >
@@ -879,72 +929,49 @@ const UserBookingPage = () => {
               </Step>
             ))}
           </Stepper>
-          
-          <LinearProgress 
-            variant="determinate" 
-            value={(activeStep / (steps.length - 1)) * 100} 
-            sx={{ 
-              mt: 2, 
-              height: 6, 
-              borderRadius: 3,
-              backgroundColor: theme.surfaceBackground,
-              '& .MuiLinearProgress-bar': {
-                backgroundColor: theme.primary,
-              }
-            }} 
-          />
         </Box>
 
         {/* Step Content */}
-        <Box sx={{ mb: 4 }}>
-          {getStepContent(activeStep)}
-        </Box>
+        {getStepContent(activeStep)}
 
         {/* Navigation Buttons */}
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between' }}>
           <Button
-            disabled={activeStep === 0 || activeStep === 2}
             onClick={handleBack}
-            variant="outlined"
-            sx={{
-              borderColor: theme.textSecondary,
-              color: theme.textSecondary,
-              '&:hover': {
-                backgroundColor: `${theme.textSecondary}10`,
-              },
-              px: 4,
-              py: 1.5
-            }}
+            disabled={activeStep === 0 || activeStep === 2}
+            sx={{ mr: 1 }}
           >
             Back
           </Button>
-          
-          <Button 
-            onClick={handleNext} 
-            variant="contained" 
+          <Box sx={{ flex: '1 1 auto' }} />
+          <Button
+            variant="contained"
+            onClick={handleNext}
             disabled={isNextButtonDisabled()}
-            sx={{
-              backgroundColor: theme.primary,
-              color: isDark ? theme.textPrimary : '#FFFFFF',
-              '&:hover': {
-                backgroundColor: theme.secondary,
-              },
-              px: 4,
-              py: 1.5
-            }}
+            sx={{ minWidth: 200 }}
           >
             {getNextButtonText()}
           </Button>
         </Box>
 
         {/* Success Dialog */}
-        <Dialog open={successDialog.open} onClose={() => setSuccessDialog({ ...successDialog, open: false })}>
-          <DialogTitle>{successDialog.title}</DialogTitle>
+        <Dialog
+          open={successDialog.open}
+          onClose={() => setSuccessDialog({ open: false, message: '', title: '' })}
+        >
+          <DialogTitle>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
+              {successDialog.title}
+            </Box>
+          </DialogTitle>
           <DialogContent>
-            <Typography>{successDialog.message}</Typography>
+            <Typography>
+              {successDialog.message}
+            </Typography>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setSuccessDialog({ ...successDialog, open: false })}>
+            <Button onClick={() => setSuccessDialog({ open: false, message: '', title: '' })}>
               OK
             </Button>
           </DialogActions>
