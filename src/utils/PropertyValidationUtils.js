@@ -1,5 +1,3 @@
-// PropertyValidationUtils.js - Comprehensive property validation utilities
-
 /**
  * Validate property availability status
  * @param {Object} property - Property object
@@ -314,7 +312,7 @@ export const validateBookingEligibility = (property, user) => {
  */
 export const getPropertyTypeInfo = (propertyType) => {
   const typeInfo = {
-    'Room': {
+    'Rooms': {
       singular: 'Room',
       plural: 'Rooms', 
       description: 'Single private room in shared accommodation',
@@ -330,7 +328,7 @@ export const getPropertyTypeInfo = (propertyType) => {
       averageSize: '6-12 sqm per bed',
       targetTenants: ['Students', 'Backpackers', 'Budget travelers', 'Short-term visitors']
     },
-    'Flat': {
+    'Flats': {
       singular: 'Flat',
       plural: 'Flats',
       description: 'Self-contained residential unit in a building',
@@ -338,23 +336,7 @@ export const getPropertyTypeInfo = (propertyType) => {
       averageSize: '40-80 sqm',
       targetTenants: ['Small families', 'Couples', 'Young professionals']
     },
-    'Apartment': {
-      singular: 'Apartment',
-      plural: 'Apartments',
-      description: 'Modern residential unit with amenities',
-      icon: '🏢',
-      averageSize: '50-120 sqm',
-      targetTenants: ['Professionals', 'Small families', 'Expatriates']
-    },
-    'House': {
-      singular: 'House',
-      plural: 'Houses',
-      description: 'Standalone residential building',
-      icon: '🏡',
-      averageSize: '100-200 sqm',
-      targetTenants: ['Families', 'Groups', 'Long-term residents']
-    },
-    'Villa': {
+    'Villas': {
       singular: 'Villa',
       plural: 'Villas',
       description: 'Luxury house with premium features',
@@ -373,6 +355,7 @@ export const getPropertyTypeInfo = (propertyType) => {
     targetTenants: ['Various']
   };
 };
+
 
 /**
  * Generate property listing optimization suggestions
