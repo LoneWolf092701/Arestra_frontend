@@ -1,613 +1,99 @@
-import React, { useState, useEffect, useRef, memo } from "react";
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
+  Typography,
+  Grid,
+  Card,
+  CardContent,
+  CardMedia,
+  TextField,
+  Button,
+  Box,
   Stepper,
   Step,
   StepLabel,
-  Box,
-  Button,
-  Typography,
-  Card,
-  CardContent,
-  Grid,
-  TextField,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  FormControl,
-  FormLabel,
-  Divider,
   Alert,
-  Checkbox,
-  IconButton,
-  LinearProgress,
+  Divider,
+  Paper,
+  Chip,
   CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import InfoIcon from '@mui/icons-material/Info';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
-import PaymentIcon from '@mui/icons-material/Payment';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { getPropertyById } from '../../api/propertyApi';
+import {
+  DatePicker,
+  LocalizationProvider
+} from '@mui/x-date-pickers';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs from 'dayjs';
+import {
+  ExpandMore as ExpandMoreIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  Info as InfoIcon,
+  LocationOn as LocationOnIcon,
+  CalendarToday as CalendarTodayIcon,
+  People as PeopleIcon,
+  Home as HomeIcon
+} from '@mui/icons-material';
+import { getPublicPropertyById } from '../../api/propertyApi';
 import { getUserProfile } from '../../api/profileApi';
+import { submitBookingRequest, getPropertyAvailabilityStatus } from '../../api/bookingApi';
+import { 
+  calculateBookingPricing, 
+  validateBookingDates, 
+  formatPricingBreakdown,
+  checkDateConflicts
+} from '../../utils/BookingCalculationUtils';
+import AppSnackbar from '../../components/common/AppSnackbar';
 
-// Completely external TextField to prevent re-renders
-const FormTextField = memo(({ label, value, onChange, inputRef, ...props }) => {
-  return (
-    <TextField
-      label={label}
-      value={value}
-      onChange={onChange}
-      inputRef={inputRef}
-      {...props}
-    />
-  );
-});
+const steps = ['Select Dates', 'Personal Details', 'Review & Confirm'];
 
-// External Personal Details Form Component - completely separated from parent rendering
-const PersonalDetailsFormExternal = memo(({ 
-  personalDetails, 
-  bookingDates, 
-  onPersonalDetailChange, 
-  onBookingDateChange, 
-  error, 
-  theme 
-}) => {
-  // Create local refs for focus management inside this component only
-  const fieldRefs = useRef({});
-
-  return (
-    <Card variant="outlined" sx={{ backgroundColor: theme.cardBackground }}>
-      <CardContent sx={{ p: 4 }}>
-        <Typography variant="h5" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-          Personal Details
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 3, color: theme.textSecondary }}>
-          Please provide your personal information for the booking request.
-        </Typography>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {error}
-          </Alert>
-        )}
-
-        <Grid container spacing={3}>
-          <Grid item xs={12} sm={6}>
-            <FormTextField
-              label="First Name *"
-              variant="outlined"
-              fullWidth
-              inputRef={el => fieldRefs.current.firstName = el}
-              value={personalDetails.firstName}
-              onChange={(e) => onPersonalDetailChange('firstName', e.target.value)}
-              required
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormTextField
-              label="Last Name *"
-              variant="outlined"
-              fullWidth
-              inputRef={el => fieldRefs.current.lastName = el}
-              value={personalDetails.lastName}
-              onChange={(e) => onPersonalDetailChange('lastName', e.target.value)}
-              required
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormTextField
-              label="Email Address *"
-              type="email"
-              variant="outlined"
-              fullWidth
-              inputRef={el => fieldRefs.current.email = el}
-              value={personalDetails.email}
-              onChange={(e) => onPersonalDetailChange('email', e.target.value)}
-              required
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Grid container spacing={1}>
-              <Grid item xs={4}>
-                <FormTextField
-                  label="Code"
-                  variant="outlined"
-                  fullWidth
-                  inputRef={el => fieldRefs.current.countryCode = el}
-                  value={personalDetails.countryCode}
-                  onChange={(e) => onPersonalDetailChange('countryCode', e.target.value)}
-                />
-              </Grid>
-              <Grid item xs={8}>
-                <FormTextField
-                  label="Mobile Number *"
-                  variant="outlined"
-                  fullWidth
-                  inputRef={el => fieldRefs.current.mobileNumber = el}
-                  value={personalDetails.mobileNumber}
-                  onChange={(e) => onPersonalDetailChange('mobileNumber', e.target.value)}
-                  required
-                />
-              </Grid>
-            </Grid>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormTextField
-              label="Date of Birth *"
-              type="date"
-              variant="outlined"
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              inputRef={el => fieldRefs.current.birthdate = el}
-              value={personalDetails.birthdate}
-              onChange={(e) => onPersonalDetailChange('birthdate', e.target.value)}
-              required
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormControl component="fieldset" fullWidth>
-              <FormLabel component="legend" sx={{ color: theme.textPrimary }}>Gender *</FormLabel>
-              <RadioGroup
-                row
-                value={personalDetails.gender}
-                onChange={(e) => onPersonalDetailChange('gender', e.target.value)}
-              >
-                <FormControlLabel value="Male" control={<Radio />} label="Male" />
-                <FormControlLabel value="Female" control={<Radio />} label="Female" />
-                <FormControlLabel value="Other" control={<Radio />} label="Other" />
-              </RadioGroup>
-            </FormControl>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormTextField
-              label="Nationality *"
-              variant="outlined"
-              fullWidth
-              inputRef={el => fieldRefs.current.nationality = el}
-              value={personalDetails.nationality}
-              onChange={(e) => onPersonalDetailChange('nationality', e.target.value)}
-              required
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormTextField
-              label="Occupation *"
-              variant="outlined"
-              fullWidth
-              inputRef={el => fieldRefs.current.occupation = el}
-              value={personalDetails.occupation}
-              onChange={(e) => onPersonalDetailChange('occupation', e.target.value)}
-              required
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormTextField
-              label="Field of Work *"
-              variant="outlined"
-              fullWidth
-              inputRef={el => fieldRefs.current.field = el}
-              value={personalDetails.field}
-              onChange={(e) => onPersonalDetailChange('field', e.target.value)}
-              required
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <FormTextField
-              label="Destination/Purpose"
-              variant="outlined"
-              fullWidth
-              inputRef={el => fieldRefs.current.destination = el}
-              value={personalDetails.destination}
-              onChange={(e) => onPersonalDetailChange('destination', e.target.value)}
-            />
-          </Grid>
-          <Grid item xs={12}>
-            <FormTextField
-              label="Additional Information"
-              placeholder="Any additional information that might help the owner..."
-              variant="outlined"
-              multiline
-              rows={4}
-              fullWidth
-              inputRef={el => fieldRefs.current.relocationDetails = el}
-              value={personalDetails.relocationDetails}
-              onChange={(e) => onPersonalDetailChange('relocationDetails', e.target.value)}
-            />
-          </Grid>
-
-          <Grid item xs={12}>
-            <Typography variant="subtitle1" sx={{ color: theme.textPrimary, mb: 2 }}>
-              Booking Dates
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <FormTextField
-                  label="Check-in Date *"
-                  type="date"
-                  variant="outlined"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  inputRef={el => fieldRefs.current.checkIn = el}
-                  value={bookingDates.checkIn}
-                  onChange={(e) => onBookingDateChange('checkIn', e.target.value)}
-                  required
-                  inputProps={{ min: new Date().toISOString().split('T')[0] }}
-                />
-              </Grid>
-              <Grid item xs={6}>
-                <FormTextField
-                  label="Check-out Date *"
-                  type="date"
-                  variant="outlined"
-                  fullWidth
-                  InputLabelProps={{ shrink: true }}
-                  inputRef={el => fieldRefs.current.checkOut = el}
-                  value={bookingDates.checkOut}
-                  onChange={(e) => onBookingDateChange('checkOut', e.target.value)}
-                  required
-                  inputProps={{ min: bookingDates.checkIn || new Date().toISOString().split('T')[0] }}
-                />
-              </Grid>
-            </Grid>
-          </Grid>
-        </Grid>
-      </CardContent>
-    </Card>
-  );
-});
-
-// External Payment Form Component
-const PaymentFormExternal = memo(({ 
-  theme, 
-  bookingRequest, 
-  paymentDetails, 
-  onPaymentDetailsChange, 
-  error 
-}) => (
-  <Card variant="outlined" sx={{ backgroundColor: theme.cardBackground }}>
-    <CardContent sx={{ p: 4 }}>
-      <Typography variant="h5" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-        Payment & Documents
-      </Typography>
-      
-      {bookingRequest?.status === 'approved' ? (
-        <>
-          <Alert severity="success" sx={{ mb: 3 }}>
-            <Typography variant="body2">
-              Congratulations! Your booking request has been approved.
-            </Typography>
-          </Alert>
-
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>Payment Instructions</Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              Please make payment to the following account details:
-            </Typography>
-            <Alert severity="info">
-              <Typography variant="body2">
-                Payment account details will be provided by the property owner.
-              </Typography>
-            </Alert>
-          </Box>
-
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              <Box sx={{ border: `2px dashed ${theme.border}`, p: 3, borderRadius: 1, textAlign: 'center' }}>
-                <UploadFileIcon sx={{ fontSize: 48, color: theme.textSecondary, mb: 1 }} />
-                <Typography variant="body2" sx={{ mb: 1 }}>Upload Payment Receipt</Typography>
-                <Button variant="outlined" component="label">
-                  Choose File
-                  <input 
-                    type="file" 
-                    hidden 
-                    accept="image/*,application/pdf" 
-                    onChange={(e) => onPaymentDetailsChange('paymentProof', e.target.files[0])}
-                  />
-                </Button>
-                {paymentDetails.paymentProof && (
-                  <Typography variant="body2" sx={{ mt: 1, color: theme.primary }}>
-                    {paymentDetails.paymentProof.name}
-                  </Typography>
-                )}
-              </Box>
-            </Grid>
-
-            <Grid item xs={12}>
-              <Box sx={{ border: `2px dashed ${theme.border}`, p: 3, borderRadius: 1, textAlign: 'center' }}>
-                <UploadFileIcon sx={{ fontSize: 48, color: theme.textSecondary, mb: 1 }} />
-                <Typography variant="body2" sx={{ mb: 1 }}>Upload Verification Document</Typography>
-                <Button variant="outlined" component="label">
-                  Choose File
-                  <input 
-                    type="file" 
-                    hidden 
-                    accept="image/*,application/pdf"
-                    onChange={(e) => onPaymentDetailsChange('verificationFile', e.target.files[0])}
-                  />
-                </Button>
-                {paymentDetails.verificationFile && (
-                  <Typography variant="body2" sx={{ mt: 1, color: theme.primary }}>
-                    {paymentDetails.verificationFile.name}
-                  </Typography>
-                )}
-              </Box>
-            </Grid>
-
-            <Grid item xs={12}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={paymentDetails.agreeTerms}
-                    onChange={(e) => onPaymentDetailsChange('agreeTerms', e.target.checked)}
-                  />
-                }
-                label="I agree to the terms and conditions and confirm that all information provided is accurate."
-              />
-            </Grid>
-          </Grid>
-        </>
-      ) : (
-        <Alert severity="warning">
-          <Typography variant="body2">
-            Please wait for the property owner to approve your request before proceeding with payment.
-          </Typography>
-        </Alert>
-      )}
-    </CardContent>
-  </Card>
-));
-
-// Memoized BookingSummary component
-const BookingSummary = memo(({ property, bookingDates, pricing, theme }) => (
-  <Card 
-    variant="outlined" 
-    sx={{ 
-      backgroundColor: theme.cardBackground,
-      border: `1px solid ${theme.border}`,
-      position: 'sticky',
-      top: 20
-    }}
-  >
-    <CardContent sx={{ p: 3 }}>
-      <Typography variant="h6" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-        {property?.property_type || 'Property'} - {property?.unit_type || 'Unit'}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {property?.address || 'Address not available'}
-      </Typography>
-
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ color: theme.textPrimary, mb: 2 }}>
-          Booking Dates
-        </Typography>
-        <Grid container spacing={2}>
-          <Grid item xs={6}>
-            <Box sx={{ 
-              p: 2, 
-              backgroundColor: theme.surfaceBackground, 
-              borderRadius: 1,
-              textAlign: 'center'
-            }}>
-              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                Check In
-              </Typography>
-              <Typography variant="body2" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-                {bookingDates.checkIn || 'Not set'}
-              </Typography>
-            </Box>
-          </Grid>
-          <Grid item xs={6}>
-            <Box sx={{ 
-              p: 2, 
-              backgroundColor: theme.surfaceBackground, 
-              borderRadius: 1,
-              textAlign: 'center'
-            }}>
-              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                Check Out
-              </Typography>
-              <Typography variant="body2" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-                {bookingDates.checkOut || 'Not set'}
-              </Typography>
-            </Box>
-          </Grid>
-        </Grid>
-      </Box>
-
-      <Divider sx={{ my: 2 }} />
-
-      <Box>
-        <Typography variant="subtitle2" sx={{ color: theme.textPrimary, mb: 2 }}>
-          Pricing Details
-        </Typography>
-        
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-          <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-            Monthly Rent
-          </Typography>
-          <Typography variant="body2" sx={{ color: theme.textPrimary }}>
-            LKR {pricing.monthlyRent.toLocaleString()}
-          </Typography>
-        </Box>
-        
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-            Service Fee
-          </Typography>
-          <Typography variant="body2" sx={{ color: theme.textPrimary }}>
-            LKR {pricing.serviceFee.toLocaleString()}
-          </Typography>
-        </Box>
-        
-        <Divider sx={{ mb: 2 }} />
-        
-        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Typography variant="subtitle2" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-            Total
-          </Typography>
-          <Typography variant="subtitle2" sx={{ color: theme.primary, fontWeight: 600 }}>
-            LKR {pricing.total.toLocaleString()}
-          </Typography>
-        </Box>
-      </Box>
-    </CardContent>
-  </Card>
-));
-
-// Memoized BookingLayout component
-const BookingLayout = memo(({ children, summaryProps }) => (
-  <Grid container spacing={4}>
-    <Grid item xs={12} md={8}>
-      {children}
-    </Grid>
-    <Grid item xs={12} md={4}>
-      <BookingSummary {...summaryProps} />
-    </Grid>
-  </Grid>
-));
-
-// Memoized BookingOverview component
-const BookingOverviewComponent = memo(({ theme }) => (
-  <Card variant="outlined" sx={{ backgroundColor: theme.cardBackground }}>
-    <CardContent sx={{ p: 4 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-        <InfoIcon sx={{ color: theme.primary, mr: 2, fontSize: 32 }} />
-        <Typography variant="h5" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-          How the Booking Process Works
-        </Typography>
-      </Box>
-
-      <Alert severity="info" sx={{ mb: 3 }}>
-        <Typography variant="body2">
-          Please review the booking process below before proceeding with your request.
-        </Typography>
-      </Alert>
-
-      <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
-        Step 1: Submit Booking Request
-      </Typography>
-      <Box sx={{ pl: 2, mb: 3 }}>
-        <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-          • Complete your personal details and booking information
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-          • Submit your booking request to the property owner
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
-          • No payment required at this stage
-        </Typography>
-      </Box>
-
-      <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
-        Step 2: Wait for Owner Approval
-      </Typography>
-      <Box sx={{ pl: 2, mb: 3 }}>
-        <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-          • The property owner will review your request
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-          • You'll receive a notification once they respond
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
-          • If approved, payment account details will be provided
-        </Typography>
-      </Box>
-
-      <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
-        Step 3: Submit Payment & Documents
-      </Typography>
-      <Box sx={{ pl: 2 }}>
-        <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-          • Make payment to the provided account details
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 1, color: theme.textSecondary }}>
-          • Upload payment receipt and verification documents
-        </Typography>
-        <Typography variant="body2" sx={{ mb: 2, color: theme.textSecondary }}>
-          • Wait for final confirmation from the owner
-        </Typography>
-      </Box>
-
-      <Alert severity="success" sx={{ mt: 3 }}>
-        <Typography variant="body2">
-          Your booking will be confirmed once the owner verifies your payment. 
-          This process typically takes 1-2 business days.
-        </Typography>
-      </Alert>
-    </CardContent>
-  </Card>
-));
-
-// Memoized WaitingForApproval component
-const WaitingForApprovalComponent = memo(({ theme, bookingRequest }) => (
-  <Card variant="outlined" sx={{ backgroundColor: theme.cardBackground }}>
-    <CardContent sx={{ p: 4, textAlign: 'center' }}>
-      <HourglassEmptyIcon sx={{ fontSize: 80, color: theme.warning, mb: 3 }} />
-      
-      <Typography variant="h5" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-        Waiting for Owner Approval
-      </Typography>
-      
-      <Typography variant="body1" sx={{ color: theme.textSecondary, mb: 4 }}>
-        Your booking request has been submitted successfully. The property owner will review 
-        your request and respond within 24-48 hours.
-      </Typography>
-
-      {bookingRequest && (
-        <Alert severity="info" sx={{ mb: 3 }}>
-          <Typography variant="body2">
-            Request ID: #{bookingRequest.id} | 
-            Submitted: {new Date(bookingRequest.created_at).toLocaleDateString()}
-          </Typography>
-        </Alert>
-      )}
-
-      <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-        You'll receive a notification once the owner responds to your request.
-      </Typography>
-    </CardContent>
-  </Card>
-));
+// Helper function to safely parse JSON
+const safeParse = (str) => {
+  try {
+    return typeof str === 'string' ? JSON.parse(str) : (str || []);
+  } catch (error) {
+    return [];
+  }
+};
 
 const UserBookingPage = () => {
-  const [activeStep, setActiveStep] = useState(0);
-  const { theme, isDark } = useTheme();
   const { id } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
-
-  // Property and booking state
+  
+  // State management
+  const [activeStep, setActiveStep] = useState(0);
   const [property, setProperty] = useState(null);
-  const [bookingRequest, setBookingRequest] = useState(null);
+  const [propertyStatus, setPropertyStatus] = useState(null);
+  const [existingBookings, setExistingBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  // Get dates from URL parameters - fix parameter reading
-  const urlParams = new URLSearchParams(location.search);
-  const [bookingDates, setBookingDates] = useState(() => {
-    // Check both possible parameter names for compatibility
-    const checkIn = urlParams.get('checkIn') || urlParams.get('from') || '';
-    const checkOut = urlParams.get('checkOut') || urlParams.get('to') || '';
-    
-    return { checkIn, checkOut };
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  
+  // Booking form state
+  const [bookingDates, setBookingDates] = useState({
+    checkIn: null,
+    checkOut: null
   });
-
-  // Form states - start with empty form, will be populated from API
+  
   const [personalDetails, setPersonalDetails] = useState({
     firstName: '',
     lastName: '',
     email: '',
     countryCode: '+94',
     mobileNumber: '',
-    birthdate: '',
+    birthdate: null,
     gender: '',
     nationality: '',
     occupation: '',
@@ -615,473 +101,721 @@ const UserBookingPage = () => {
     destination: '',
     relocationDetails: ''
   });
+  
+  const [pricingBreakdown, setPricingBreakdown] = useState(null);
+  const [dateValidation, setDateValidation] = useState({ isValid: false, errors: [], warnings: [] });
+  const [competitionInfo, setCompetitionInfo] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(false);
 
-  const [paymentDetails, setPaymentDetails] = useState({
-    paymentProof: null,
-    verificationDocument: '',
-    verificationFile: null,
-    agreeTerms: false
-  });
-
-  const [successDialog, setSuccessDialog] = useState({ open: false, message: '', title: '' });
-
-  const steps = ["Booking Overview", "Personal Details", "Waiting for Approval", "Payment & Documents"];
-
-  // Calculate pricing using property data from API
-  const calculatePricing = () => {
-    if (!property || !property.price) {
-      return { monthlyRent: 0, serviceFee: 300, total: 300 };
-    }
-
-    // Use actual property price from database
-    const monthlyRent = parseFloat(property.price) || 0;
-    const serviceFee = 300; // Standard service fee
-    const total = monthlyRent + serviceFee;
-
-    return { monthlyRent, serviceFee, total };
-  };
-
-  const pricing = calculatePricing();
-
-  // Load user profile data to pre-populate form - fixed API call
-  const loadUserProfile = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.log('No token found, using empty form');
-        return;
-      }
-
-      console.log('Loading user profile...');
-      const userProfile = await getUserProfile(token);
-      console.log('User profile loaded:', userProfile);
-
-      // Map profile data to form fields correctly
-      setPersonalDetails(prev => ({
-        ...prev,
-        firstName: userProfile.firstName || '',
-        lastName: userProfile.lastName || '',
-        email: userProfile.email || '',
-        mobileNumber: userProfile.phone || '',
-        birthdate: userProfile.birthdate || '',
-        gender: userProfile.gender || '',
-        nationality: userProfile.nationality || ''
-        // Keep existing values for occupation, field, destination, relocationDetails
-      }));
-
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-      // Continue with empty form if profile loading fails
-    }
-  };
-
-  // Load property details using API call - fixed property loading
-  const loadPropertyDetails = async () => {
-    try {
-      console.log('Loading property details for ID:', id);
-      const propertyData = await getPropertyById(id);
-      console.log('Property data received:', propertyData);
-
-      if (propertyData) {
-        setProperty(propertyData);
-      } else {
-        setError('Property not found');
-      }
-    } catch (error) {
-      console.error('Error loading property:', error);
-      setError('Failed to load property details');
-    }
-  };
-
-  // Check for existing booking request
-  const checkExistingBooking = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      const response = await fetch('/api/bookings/user-requests', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.ok) {
-        const requests = await response.json();
-        const existingRequest = requests.find(req => 
-          req.property_id === parseInt(id) && 
-          ['pending', 'approved', 'payment_pending', 'payment_submitted'].includes(req.status)
-        );
-        
-        if (existingRequest) {
-          setBookingRequest(existingRequest);
-          // Set appropriate step based on request status
-          switch (existingRequest.status) {
-            case 'pending':
-              setActiveStep(2);
-              break;
-            case 'approved':
-              setActiveStep(3);
-              break;
-            case 'payment_submitted':
-              setActiveStep(3);
-              break;
-            default:
-              setActiveStep(0);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Error checking existing booking:', error);
-    }
-  };
-
-  // Main data loading effect
+  // Load property details and availability status
   useEffect(() => {
-    const loadAllData = async () => {
-      setLoading(true);
-      
+    const loadPropertyData = async () => {
       try {
-        // Load property details first (required)
-        await loadPropertyDetails();
+        setLoading(true);
         
-        // Load user profile (optional, for pre-filling form)
-        await loadUserProfile();
+        // Load property details
+        const propertyData = await getPublicPropertyById(id);
+        setProperty(propertyData);
         
-        // Check for existing booking requests
-        await checkExistingBooking();
+        // Load property availability status
+        const statusData = await getPropertyAvailabilityStatus(id);
+        setPropertyStatus(statusData);
+        setExistingBookings(statusData.confirmed_bookings || []);
+        
+        // Set competition warning if needed
+        if (statusData.statistics?.pending_requests > 0) {
+          setCompetitionInfo({
+            count: statusData.statistics.pending_requests,
+            message: statusData.status_message
+          });
+        }
         
       } catch (error) {
-        console.error('Error in data loading:', error);
-        setError('Failed to load booking information');
+        console.error('Error loading property data:', error);
+        setSnackbar({
+          open: true,
+          message: 'Error loading property details. Please try again.',
+          severity: 'error'
+        });
       } finally {
         setLoading(false);
       }
     };
 
-    loadAllData();
+    if (id) {
+      loadPropertyData();
+    }
   }, [id]);
 
-  // Handle input changes for personal details without losing focus
-  const handlePersonalDetailChange = React.useCallback((field, value) => {
-    setPersonalDetails(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  }, []);
-  
-  // Handle input changes for booking dates
-  const handleBookingDateChange = React.useCallback((field, value) => {
-    setBookingDates(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  }, []);
-
-  // Handle input changes for payment details
-  const handlePaymentDetailChange = React.useCallback((field, value) => {
-    setPaymentDetails(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  }, []);
-
-  const validatePersonalDetails = () => {
-    const required = ['firstName', 'lastName', 'email', 'mobileNumber', 'birthdate', 'gender', 'nationality', 'occupation', 'field'];
-    const missing = required.filter(field => !personalDetails[field]);
-    
-    if (missing.length > 0) {
-      setError(`Please fill in all required fields: ${missing.join(', ')}`);
-      return false;
-    }
-
-    if (!bookingDates.checkIn || !bookingDates.checkOut) {
-      setError('Please select both check-in and check-out dates');
-      return false;
-    }
-
-    const checkIn = new Date(bookingDates.checkIn);
-    const checkOut = new Date(bookingDates.checkOut);
-    const today = new Date();
-
-    if (checkIn <= today) {
-      setError('Check-in date must be in the future');
-      return false;
-    }
-
-    if (checkOut <= checkIn) {
-      setError('Check-out date must be after check-in date');
-      return false;
-    }
-
-    return true;
-  };
-
-  const handleNext = React.useCallback(async () => {
-    setError('');
-
-    if (activeStep === 1) {
-      // Submit booking request
-      if (!validatePersonalDetails()) {
-        return;
-      }
-
-      setSubmitting(true);
+  // Load user profile data to pre-populate form
+  useEffect(() => {
+    const loadUserProfile = async () => {
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch('/api/bookings/request', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            property_id: parseInt(id),
-            first_name: personalDetails.firstName,
-            last_name: personalDetails.lastName,
-            email: personalDetails.email,
-            country_code: personalDetails.countryCode,
-            mobile_number: personalDetails.mobileNumber,
-            birthdate: personalDetails.birthdate,
-            gender: personalDetails.gender,
-            nationality: personalDetails.nationality,
-            occupation: personalDetails.occupation,
-            field: personalDetails.field,
-            destination: personalDetails.destination,
-            relocation_details: personalDetails.relocationDetails,
-            check_in_date: bookingDates.checkIn,
-            check_out_date: bookingDates.checkOut
-          })
-        });
+        if (!token) return;
 
-        if (response.ok) {
-          const result = await response.json();
-          setBookingRequest(result);
-          setActiveStep(2);
-          setSuccessDialog({
-            open: true,
-            title: 'Request Submitted Successfully',
-            message: 'Your booking request has been sent to the property owner. You will be notified once they respond.'
-          });
-        } else {
-          const errorData = await response.json();
-          setError(errorData.error || 'Failed to submit booking request');
-        }
+        const userProfile = await getUserProfile(token);
+        setPersonalDetails(prev => ({
+          ...prev,
+          firstName: userProfile.firstName || '',
+          lastName: userProfile.lastName || '',
+          email: userProfile.email || '',
+          mobileNumber: userProfile.phone || '',
+          birthdate: userProfile.birthdate ? dayjs(userProfile.birthdate).toDate() : null,
+          gender: userProfile.gender || '',
+          nationality: userProfile.nationality || ''
+        }));
       } catch (error) {
-        console.error('Error submitting booking request:', error);
-        setError('Network error. Please try again.');
-      } finally {
-        setSubmitting(false);
+        console.error('Error loading user profile:', error);
+        // Continue with empty form if profile loading fails
       }
-    } else if (activeStep === 3) {
-      // Submit payment
-      if (!paymentDetails.agreeTerms) {
-        setError('Please agree to the terms and conditions');
+    };
+
+    loadUserProfile();
+  }, []);
+
+  // Calculate pricing when dates change
+  useEffect(() => {
+    if (bookingDates.checkIn && bookingDates.checkOut && property) {
+      // Validate dates first
+      const validation = validateBookingDates(bookingDates.checkIn, bookingDates.checkOut);
+      setDateValidation(validation);
+      
+      if (validation.isValid) {
+        // Calculate pricing
+        const pricing = calculateBookingPricing({
+          monthlyRent: parseFloat(property.price) || 0,
+          checkInDate: bookingDates.checkIn,
+          checkOutDate: bookingDates.checkOut,
+          serviceFee: 300
+        });
+        
+        setPricingBreakdown(pricing);
+        
+        // Check for conflicts with existing bookings
+        const conflicts = checkDateConflicts(
+          bookingDates.checkIn, 
+          bookingDates.checkOut, 
+          existingBookings
+        );
+        
+        if (conflicts.hasConflicts) {
+          setDateValidation(prev => ({
+            ...prev,
+            errors: [...prev.errors, 'Selected dates conflict with existing bookings']
+          }));
+        }
+        
+        if (conflicts.hasPendingRequests) {
+          setCompetitionInfo({
+            count: conflicts.pendingCount,
+            message: `${conflicts.pendingCount} other guest${conflicts.pendingCount > 1 ? 's have' : ' has'} requested overlapping dates`
+          });
+        }
+      } else {
+        setPricingBreakdown(null);
+      }
+    }
+  }, [bookingDates.checkIn, bookingDates.checkOut, property, existingBookings]);
+
+  // Handle step navigation
+  const handleNext = () => {
+    if (activeStep === 0) {
+      // Validate dates before proceeding
+      if (!dateValidation.isValid || !pricingBreakdown) {
+        setSnackbar({
+          open: true,
+          message: 'Please select valid check-in and check-out dates',
+          severity: 'error'
+        });
         return;
       }
-      // Implementation for payment submission would go here
-    } else {
-      setActiveStep(prev => prev + 1);
+    } else if (activeStep === 1) {
+      // Validate personal details
+      const requiredFields = ['firstName', 'lastName', 'email', 'mobileNumber'];
+      const missingFields = requiredFields.filter(field => !personalDetails[field]);
+      
+      if (missingFields.length > 0) {
+        setSnackbar({
+          open: true,
+          message: 'Please fill in all required personal details',
+          severity: 'error'
+        });
+        return;
+      }
     }
-  }, [activeStep, id, personalDetails, bookingDates, paymentDetails.agreeTerms]);
-
-  const handleBack = React.useCallback(() => {
-    if (activeStep > 0 && activeStep !== 2) {
-      setActiveStep(prev => prev - 1);
-    }
-  }, [activeStep]);
-
-  const getNextButtonText = () => {
-    switch (activeStep) {
-      case 0:
-        return "Start Booking Process";
-      case 1:
-        return submitting ? "Submitting..." : "Submit Booking Request";
-      case 2:
-        return "Waiting for Approval";
-      case 3:
-        return "Submit Payment & Documents";
-      default:
-        return "Next";
-    }
+    
+    setActiveStep((prev) => prev + 1);
   };
 
-  const isNextButtonDisabled = () => {
-    switch (activeStep) {
-      case 1:
-        return submitting;
-      case 2:
-        return true; // Always disabled while waiting
-      case 3:
-        return !paymentDetails.agreeTerms || bookingRequest?.status !== 'approved';
-      default:
-        return false;
-    }
+  const handleBack = () => {
+    setActiveStep((prev) => prev - 1);
   };
 
-  // Create a common set of props for the BookingSummary
-  const summaryProps = {
-    property,
-    bookingDates,
-    pricing,
-    theme
-  };
-
-  // Render the appropriate step content based on activeStep
-  const renderStepContent = React.useCallback(() => {
-    switch (activeStep) {
-      case 0:
-        return (
-          <BookingLayout summaryProps={summaryProps}>
-            <BookingOverviewComponent theme={theme} />
-          </BookingLayout>
-        );
-      case 1:
-        return (
-          <BookingLayout summaryProps={summaryProps}>
-            <PersonalDetailsFormExternal 
-              personalDetails={personalDetails}
-              bookingDates={bookingDates}
-              onPersonalDetailChange={handlePersonalDetailChange}
-              onBookingDateChange={handleBookingDateChange}
-              error={error}
-              theme={theme}
-            />
-          </BookingLayout>
-        );
-      case 2:
-        return (
-          <BookingLayout summaryProps={summaryProps}>
-            <WaitingForApprovalComponent 
-              theme={theme} 
-              bookingRequest={bookingRequest} 
-            />
-          </BookingLayout>
-        );
-      case 3:
-        return (
-          <BookingLayout summaryProps={summaryProps}>
-            <PaymentFormExternal 
-              theme={theme}
-              bookingRequest={bookingRequest}
-              paymentDetails={paymentDetails}
-              onPaymentDetailsChange={handlePaymentDetailChange}
-              error={error}
-            />
-          </BookingLayout>
-        );
-      default:
-        return <Typography>Unknown step</Typography>;
+  // Handle booking submission
+  const handleSubmitBooking = async () => {
+    try {
+      setSubmitting(true);
+      
+      const bookingData = {
+        propertyId: parseInt(id),
+        checkInDate: bookingDates.checkIn.toISOString().split('T')[0],
+        checkOutDate: bookingDates.checkOut.toISOString().split('T')[0],
+        personalDetails,
+        pricingBreakdown
+      };
+      
+      const response = await submitBookingRequest(bookingData);
+      
+      setSnackbar({
+        open: true,
+        message: response.message || 'Booking request submitted successfully!',
+        severity: 'success'
+      });
+      
+      // Show competition warning if applicable
+      if (response.competition_warning) {
+        setTimeout(() => {
+          setSnackbar({
+            open: true,
+            message: response.competition_warning,
+            severity: 'warning'
+          });
+        }, 2000);
+      }
+      
+      // Navigate to bookings page after delay
+      setTimeout(() => {
+        navigate('/user/bookings');
+      }, 3000);
+      
+    } catch (error) {
+      console.error('Error submitting booking:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.error || 'Error submitting booking request',
+        severity: 'error'
+      });
+    } finally {
+      setSubmitting(false);
+      setConfirmDialog(false);
     }
-  }, [
-    activeStep,
-    theme, 
-    bookingRequest, 
-    personalDetails,
-    bookingDates,
-    paymentDetails, 
-    error, 
-    handlePersonalDetailChange,
-    handleBookingDateChange,
-    handlePaymentDetailChange, 
-    summaryProps
-  ]);
+  };
 
   if (loading) {
     return (
-      <Box sx={{ 
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <CircularProgress size={60} />
-      </Box>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+          <CircularProgress size={60} />
+        </Box>
+      </Container>
     );
   }
 
+  if (!property) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Alert severity="error">
+          Property not found or not available for booking.
+        </Alert>
+      </Container>
+    );
+  }
+
+  // Check if property can be booked
+  const canBook = propertyStatus?.can_book && 
+    !['unavailable', 'expired'].includes(propertyStatus?.availability_status);
+
+  if (!canBook) {
+    return (
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <Alert severity="warning">
+          <Typography variant="h6" gutterBottom>
+            Property Not Available for Booking
+          </Typography>
+          <Typography>
+            {propertyStatus?.status_message || 'This property is currently not available for booking.'}
+          </Typography>
+          <Button 
+            variant="outlined" 
+            sx={{ mt: 2 }}
+            onClick={() => navigate(`/property/${id}`)}
+          >
+            View Property Details
+          </Button>
+        </Alert>
+      </Container>
+    );
+  }
+
+  const amenities = safeParse(property.amenities);
+  const facilities = safeParse(property.facilities);
+  const images = safeParse(property.images);
+
   return (
-    <Box sx={{ 
-      background: isDark 
-        ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)`
-        : `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}05 50%, ${theme.background} 100%)`,
-      minHeight: '100vh',
-      py: 4
-    }}>
-      <Container maxWidth="lg">
-        <Typography variant="body2" sx={{ color: theme.textSecondary, mb: 2 }}>
-          Home / Booking
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        {/* Header */}
+        <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+          Book Your Stay
         </Typography>
 
-        {/* Stepper */}
-        <Box sx={{ mb: 4 }}>
-          <Stepper activeStep={activeStep} alternativeLabel>
-            {steps.map((label, index) => (
-              <Step key={label}>
-                <StepLabel
-                  sx={{
-                    '& .MuiStepLabel-label': {
-                      color: activeStep === index ? theme.primary : theme.textSecondary,
-                      fontWeight: activeStep === index ? 600 : 400,
-                    },
-                    '& .MuiStepIcon-root': {
-                      color: activeStep >= index ? theme.primary : theme.textSecondary,
-                    },
-                  }}
+        {/* Competition Warning */}
+        {competitionInfo && (
+          <Alert 
+            severity="warning" 
+            icon={<PeopleIcon />}
+            sx={{ mb: 3 }}
+          >
+            <Typography variant="body2">
+              <strong>High Demand Property:</strong> {competitionInfo.message}
+            </Typography>
+          </Alert>
+        )}
+
+        <Grid container spacing={4}>
+          {/* Left Column - Property Info */}
+          <Grid item xs={12} md={4}>
+            <Card sx={{ position: 'sticky', top: 20 }}>
+              <CardMedia
+                component="img"
+                height="200"
+                image={images[0]?.url || 'https://via.placeholder.com/400x200'}
+                alt={property.property_type}
+              />
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  {property.property_type} - {property.unit_type}
+                </Typography>
+                
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                  <LocationOnIcon sx={{ mr: 1, fontSize: 16, color: 'text.secondary' }} />
+                  <Typography variant="body2" color="text.secondary">
+                    {property.address}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <HomeIcon sx={{ mr: 1, fontSize: 16, color: 'text.secondary' }} />
+                  <Typography variant="body2" color="text.secondary">
+                    {facilities.Bedroom || 0} bed • {facilities.Bathroom || 0} bath
+                  </Typography>
+                </Box>
+
+                <Chip 
+                  label={propertyStatus?.status_message || 'Available'}
+                  color={propertyStatus?.availability_status === 'available' ? 'success' : 'warning'}
+                  size="small"
+                  sx={{ mb: 2 }}
+                />
+
+                <Typography variant="h5" color="primary" sx={{ fontWeight: 'bold' }}>
+                  LKR {parseInt(property.price).toLocaleString()}/month
+                </Typography>
+
+                {/* Pricing Breakdown */}
+                {pricingBreakdown && (
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Pricing Breakdown
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    
+                    {pricingBreakdown.breakdown.isSpecialRate && (
+                      <Alert severity="info" sx={{ mb: 2, fontSize: '0.8rem' }}>
+                        {formatPricingBreakdown(pricingBreakdown).specialRateMessage}
+                      </Alert>
+                    )}
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="body2">Duration:</Typography>
+                      <Typography variant="body2" fontWeight="bold">
+                        {formatPricingBreakdown(pricingBreakdown).durationText}
+                      </Typography>
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="body2">Rent:</Typography>
+                      <Typography variant="body2">
+                        {formatPricingBreakdown(pricingBreakdown).subtotalText}
+                      </Typography>
+                    </Box>
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="body2">Service Fee:</Typography>
+                      <Typography variant="body2">
+                        {formatPricingBreakdown(pricingBreakdown).serviceFeeText}
+                      </Typography>
+                    </Box>
+                    
+                    <Divider sx={{ my: 1 }} />
+                    
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="h6" fontWeight="bold">Total:</Typography>
+                      <Typography variant="h6" fontWeight="bold" color="primary">
+                        {formatPricingBreakdown(pricingBreakdown).totalText}
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+              </CardContent>
+            </Card>
+          </Grid>
+
+          {/* Right Column - Booking Form */}
+          <Grid item xs={12} md={8}>
+            <Paper sx={{ p: 3 }}>
+              {/* Stepper */}
+              <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
+                {steps.map((label, index) => (
+                  <Step key={label}>
+                    <StepLabel>{label}</StepLabel>
+                  </Step>
+                ))}
+              </Stepper>
+
+              {/* Step Content */}
+              {activeStep === 0 && (
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Select Your Dates
+                  </Typography>
+                  
+                  <Grid container spacing={3} sx={{ mt: 2 }}>
+                    <Grid item xs={12} sm={6}>
+                      <DatePicker
+                        label="Check-in Date"
+                        value={bookingDates.checkIn ? dayjs(bookingDates.checkIn) : null}
+                        onChange={(newValue) => 
+                          setBookingDates(prev => ({ ...prev, checkIn: newValue ? newValue.toDate() : null }))
+                        }
+                        minDate={dayjs()}
+                        slotProps={{ textField: { fullWidth: true } }}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <DatePicker
+                        label="Check-out Date"
+                        value={bookingDates.checkOut ? dayjs(bookingDates.checkOut) : null}
+                        onChange={(newValue) => 
+                          setBookingDates(prev => ({ ...prev, checkOut: newValue ? newValue.toDate() : null }))
+                        }
+                        minDate={bookingDates.checkIn ? dayjs(bookingDates.checkIn) : dayjs()}
+                        slotProps={{ textField: { fullWidth: true } }}
+                      />
+                    </Grid>
+                  </Grid>
+
+                  {/* Date Validation Messages */}
+                  {dateValidation.errors.length > 0 && (
+                    <Alert severity="error" sx={{ mt: 2 }}>
+                      {dateValidation.errors.map((error, index) => (
+                        <Typography key={index} variant="body2">
+                          {error}
+                        </Typography>
+                      ))}
+                    </Alert>
+                  )}
+
+                  {dateValidation.warnings.length > 0 && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      {dateValidation.warnings.map((warning, index) => (
+                        <Typography key={index} variant="body2">
+                          {warning}
+                        </Typography>
+                      ))}
+                    </Alert>
+                  )}
+                </Box>
+              )}
+
+              {activeStep === 1 && (
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Personal Details
+                  </Typography>
+                  
+                  <Grid container spacing={2} sx={{ mt: 2 }}>
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="First Name"
+                        required
+                        fullWidth
+                        value={personalDetails.firstName}
+                        onChange={(e) => setPersonalDetails(prev => ({ 
+                          ...prev, firstName: e.target.value 
+                        }))}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Last Name"
+                        required
+                        fullWidth
+                        value={personalDetails.lastName}
+                        onChange={(e) => setPersonalDetails(prev => ({ 
+                          ...prev, lastName: e.target.value 
+                        }))}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Email"
+                        type="email"
+                        required
+                        fullWidth
+                        value={personalDetails.email}
+                        onChange={(e) => setPersonalDetails(prev => ({ 
+                          ...prev, email: e.target.value 
+                        }))}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Mobile Number"
+                        required
+                        fullWidth
+                        value={personalDetails.mobileNumber}
+                        onChange={(e) => setPersonalDetails(prev => ({ 
+                          ...prev, mobileNumber: e.target.value 
+                        }))}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <FormControl fullWidth>
+                        <InputLabel>Gender</InputLabel>
+                        <Select
+                          value={personalDetails.gender}
+                          onChange={(e) => setPersonalDetails(prev => ({ 
+                            ...prev, gender: e.target.value 
+                          }))}
+                        >
+                          <MenuItem value="male">Male</MenuItem>
+                          <MenuItem value="female">Female</MenuItem>
+                          <MenuItem value="other">Other</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Nationality"
+                        fullWidth
+                        value={personalDetails.nationality}
+                        onChange={(e) => setPersonalDetails(prev => ({ 
+                          ...prev, nationality: e.target.value 
+                        }))}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        label="Occupation"
+                        fullWidth
+                        value={personalDetails.occupation}
+                        onChange={(e) => setPersonalDetails(prev => ({ 
+                          ...prev, occupation: e.target.value 
+                        }))}
+                      />
+                    </Grid>
+                    
+                    <Grid item xs={12}>
+                      <TextField
+                        label="Purpose of Stay"
+                        fullWidth
+                        multiline
+                        rows={3}
+                        value={personalDetails.relocationDetails}
+                        onChange={(e) => setPersonalDetails(prev => ({ 
+                          ...prev, relocationDetails: e.target.value 
+                        }))}
+                        placeholder="Please describe the purpose of your stay..."
+                      />
+                    </Grid>
+                  </Grid>
+                </Box>
+              )}
+
+              {activeStep === 2 && (
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Review & Confirm
+                  </Typography>
+                  
+                  {/* Booking Summary */}
+                  <Alert severity="info" sx={{ mt: 2, mb: 3 }}>
+                    <Typography variant="body2">
+                      <strong>Please review your booking details carefully.</strong> 
+                      Once submitted, you will need to wait for the property owner's approval.
+                    </Typography>
+                  </Alert>
+
+                  <Accordion defaultExpanded>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle1" fontWeight="bold">
+                        Booking Details
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Check-in:</Typography>
+                          <Typography variant="body1">
+                            {bookingDates.checkIn?.toLocaleDateString()}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Check-out:</Typography>
+                          <Typography variant="body1">
+                            {bookingDates.checkOut?.toLocaleDateString()}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12}>
+                          <Typography variant="body2" color="text.secondary">Duration:</Typography>
+                          <Typography variant="body1">
+                            {pricingBreakdown && formatPricingBreakdown(pricingBreakdown).durationText}
+                          </Typography>
+                        </Grid>
+                      </Grid>
+                    </AccordionDetails>
+                  </Accordion>
+
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="subtitle1" fontWeight="bold">
+                        Personal Information
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Name:</Typography>
+                          <Typography variant="body1">
+                            {personalDetails.firstName} {personalDetails.lastName}
+                          </Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Email:</Typography>
+                          <Typography variant="body1">{personalDetails.email}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Mobile:</Typography>
+                          <Typography variant="body1">{personalDetails.mobileNumber}</Typography>
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <Typography variant="body2" color="text.secondary">Nationality:</Typography>
+                          <Typography variant="body1">{personalDetails.nationality || 'Not specified'}</Typography>
+                        </Grid>
+                      </Grid>
+                    </AccordionDetails>
+                  </Accordion>
+
+                  {/* Competition Warning */}
+                  {competitionInfo && (
+                    <Alert severity="warning" sx={{ mt: 2 }}>
+                      <Typography variant="body2">
+                        <strong>Competition Notice:</strong> {competitionInfo.message}. 
+                        The property owner will review all requests and choose which one to approve.
+                      </Typography>
+                    </Alert>
+                  )}
+                </Box>
+              )}
+
+              {/* Navigation Buttons */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
+                <Button
+                  onClick={handleBack}
+                  disabled={activeStep === 0}
+                  variant="outlined"
                 >
-                  {label}
-                </StepLabel>
-              </Step>
-            ))}
-          </Stepper>
-        </Box>
+                  Back
+                </Button>
+                
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  {activeStep === steps.length - 1 ? (
+                    <Button
+                      variant="contained"
+                      size="large"
+                      onClick={() => setConfirmDialog(true)}
+                      disabled={!dateValidation.isValid || submitting}
+                      startIcon={submitting ? <CircularProgress size={20} /> : <CheckCircleIcon />}
+                    >
+                      {submitting ? 'Submitting...' : 'Submit Booking Request'}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="contained"
+                      onClick={handleNext}
+                      disabled={
+                        (activeStep === 0 && (!dateValidation.isValid || !pricingBreakdown)) ||
+                        (activeStep === 1 && (!personalDetails.firstName || !personalDetails.lastName || !personalDetails.email || !personalDetails.mobileNumber))
+                      }
+                    >
+                      Next
+                    </Button>
+                  )}
+                </Box>
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
 
-        {/* Step Content - Using fully externalized components */}
-        {renderStepContent()}
-
-        {/* Navigation Buttons */}
-        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between' }}>
-          <Button
-            onClick={handleBack}
-            disabled={activeStep === 0 || activeStep === 2}
-            sx={{ mr: 1 }}
-          >
-            Back
-          </Button>
-          <Box sx={{ flex: '1 1 auto' }} />
-          <Button
-            variant="contained"
-            onClick={handleNext}
-            disabled={isNextButtonDisabled()}
-            sx={{ minWidth: 200 }}
-          >
-            {getNextButtonText()}
-          </Button>
-        </Box>
-
-        {/* Success Dialog */}
-        <Dialog
-          open={successDialog.open}
-          onClose={() => setSuccessDialog({ open: false, message: '', title: '' })}
-        >
+        {/* Confirmation Dialog */}
+        <Dialog open={confirmDialog} onClose={() => setConfirmDialog(false)} maxWidth="sm" fullWidth>
           <DialogTitle>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
-              {successDialog.title}
+              <WarningIcon sx={{ mr: 1, color: 'warning.main' }} />
+              Confirm Booking Request
             </Box>
           </DialogTitle>
           <DialogContent>
-            <Typography>
-              {successDialog.message}
+            <Typography variant="body1" gutterBottom>
+              Are you sure you want to submit this booking request?
+            </Typography>
+            
+            {pricingBreakdown && (
+              <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>Final Amount:</Typography>
+                <Typography variant="h5" color="primary" fontWeight="bold">
+                  {formatPricingBreakdown(pricingBreakdown).totalText}
+                </Typography>
+              </Box>
+            )}
+            
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              After submission, you'll need to wait for the property owner to approve your request 
+              and provide payment instructions.
             </Typography>
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setSuccessDialog({ open: false, message: '', title: '' })}>
-              OK
+            <Button onClick={() => setConfirmDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSubmitBooking} 
+              variant="contained"
+              disabled={submitting}
+            >
+              {submitting ? 'Submitting...' : 'Confirm & Submit'}
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* Snackbar */}
+        <AppSnackbar
+          open={snackbar.open}
+          message={snackbar.message}
+          severity={snackbar.severity}
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        />
       </Container>
-    </Box>
+    </LocalizationProvider>
   );
 };
 

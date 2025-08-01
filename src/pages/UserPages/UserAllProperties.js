@@ -74,7 +74,7 @@ const UserAllProperties = () => {
     isAvailable: true
   });
 
-  const propertyTypes = ['All', 'Apartment', 'Villa', 'Flat', 'Room', 'House'];
+  const propertyTypes = ['All', 'Villa', 'Flat', 'Room', 'Hostels'];
   
   const sortOptions = [
     { value: '', label: 'Default' },
@@ -97,85 +97,48 @@ const UserAllProperties = () => {
       locations: getUniqueFilterValues(properties, 'address')
         .map(addr => {
           const parts = addr.split(',');
-          return parts[parts.length - 1]?.trim() || addr;
+          return parts[parts.length - 1]?.trim();
         })
-        .filter((city, index, arr) => arr.indexOf(city) === index)
-        .slice(0, 20),
-      
-      amenities: properties.reduce((acc, property) => {
-        try {
-          const amenities = JSON.parse(property.amenities || '[]');
-          amenities.forEach(amenity => {
-            if (amenity && !acc.includes(amenity)) {
-              acc.push(amenity);
-            }
-          });
-        } catch (error) {
-          // Handle invalid JSON gracefully
-        }
-        return acc;
-      }, []).slice(0, 15)
+        .filter(location => location && location !== 'Unknown')
+        .filter((location, index, arr) => arr.indexOf(location) === index),
+      amenities: getUniqueFilterValues(properties, 'amenities')
+        .filter(amenity => amenity && amenity !== 'Unknown')
     };
   }, [properties]);
 
-  // Single API call to fetch all properties - no loops
   useEffect(() => {
-    const fetchProperties = async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        const data = await getAllProperties();
-        setProperties(data);
-        
-        const prices = data.map(p => p.price).filter(p => p > 0);
-        if (prices.length > 0) {
-          const maxPrice = Math.max(...prices);
-          const defaultMax = Math.min(100000, maxPrice);
-          
-          setFilters(prev => ({
-            ...prev,
-            priceRange: [0, defaultMax]
-          }));
-          setAppliedFilters(prev => ({
-            ...prev,
-            priceRange: [0, defaultMax]
-          }));
-        }
-        
-      } catch (error) {
-        console.error('Error fetching properties:', error);
-        setError('Failed to load properties. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchProperties();
   }, []);
 
+  const fetchProperties = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getAllProperties();
+      setProperties(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching properties:', err);
+      setError('Failed to load properties. Please try again.');
+      setProperties([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleTabChange = useCallback((event, newValue) => {
     setSelectedTab(newValue);
-    
-    if (newValue === 0) {
-      setAppliedFilters(prev => ({ ...prev, propertyType: '' }));
-    } else {
-      const selectedType = propertyTypes[newValue];
-      setAppliedFilters(prev => ({ ...prev, propertyType: selectedType }));
-    }
-  }, [propertyTypes]);
+  }, []);
 
   const handleSearch = useCallback((event) => {
     if (event.key === 'Enter') {
-      // The PropertyGrid will handle the search filtering
       event.preventDefault();
     }
   }, []);
 
-  const handleFilterChange = useCallback((filterType, value) => {
+  const handleFilterChange = useCallback((filterName, value) => {
     setFilters(prev => ({
       ...prev,
-      [filterType]: value
+      [filterName]: value
     }));
   }, []);
 
@@ -184,8 +147,8 @@ const UserAllProperties = () => {
     setFilterDrawerOpen(false);
   }, [filters]);
 
-  const clearFilters = useCallback(() => {
-    const clearedFilters = {
+  const resetFilters = useCallback(() => {
+    const defaultFilters = {
       priceRange: [0, 100000],
       starRating: 0,
       availabilityDate: '',
@@ -195,191 +158,216 @@ const UserAllProperties = () => {
       requiredAmenities: [],
       isAvailable: true
     };
-    setFilters(clearedFilters);
-    setAppliedFilters(clearedFilters);
+    setFilters(defaultFilters);
+    setAppliedFilters(defaultFilters);
   }, []);
 
-  const handleSortChange = useCallback((event) => {
-    setSortBy(event.target.value);
-  }, []);
+  const filteredAndSortedProperties = useMemo(() => {
+    let filtered = [...properties];
 
-  const handleSortOrderChange = useCallback((event) => {
-    setSortOrder(event.target.value);
-  }, []);
+    // Apply tab-based property type filtering
+    const selectedPropertyType = propertyTypes[selectedTab];
+    if (selectedPropertyType && selectedPropertyType !== 'All') {
+      filtered = filtered.filter(property => {
+        const propertyType = property.property_type;
+        if (!propertyType) return false;
+        
+        // Handle different property type names and case variations
+        const normalizedPropertyType = propertyType.toLowerCase().trim();
+        const normalizedSelectedType = selectedPropertyType.toLowerCase().trim();
+        
+        // Handle plural/singular variations
+        if (normalizedSelectedType === 'hostels' && normalizedPropertyType === 'hostel') return true;
+        if (normalizedSelectedType === 'hostel' && normalizedPropertyType === 'hostels') return true;
+        
+        return normalizedPropertyType === normalizedSelectedType;
+      });
+    }
 
-  const handleAmenityToggle = useCallback((amenity) => {
-    setFilters(prev => ({
-      ...prev,
-      requiredAmenities: prev.requiredAmenities.includes(amenity)
-        ? prev.requiredAmenities.filter(a => a !== amenity)
-        : [...prev.requiredAmenities, amenity]
-    }));
-  }, []);
+    // Apply search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      filtered = filtered.filter(property =>
+        property.property_type?.toLowerCase().includes(query) ||
+        property.unit_type?.toLowerCase().includes(query) ||
+        property.address?.toLowerCase().includes(query) ||
+        property.description?.toLowerCase().includes(query)
+      );
+    }
 
-  const FilterDrawer = () => (
-    <Drawer
-      anchor="right"
-      open={filterDrawerOpen}
-      onClose={() => setFilterDrawerOpen(false)}
-      PaperProps={{
-        sx: { width: { xs: '100%', sm: 400 }, p: 2 }
-      }}
-    >
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">Filter Properties</Typography>
-        <IconButton onClick={() => setFilterDrawerOpen(false)}>
-          <CloseIcon />
-        </IconButton>
-      </Box>
+    // Apply price range filter
+    if (appliedFilters.priceRange && appliedFilters.priceRange[0] > 0 || appliedFilters.priceRange[1] < 100000) {
+      filtered = filtered.filter(property => {
+        const price = parseFloat(property.price);
+        return price >= appliedFilters.priceRange[0] && price <= appliedFilters.priceRange[1];
+      });
+    }
 
-      <Divider sx={{ mb: 2 }} />
+    // Apply star rating filter
+    if (appliedFilters.starRating > 0) {
+      filtered = filtered.filter(property => {
+        const rating = parseFloat(property.rating) || 0;
+        return rating >= appliedFilters.starRating;
+      });
+    }
 
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>Price Range</Typography>
-        <Slider
-          value={filters.priceRange}
-          onChange={(e, value) => handleFilterChange('priceRange', value)}
-          valueLabelDisplay="auto"
-          min={0}
-          max={200000}
-          step={1000}
-          valueLabelFormat={(value) => `LKR ${value.toLocaleString()}`}
-        />
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-          <Typography variant="body2">LKR {filters.priceRange[0].toLocaleString()}</Typography>
-          <Typography variant="body2">LKR {filters.priceRange[1].toLocaleString()}</Typography>
-        </Box>
-      </Box>
+    // Apply location filter
+    if (appliedFilters.location) {
+      filtered = filtered.filter(property =>
+        property.address?.toLowerCase().includes(appliedFilters.location.toLowerCase())
+      );
+    }
 
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>Minimum Rating</Typography>
-        <Rating
-          value={filters.starRating}
-          onChange={(e, value) => handleFilterChange('starRating', value || 0)}
-          size="large"
-        />
-      </Box>
+    // Apply bedroom filter
+    if (appliedFilters.bedrooms > 0) {
+      filtered = filtered.filter(property => {
+        try {
+          const facilities = typeof property.facilities === 'string' 
+            ? JSON.parse(property.facilities) 
+            : property.facilities || {};
+          const bedrooms = parseInt(facilities.Bedroom || facilities.bedroom || 0);
+          return bedrooms >= appliedFilters.bedrooms;
+        } catch (e) {
+          return false;
+        }
+      });
+    }
 
-      <Box sx={{ mb: 3 }}>
-        <FormControl fullWidth>
-          <InputLabel>Location</InputLabel>
-          <Select
-            value={filters.location}
-            onChange={(e) => handleFilterChange('location', e.target.value)}
-            label="Location"
-          >
-            <MenuItem value="">All Locations</MenuItem>
-            {filterOptions.locations.map(location => (
-              <MenuItem key={location} value={location}>
-                {location}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
+    // Apply bathroom filter
+    if (appliedFilters.bathrooms > 0) {
+      filtered = filtered.filter(property => {
+        try {
+          const facilities = typeof property.facilities === 'string' 
+            ? JSON.parse(property.facilities) 
+            : property.facilities || {};
+          const bathrooms = parseInt(facilities.Bathroom || facilities.bathroom || 0);
+          return bathrooms >= appliedFilters.bathrooms;
+        } catch (e) {
+          return false;
+        }
+      });
+    }
 
-      <Box sx={{ mb: 3 }}>
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel>Bedrooms</InputLabel>
-          <Select
-            value={filters.bedrooms}
-            onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
-            label="Bedrooms"
-          >
-            <MenuItem value={0}>Any</MenuItem>
-            <MenuItem value={1}>1+</MenuItem>
-            <MenuItem value={2}>2+</MenuItem>
-            <MenuItem value={3}>3+</MenuItem>
-            <MenuItem value={4}>4+</MenuItem>
-          </Select>
-        </FormControl>
+    // Apply amenities filter
+    if (appliedFilters.requiredAmenities.length > 0) {
+      filtered = filtered.filter(property => {
+        try {
+          const amenities = typeof property.amenities === 'string' 
+            ? JSON.parse(property.amenities) 
+            : property.amenities || {};
+          
+          return appliedFilters.requiredAmenities.every(requiredAmenity =>
+            Object.keys(amenities).some(key =>
+              key.toLowerCase().includes(requiredAmenity.toLowerCase()) && amenities[key]
+            )
+          );
+        } catch (e) {
+          return false;
+        }
+      });
+    }
 
-        <FormControl fullWidth>
-          <InputLabel>Bathrooms</InputLabel>
-          <Select
-            value={filters.bathrooms}
-            onChange={(e) => handleFilterChange('bathrooms', e.target.value)}
-            label="Bathrooms"
-          >
-            <MenuItem value={0}>Any</MenuItem>
-            <MenuItem value={1}>1+</MenuItem>
-            <MenuItem value={2}>2+</MenuItem>
-            <MenuItem value={3}>3+</MenuItem>
-            <MenuItem value={4}>4+</MenuItem>
-          </Select>
-        </FormControl>
-      </Box>
+    // Apply availability filter
+    if (appliedFilters.isAvailable) {
+      filtered = filtered.filter(property => 
+        property.is_available !== false && property.is_active !== false
+      );
+    }
 
-      <Box sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          type="date"
-          label="Available From"
-          value={filters.availabilityDate}
-          onChange={(e) => handleFilterChange('availabilityDate', e.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
-      </Box>
+    // Apply sorting
+    if (sortBy) {
+      filtered.sort((a, b) => {
+        let aValue, bValue;
 
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>Amenities</Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {filterOptions.amenities.map(amenity => (
-            <Chip
-              key={amenity}
-              label={amenity}
-              clickable
-              color={filters.requiredAmenities.includes(amenity) ? 'primary' : 'default'}
-              onClick={() => handleAmenityToggle(amenity)}
-              variant={filters.requiredAmenities.includes(amenity) ? 'filled' : 'outlined'}
-            />
-          ))}
-        </Box>
-      </Box>
+        switch (sortBy) {
+          case 'price':
+            aValue = parseFloat(a.price) || 0;
+            bValue = parseFloat(b.price) || 0;
+            break;
+          case 'rating':
+            aValue = parseFloat(a.rating) || 0;
+            bValue = parseFloat(b.rating) || 0;
+            break;
+          case 'date':
+            aValue = new Date(a.available_from || a.created_at);
+            bValue = new Date(b.available_from || b.created_at);
+            break;
+          case 'newest':
+            aValue = new Date(a.created_at);
+            bValue = new Date(b.created_at);
+            break;
+          case 'bedrooms':
+            try {
+              const aFacilities = typeof a.facilities === 'string' ? JSON.parse(a.facilities) : a.facilities || {};
+              const bFacilities = typeof b.facilities === 'string' ? JSON.parse(b.facilities) : b.facilities || {};
+              aValue = parseInt(aFacilities.Bedroom || aFacilities.bedroom || 0);
+              bValue = parseInt(bFacilities.Bedroom || bFacilities.bedroom || 0);
+            } catch (e) {
+              aValue = 0;
+              bValue = 0;
+            }
+            break;
+          case 'popularity':
+            aValue = parseInt(a.total_ratings) || 0;
+            bValue = parseInt(b.total_ratings) || 0;
+            break;
+          default:
+            return 0;
+        }
 
-      <Box sx={{ mb: 3 }}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={filters.isAvailable}
-              onChange={(e) => handleFilterChange('isAvailable', e.target.checked)}
-            />
-          }
-          label="Available Only"
-        />
-      </Box>
+        if (sortOrder === 'asc') {
+          return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+        } else {
+          return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+        }
+      });
+    }
 
-      <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
-        <Button
-          variant="outlined"
-          onClick={clearFilters}
-          startIcon={<ClearIcon />}
-          fullWidth
-        >
-          Clear
+    return filtered;
+  }, [properties, selectedTab, searchQuery, appliedFilters, sortBy, sortOrder, propertyTypes]);
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (appliedFilters.priceRange[0] > 0 || appliedFilters.priceRange[1] < 100000) count++;
+    if (appliedFilters.starRating > 0) count++;
+    if (appliedFilters.location) count++;
+    if (appliedFilters.bedrooms > 0) count++;
+    if (appliedFilters.bathrooms > 0) count++;
+    if (appliedFilters.requiredAmenities.length > 0) count++;
+    if (!appliedFilters.isAvailable) count++;
+    return count;
+  }, [appliedFilters]);
+
+  if (loading) {
+    return (
+      <Container sx={{ mt: 4, textAlign: 'center' }}>
+        <Typography variant="h6">Loading properties...</Typography>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container sx={{ mt: 4 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+        <Button variant="contained" onClick={fetchProperties}>
+          Retry
         </Button>
-        <Button
-          variant="contained"
-          onClick={applyFilters}
-          startIcon={<TuneIcon />}
-          fullWidth
-        >
-          Apply Filters
-        </Button>
-      </Box>
-    </Drawer>
-  );
+      </Container>
+    );
+  }
 
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
-      <Typography variant="h4" component="h1" sx={{ mb: 3, fontWeight: 'bold' }}>
-        All Properties
+    <Container sx={{ mt: 4 }}>
+      <Typography variant="h4" gutterBottom>
+        Find Your Perfect Stay
       </Typography>
 
-      {propertyStats.total > 0 && (
-        <Paper sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>Property Statistics</Typography>
-          <Grid container spacing={2}>
+      {properties.length > 0 && (
+        <Paper sx={{ p: 2, mb: 3, backgroundColor: isDark ? 'grey.900' : 'grey.50' }}>
+          <Grid container spacing={2} alignItems="center">
             <Grid item xs={6} sm={3}>
               <Typography variant="body2" color="text.secondary">Total Properties</Typography>
               <Typography variant="h6">{propertyStats.total}</Typography>
@@ -422,13 +410,26 @@ const UserAllProperties = () => {
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyPress={handleSearch}
           InputProps={{
-            startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+            startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
           }}
         />
         
-        <FormControl sx={{ minWidth: 120 }}>
+        <Button
+          variant="outlined"
+          startIcon={<FilterListIcon />}
+          onClick={() => setFilterDrawerOpen(true)}
+          sx={{ minWidth: 120 }}
+        >
+          Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
+        </Button>
+
+        <FormControl sx={{ minWidth: 150 }}>
           <InputLabel>Sort By</InputLabel>
-          <Select value={sortBy} onChange={handleSortChange} label="Sort By">
+          <Select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            label="Sort By"
+          >
             {sortOptions.map(option => (
               <MenuItem key={option.value} value={option.value}>
                 {option.label}
@@ -437,40 +438,177 @@ const UserAllProperties = () => {
           </Select>
         </FormControl>
 
-        <FormControl sx={{ minWidth: 100 }}>
-          <InputLabel>Order</InputLabel>
-          <Select value={sortOrder} onChange={handleSortOrderChange} label="Order">
-            <MenuItem value="asc">Ascending</MenuItem>
-            <MenuItem value="desc">Descending</MenuItem>
-          </Select>
-        </FormControl>
-
-        <Button
-          variant="outlined"
-          onClick={() => setFilterDrawerOpen(true)}
-          startIcon={<FilterListIcon />}
-          sx={{ minWidth: 120 }}
-        >
-          Filters
-        </Button>
+        {sortBy && (
+          <Button
+            variant="outlined"
+            startIcon={<SortIcon />}
+            onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+            sx={{ minWidth: 100 }}
+          >
+            {sortOrder === 'asc' ? 'Asc' : 'Desc'}
+          </Button>
+        )}
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
+      {(searchQuery || activeFiltersCount > 0 || propertyTypes[selectedTab] !== 'All') && (
+        <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            Active filters:
+          </Typography>
+          
+          {propertyTypes[selectedTab] !== 'All' && (
+            <Chip 
+              label={`Type: ${propertyTypes[selectedTab]}`}
+              size="small"
+              onDelete={() => setSelectedTab(0)}
+            />
+          )}
+          
+          {searchQuery && (
+            <Chip 
+              label={`Search: ${searchQuery}`}
+              size="small"
+              onDelete={() => setSearchQuery('')}
+            />
+          )}
+          
+          {activeFiltersCount > 0 && (
+            <Chip 
+              label={`${activeFiltersCount} filter${activeFiltersCount > 1 ? 's' : ''}`}
+              size="small"
+              onDelete={resetFilters}
+            />
+          )}
+        </Box>
       )}
 
-      <PropertyGrid
-        searchQuery={searchQuery}
-        filters={filters}
-        appliedFilters={appliedFilters}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        isUserPage={true}
+      <Typography variant="h6" sx={{ mb: 2 }}>
+        {filteredAndSortedProperties.length} Properties Found
+        {propertyTypes[selectedTab] !== 'All' && ` in ${propertyTypes[selectedTab]}`}
+      </Typography>
+
+      <PropertyGrid 
+        properties={filteredAndSortedProperties} 
+        loading={loading}
+        onPropertyClick={(property) => navigate(`/user-viewproperty/${property.id}`)}
       />
 
-      <FilterDrawer />
+      <Drawer
+        anchor="right"
+        open={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        sx={{ '& .MuiDrawer-paper': { width: 350, p: 3 } }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6">Filters</Typography>
+          <IconButton onClick={() => setFilterDrawerOpen(false)}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+          <Button variant="contained" onClick={applyFilters} fullWidth>
+            Apply
+          </Button>
+          <Button variant="outlined" onClick={resetFilters} fullWidth>
+            Reset
+          </Button>
+        </Box>
+
+        <Divider sx={{ mb: 3 }} />
+
+        <Box sx={{ mb: 3 }}>
+          <Typography gutterBottom>Price Range (LKR)</Typography>
+          <Slider
+            value={filters.priceRange}
+            onChange={(e, newValue) => handleFilterChange('priceRange', newValue)}
+            valueLabelDisplay="auto"
+            min={0}
+            max={100000}
+            step={1000}
+            valueLabelFormat={(value) => `${value.toLocaleString()}`}
+          />
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+            <Typography variant="caption">LKR 0</Typography>
+            <Typography variant="caption">LKR 100,000+</Typography>
+          </Box>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography gutterBottom>Minimum Rating</Typography>
+          <Rating
+            value={filters.starRating}
+            onChange={(e, newValue) => handleFilterChange('starRating', newValue)}
+            precision={0.5}
+          />
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <FormControl fullWidth>
+            <InputLabel>Location</InputLabel>
+            <Select
+              value={filters.location}
+              onChange={(e) => handleFilterChange('location', e.target.value)}
+              label="Location"
+            >
+              <MenuItem value="">Any Location</MenuItem>
+              {filterOptions.locations.map(location => (
+                <MenuItem key={location} value={location}>{location}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography gutterBottom>Minimum Bedrooms</Typography>
+          <Slider
+            value={filters.bedrooms}
+            onChange={(e, newValue) => handleFilterChange('bedrooms', newValue)}
+            valueLabelDisplay="auto"
+            min={0}
+            max={5}
+            step={1}
+            marks={[
+              { value: 0, label: 'Any' },
+              { value: 1, label: '1+' },
+              { value: 2, label: '2+' },
+              { value: 3, label: '3+' },
+              { value: 4, label: '4+' },
+              { value: 5, label: '5+' }
+            ]}
+          />
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography gutterBottom>Minimum Bathrooms</Typography>
+          <Slider
+            value={filters.bathrooms}
+            onChange={(e, newValue) => handleFilterChange('bathrooms', newValue)}
+            valueLabelDisplay="auto"
+            min={0}
+            max={3}
+            step={1}
+            marks={[
+              { value: 0, label: 'Any' },
+              { value: 1, label: '1+' },
+              { value: 2, label: '2+' },
+              { value: 3, label: '3+' }
+            ]}
+          />
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={filters.isAvailable}
+                onChange={(e) => handleFilterChange('isAvailable', e.target.checked)}
+              />
+            }
+            label="Show only available properties"
+          />
+        </Box>
+      </Drawer>
     </Container>
   );
 };
