@@ -1,47 +1,45 @@
-// userInteractionApi.js - Complete User Interaction API Client
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Create axios instance with base configuration for user interactions
 const apiClient = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to add authentication token to all requests
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
-// Response interceptor to handle authentication errors globally
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Clear authentication data and redirect to login
       localStorage.removeItem('token');
       localStorage.removeItem('userRole');
+      localStorage.removeItem('userId');
       localStorage.removeItem('tokenExpiry');
-      window.location.href = '/login';
+      
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
 );
 
-/**
- * Validates and normalizes property ID input
- * This helper function ensures property IDs are properly formatted before API calls
- * @param {string|number} propertyId - The property ID to validate
- * @returns {number} Validated property ID as integer
- * @throws {Error} If property ID is invalid
- */
 const validatePropertyId = (propertyId) => {
   const id = parseInt(propertyId);
   if (isNaN(id) || id <= 0) {
@@ -50,440 +48,440 @@ const validatePropertyId = (propertyId) => {
   return id;
 };
 
-/**
- * Submit or update a property rating
- * This function allows users to rate properties on a 1-5 scale
- * The backend handles both new ratings and updates to existing ratings
- * @param {number} propertyId - The ID of the property to rate
- * @param {Object} ratingData - Object containing rating information
- * @param {number} ratingData.rating - Rating value (1-5)
- * @returns {Promise<Object>} Response containing success message and updated rating info
- */
-export const submitPropertyRating = async (propertyId, { rating }) => {
+const validateRating = (rating) => {
+  const numRating = parseFloat(rating);
+  if (isNaN(numRating) || numRating < 1 || numRating > 5) {
+    throw new Error('Rating must be between 1 and 5');
+  }
+  return numRating;
+};
+
+export const submitPropertyRating = async (propertyId, ratingData) => {
   try {
     const validatedId = validatePropertyId(propertyId);
-
-    // Validate rating value on the frontend before sending to server
-    if (!rating || isNaN(rating)) {
-      throw new Error('Rating is required and must be a number');
-    }
-
-    const ratingValue = parseInt(rating);
-    if (ratingValue < 1 || ratingValue > 5) {
-      throw new Error('Rating must be between 1 and 5');
-    }
-
-    // Send the rating to the backend API
-    const response = await apiClient.post('/user-interactions/rating', {
+    const validatedRating = validateRating(ratingData.rating);
+    
+    const payload = {
       property_id: validatedId,
-      rating: ratingValue
-    });
-
+      rating_score: validatedRating,
+      rating_comment: ratingData.comment || ''
+    };
+    
+    const response = await apiClient.post('/user-interactions/rating', payload);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error submitting rating:', error);
+    console.error('Error submitting property rating:', error);
     
-    // Handle different types of errors with specific messages
     if (error.response?.status === 400) {
-      const errorMessage = error.response.data?.error;
-      if (errorMessage?.includes('own property')) {
-        throw new Error('You cannot rate your own property');
-      }
-      throw new Error(errorMessage || 'Invalid rating data');
+      throw new Error(error.response.data?.message || 'Invalid rating data');
     } else if (error.response?.status === 401) {
-      throw new Error('Please login to rate properties');
-    } else if (error.response?.status === 404) {
-      throw new Error('Property not found');
+      throw new Error('Please log in to rate properties');
+    } else if (error.response?.status === 409) {
+      throw new Error('You have already rated this property');
     }
     
-    throw new Error('Failed to submit rating. Please try again.');
+    throw new Error('Failed to submit rating');
   }
 };
 
-/**
- * Get the current user's rating for a specific property
- * This function retrieves the rating that the logged-in user has given to a property
- * @param {Object} params - Parameters object
- * @param {number} params.property_id - The property ID to get rating for
- * @returns {Promise<Object>} Object containing rating and timestamp, or null if no rating
- */
-export const getPropertyRating = async ({ property_id }) => {
+export const getUserPropertyRating = async (propertyId) => {
   try {
-    const validatedId = validatePropertyId(property_id);
+    const validatedId = validatePropertyId(propertyId);
+    
     const response = await apiClient.get(`/user-interactions/rating/${validatedId}`);
+    
+    if (!response.data) {
+      return null;
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching user property rating:', error);
+    
+    if (error.response?.status === 404) {
+      return null;
+    }
+    
+    return null;
+  }
+};
+
+export const addToFavorites = async (propertyId) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    const payload = {
+      property_id: validatedId,
+      interaction_type: 'favorite'
+    };
+    
+    const response = await apiClient.post('/user-interactions/favorite', payload);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error adding to favorites:', error);
+    
+    if (error.response?.status === 401) {
+      throw new Error('Please log in to add favorites');
+    } else if (error.response?.status === 409) {
+      throw new Error('Property is already in your favorites');
+    }
+    
+    throw new Error('Failed to add to favorites');
+  }
+};
+
+export const removeFromFavorites = async (propertyId) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.delete(`/user-interactions/favorite/${validatedId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error removing from favorites:', error);
+    
+    if (error.response?.status === 401) {
+      throw new Error('Please log in to manage favorites');
+    } else if (error.response?.status === 404) {
+      throw new Error('Property is not in your favorites');
+    }
+    
+    throw new Error('Failed to remove from favorites');
+  }
+};
+
+export const checkFavoriteStatus = async (propertyId) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/user-interactions/favorite-status/${validatedId}`);
+    
+    return response.data?.is_favorite || false;
+  } catch (error) {
+    console.error('Error checking favorite status:', error);
+    return false;
+  }
+};
+
+export const getUserFavorites = async (options = {}) => {
+  try {
+    const { page = 1, limit = 20 } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    
+    const response = await apiClient.get(`/user-interactions/favorites?${params.toString()}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching user favorites:', error);
+    
+    if (error.response?.status === 401) {
+      throw new Error('Please log in to view favorites');
+    }
+    
+    return {
+      favorites: [],
+      pagination: {
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 0
+      }
+    };
+  }
+};
+
+export const getFavouriteProperties = getUserFavorites;
+
+export const setFavouriteStatus = async (propertyId, isFavorite) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    if (isFavorite) {
+      return await addToFavorites(validatedId);
+    } else {
+      return await removeFromFavorites(validatedId);
+    }
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const isFavouriteStatus = checkFavoriteStatus;
+
+export const getPropertyRating = async (propertyId) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/user-interactions/property-rating/${validatedId}`);
+    
+    if (!response.data) {
+      return {
+        average_rating: 0,
+        total_ratings: 0
+      };
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error fetching property rating:', error);
     
-    if (error.response?.status === 401) {
-      throw new Error('Please login to view ratings');
-    } else if (error.response?.status === 404) {
-      throw new Error('Property not found');
-    }
-    
-    throw new Error('Failed to load rating. Please try again.');
+    return {
+      average_rating: 0,
+      total_ratings: 0
+    };
   }
 };
 
-/**
- * Submit a complaint about a property
- * This function allows users to report issues with properties to the property owner
- * @param {number} propertyId - The ID of the property to complain about
- * @param {string} complaintText - The complaint message (10-1000 characters)
- * @returns {Promise<Object>} Response confirming complaint submission
- */
-export const submitComplaint = async (propertyId, complaintText) => {
+export const submitPropertyReview = async (propertyId, reviewData) => {
   try {
     const validatedId = validatePropertyId(propertyId);
-
-    // Validate complaint text before submission
-    if (!complaintText || typeof complaintText !== 'string') {
-      throw new Error('Complaint text is required');
-    }
-
-    const trimmedComplaint = complaintText.trim();
-    if (trimmedComplaint.length < 10) {
-      throw new Error('Complaint must be at least 10 characters long');
-    }
-
-    if (trimmedComplaint.length > 1000) {
-      throw new Error('Complaint must not exceed 1000 characters');
-    }
-
-    const response = await apiClient.post('/user-interactions/complaint', {
+    
+    const payload = {
       property_id: validatedId,
-      complaint: trimmedComplaint
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Error submitting complaint:', error);
+      rating_score: validateRating(reviewData.rating),
+      rating_comment: reviewData.comment || ''
+    };
     
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data?.error || 'Invalid complaint data');
-    } else if (error.response?.status === 401) {
-      throw new Error('Please login to submit complaints');
-    } else if (error.response?.status === 404) {
-      throw new Error('Property not found');
+    const response = await apiClient.post('/user-interactions/review', payload);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    throw new Error('Failed to submit complaint. Please try again.');
-  }
-};
-
-/**
- * Check if a property is in the user's favorites
- * This function determines whether the current user has marked a property as favorite
- * @param {Object} params - Parameters object
- * @param {number} params.property_id - The property ID to check
- * @returns {Promise<Object>} Object with isFavourite boolean property
- */
-export const isFavouriteStatus = async ({ property_id }) => {
-  try {
-    const validatedId = validatePropertyId(property_id);
-    const response = await apiClient.get(`/user-interactions/favourite-status/${validatedId}`);
     return response.data;
   } catch (error) {
-    console.error('Error checking favourite status:', error);
+    console.error('Error submitting property review:', error);
     
     if (error.response?.status === 401) {
-      throw new Error('Please login to check favorites');
+      throw new Error('Please log in to submit reviews');
     }
     
-    // Return false as default if there's an error
-    return { isFavourite: false };
+    throw new Error('Failed to submit review');
   }
 };
 
-/**
- * Add or remove a property from user's favorites
- * This function toggles the favorite status of a property for the current user
- * @param {Object} params - Parameters object
- * @param {number} params.property_id - The property ID to update
- * @param {boolean} params.isFavourite - Whether to add (true) or remove (false) from favorites
- * @returns {Promise<Object>} Response confirming the favorite status change
- */
-export const setFavouriteStatus = async ({ property_id, isFavourite }) => {
+export const getPropertyReviews = async (propertyId, options = {}) => {
   try {
-    const validatedId = validatePropertyId(property_id);
-
-    const response = await apiClient.post('/user-interactions/favourite', {
-      property_id: validatedId,
-      isFavourite: Boolean(isFavourite)
-    });
-
+    const validatedId = validatePropertyId(propertyId);
+    const { page = 1, limit = 10 } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    
+    const response = await apiClient.get(`/user-interactions/reviews/${validatedId}?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        reviews: [],
+        pagination: {
+          page: 1,
+          limit: 10,
+          total: 0,
+          totalPages: 0
+        }
+      };
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error setting favourite status:', error);
+    console.error('Error fetching property reviews:', error);
     
-    if (error.response?.status === 401) {
-      throw new Error('Please login to manage favorites');
-    } else if (error.response?.status === 404) {
-      throw new Error('Property not found');
-    }
-    
-    throw new Error('Failed to update favorites. Please try again.');
+    return {
+      reviews: [],
+      pagination: {
+        page: 1,
+        limit: 10,
+        total: 0,
+        totalPages: 0
+      }
+    };
   }
 };
 
-/**
- * Get all properties marked as favorites by the current user
- * This function retrieves the complete list of properties the user has favorited
- * @param {Object} params - Optional parameters for pagination and filtering
- * @param {number} params.page - Page number for pagination (default: 1)
- * @param {number} params.limit - Number of items per page (default: 20)
- * @returns {Promise<Object>} Object containing favorite properties and pagination info
- */
-export const getFavouriteProperties = async (params = {}) => {
+export const getPropertyRatingSummary = async (propertyId) => {
   try {
-    const { page = 1, limit = 20 } = params;
-    const response = await apiClient.get('/user-interactions/favourites', {
-      params: { page, limit }
-    });
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/user-interactions/rating-summary/${validatedId}`);
+    
+    if (!response.data) {
+      return {
+        average_rating: 0,
+        total_ratings: 0,
+        rating_distribution: {
+          5: 0, 4: 0, 3: 0, 2: 0, 1: 0
+        }
+      };
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error fetching favourite properties:', error);
+    console.error('Error fetching property rating summary:', error);
     
-    if (error.response?.status === 401) {
-      throw new Error('Please login to view favorites');
-    }
-    
-    throw new Error('Failed to load favorite properties. Please try again.');
+    return {
+      average_rating: 0,
+      total_ratings: 0,
+      rating_distribution: {
+        5: 0, 4: 0, 3: 0, 2: 0, 1: 0
+      }
+    };
   }
 };
 
-/**
- * Get property complaints (for property owners)
- * This function allows property owners to view complaints submitted about their properties
- * @returns {Promise<Array>} Array of complaint objects with user and property information
- */
-export const getPropertyComplaints = async () => {
+export const submitReport = async (reportData) => {
   try {
-    const response = await apiClient.get('/user-interactions/complaints');
+    const payload = {
+      property_id: reportData.propertyId,
+      complaint_category: reportData.category,
+      complaint_description: reportData.description
+    };
+    
+    const response = await apiClient.post('/user-interactions/report', payload);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error submitting report:', error);
+    
+    if (error.response?.status === 401) {
+      throw new Error('Please log in to submit reports');
+    }
+    
+    throw new Error('Failed to submit report');
+  }
+};
+
+export const submitComplaint = submitReport;
+
+export const getPropertyComplaints = async (options = {}) => {
+  try {
+    const response = await apiClient.get('/user-interactions/complaints', {
+      params: {
+        type: 'property',
+        ...options
+      }
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error fetching property complaints:', error);
     
     if (error.response?.status === 401) {
-      throw new Error('Please login to view complaints');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Property owner role required.');
+      throw new Error('Please log in to view complaints');
     }
     
-    throw new Error('Failed to load complaints. Please try again.');
+    return [];
   }
 };
 
-/**
- * Get detailed statistics for a property (for property owners)
- * This function provides comprehensive analytics about user interactions with a property
- * @param {number} propertyId - The property ID to get statistics for
- * @returns {Promise<Object>} Detailed statistics including ratings, favorites, and complaints
- */
-export const getPropertyStatistics = async (propertyId) => {
+export const getUserInteractionHistory = async (options = {}) => {
   try {
-    const validatedId = validatePropertyId(propertyId);
-    const response = await apiClient.get(`/user-interactions/property-stats/${validatedId}`);
+    const { page = 1, limit = 20, type } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    if (type) params.append('type', type);
+    
+    const response = await apiClient.get(`/user-interactions/history?${params.toString()}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error fetching property statistics:', error);
+    console.error('Error fetching interaction history:', error);
     
     if (error.response?.status === 401) {
-      throw new Error('Please login to view statistics');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. You can only view stats for your own properties.');
-    } else if (error.response?.status === 404) {
-      throw new Error('Property not found');
+      throw new Error('Please log in to view interaction history');
     }
     
-    throw new Error('Failed to load property statistics. Please try again.');
+    return {
+      interactions: [],
+      pagination: {
+        page: 1,
+        limit: 20,
+        total: 0,
+        totalPages: 0
+      }
+    };
   }
 };
 
-/**
- * Toggle favorite status for a property
- * This convenience function automatically determines current status and toggles it
- * @param {number} propertyId - The property ID to toggle
- * @returns {Promise<Object>} Object with new favorite status and success message
- */
-export const toggleFavourite = async (propertyId) => {
+export const updateUserReview = async (interactionId, reviewData) => {
   try {
-    const validatedId = validatePropertyId(propertyId);
+    const payload = {
+      rating_score: validateRating(reviewData.rating),
+      rating_comment: reviewData.comment || ''
+    };
     
-    // First, get the current favorite status
-    const currentStatus = await isFavouriteStatus({ property_id: validatedId });
-    const newStatus = !currentStatus.isFavourite;
+    const response = await apiClient.put(`/user-interactions/review/${interactionId}`, payload);
     
-    // Then set the opposite status
-    const result = await setFavouriteStatus({ 
-      property_id: validatedId, 
-      isFavourite: newStatus 
-    });
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
     
-    return { ...result, isFavourite: newStatus };
+    return response.data;
   } catch (error) {
-    console.error('Error toggling favourite:', error);
-    throw error;
+    console.error('Error updating user review:', error);
+    
+    if (error.response?.status === 401) {
+      throw new Error('Please log in to update reviews');
+    } else if (error.response?.status === 404) {
+      throw new Error('Review not found');
+    }
+    
+    throw new Error('Failed to update review');
   }
 };
 
-/**
- * Check if the current user has rated a specific property
- * This utility function helps determine whether to show rating or edit rating UI
- * @param {number} propertyId - The property ID to check
- * @returns {Promise<boolean>} True if user has rated the property, false otherwise
- */
-export const hasUserRatedProperty = async (propertyId) => {
+export const recordPropertyView = async (propertyId, viewData = {}) => {
   try {
     const validatedId = validatePropertyId(propertyId);
-    const rating = await getPropertyRating({ property_id: validatedId });
-    return rating.rating !== null && rating.rating !== undefined;
+    
+    const payload = {
+      property_id: validatedId,
+      interaction_type: 'view',
+      view_duration: viewData.duration || null
+    };
+    
+    const response = await apiClient.post('/user-interactions/view', payload);
+    
+    return response.data || true;
   } catch (error) {
-    console.error('Error checking if user has rated property:', error);
+    console.error('Error recording property view:', error);
     return false;
   }
 };
 
-/**
- * Get comprehensive interaction data for a property
- * This function combines multiple API calls to provide complete interaction information
- * @param {number} propertyId - The property ID to get interactions for
- * @returns {Promise<Object>} Object containing favorite status, user rating, and interaction flags
- */
-export const getPropertyInteractions = async (propertyId) => {
-  try {
-    const validatedId = validatePropertyId(propertyId);
-    
-    // Use Promise.allSettled to handle cases where some API calls might fail
-    const [favouriteStatus, userRating] = await Promise.allSettled([
-      isFavouriteStatus({ property_id: validatedId }),
-      getPropertyRating({ property_id: validatedId })
-    ]);
-
-    return {
-      isFavourite: favouriteStatus.status === 'fulfilled' ? favouriteStatus.value.isFavourite : false,
-      userRating: userRating.status === 'fulfilled' ? userRating.value.rating : null,
-      hasRated: userRating.status === 'fulfilled' ? 
-        (userRating.value.rating !== null && userRating.value.rating !== undefined) : false
-    };
-  } catch (error) {
-    console.error('Error fetching property interactions:', error);
-    
-    // Return safe defaults if there's an error
-    return {
-      isFavourite: false,
-      userRating: null,
-      hasRated: false
-    };
-  }
-};
-
-/**
- * Search properties with user interaction context
- * This function enhances property search results with user interaction data
- * @param {Object} searchParams - Search parameters
- * @param {string} searchParams.query - Search query string
- * @param {Object} searchParams.filters - Filter criteria
- * @param {number} searchParams.page - Page number for pagination
- * @param {number} searchParams.limit - Items per page
- * @returns {Promise<Object>} Search results with interaction data included
- */
-export const searchPropertiesWithInteractions = async (searchParams = {}) => {
-  try {
-    const { query = '', filters = {}, page = 1, limit = 20 } = searchParams;
-    
-    const response = await apiClient.get('/user-interactions/search', {
-      params: {
-        q: query,
-        page,
-        limit,
-        ...filters
-      }
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Error searching properties with interactions:', error);
-    
-    if (error.response?.status === 400) {
-      throw new Error('Invalid search parameters');
-    }
-    
-    throw new Error('Failed to search properties. Please try again.');
-  }
-};
-
-/**
- * Mark a complaint as resolved (for property owners)
- * This function allows property owners to mark complaints about their properties as resolved
- * @param {number} complaintId - The ID of the complaint to resolve
- * @returns {Promise<Object>} Response confirming the complaint resolution
- */
-export const resolveComplaint = async (complaintId) => {
-  try {
-    const id = parseInt(complaintId);
-    if (isNaN(id) || id <= 0) {
-      throw new Error('Invalid complaint ID');
-    }
-
-    const response = await apiClient.patch(`/user-interactions/complaint/${id}/resolve`);
-    return response.data;
-  } catch (error) {
-    console.error('Error resolving complaint:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. You can only resolve complaints about your own properties.');
-    } else if (error.response?.status === 404) {
-      throw new Error('Complaint not found');
-    }
-    
-    throw new Error('Failed to resolve complaint. Please try again.');
-  }
-};
-
-/**
- * Get user's interaction history
- * This function provides a comprehensive view of all user interactions across properties
- * @param {Object} params - Parameters for filtering and pagination
- * @param {string} params.type - Type of interactions to filter ('rating', 'favourite', 'complaint', 'all')
- * @param {number} params.page - Page number for pagination
- * @param {number} params.limit - Items per page
- * @returns {Promise<Object>} User interaction history with pagination
- */
-export const getUserInteractionHistory = async (params = {}) => {
-  try {
-    const { type = 'all', page = 1, limit = 20 } = params;
-    
-    const response = await apiClient.get('/user-interactions/history', {
-      params: { type, page, limit }
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching user interaction history:', error);
-    
-    if (error.response?.status === 401) {
-      throw new Error('Please login to view interaction history');
-    }
-    
-    throw new Error('Failed to load interaction history. Please try again.');
-  }
-};
-
-// Export all functions for easy importing in components
-export default {
-  submitPropertyRating,
-  getPropertyRating,
-  submitComplaint,
-  isFavouriteStatus,
-  setFavouriteStatus,
-  getFavouriteProperties,
-  getPropertyComplaints,
-  getPropertyStatistics,
-  toggleFavourite,
-  hasUserRatedProperty,
-  getPropertyInteractions,
-  searchPropertiesWithInteractions,
-  resolveComplaint,
-  getUserInteractionHistory
-};
+export const incrementPropertyViews = recordPropertyView;

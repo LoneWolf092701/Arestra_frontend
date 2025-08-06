@@ -13,7 +13,7 @@ export const ThemeProvider = ({ children }) => {
     return savedTheme === 'dark' ? darkTheme : lightTheme;
   });
 
-  // Create Material-UI theme based on our custom theme
+  // Create Material-UI theme based
   const createMuiTheme = (customTheme) => {
     return createTheme({
       palette: {
@@ -233,7 +233,7 @@ export const ThemeProvider = ({ children }) => {
 
   // Context value providing both custom theme and toggle function
   const contextValue = {
-    theme: currentTheme,        // Our custom theme object for direct use
+    theme: currentTheme,        // Custom theme object for direct use
     muiTheme,                   // Material-UI theme for automatic component styling
     toggleTheme,                // Function to switch between themes
     isDark: currentTheme.name === 'dark',  // Boolean for conditional styling

@@ -22,7 +22,7 @@ export const calculateBookingDuration = (checkInDate, checkOutDate) => {
   }
   
   // Calculate months and remaining days
-  // We consider 30 days = 1 month for billing purposes
+  // Consider 30 days = 1 month for billing purposes
   const DAYS_PER_MONTH = 30;
   const months = Math.floor(totalDays / DAYS_PER_MONTH);
   const remainingDays = totalDays % DAYS_PER_MONTH;

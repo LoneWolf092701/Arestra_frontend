@@ -23,7 +23,11 @@ import {
   FormControlLabel,
   Divider,
   Paper,
-  Alert
+  Alert,
+  InputAdornment,
+  CircularProgress,
+  Badge,
+  Tooltip
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -31,370 +35,605 @@ import CloseIcon from '@mui/icons-material/Close';
 import TuneIcon from '@mui/icons-material/Tune';
 import SortIcon from '@mui/icons-material/Sort';
 import ClearIcon from '@mui/icons-material/Clear';
-import { getAllProperties } from '../../api/propertyApi';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import PendingIcon from '@mui/icons-material/Pending';
+import { getAllPublicProperties } from '../../api/propertyApi';
+import { getPropertyRating, checkFavoriteStatus, recordPropertyView } from '../../api/userInteractionApi';
 import PropertyGrid from '../../components/common/PropertyGrid';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useNavigate } from 'react-router-dom';
-import { getPropertyStats, getUniqueFilterValues } from '../../utils/PropertyFilterUtils';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const UserAllProperties = () => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [properties, setProperties] = useState([]);
+  const [enrichedProperties, setEnrichedProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [enriching, setEnriching] = useState(false);
   
   const [selectedTab, setSelectedTab] = useState(0);
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   
-  const [sortBy, setSortBy] = useState('');
+  const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState('desc');
   
   const { theme, isDark } = useTheme();
   const navigate = useNavigate();
   
   const [filters, setFilters] = useState({
-    priceRange: [0, 100000],
-    starRating: 0,
+    priceRange: [0, 200000],
+    minRating: 0,
     availabilityDate: '',
     location: '',
     bedrooms: 0,
     bathrooms: 0,
-    requiredAmenities: [],
-    isAvailable: true
+    amenities: [],
+    isAvailable: true,
+    approvalStatus: 'approved',
+    showPending: false,
+    minViews: 0,
+    hasImages: false
   });
 
   const [appliedFilters, setAppliedFilters] = useState({
-    priceRange: [0, 100000],
-    starRating: 0,
+    priceRange: [0, 200000],
+    minRating: 0,
     availabilityDate: '',
     location: '',
     bedrooms: 0,
     bathrooms: 0,
-    requiredAmenities: [],
-    isAvailable: true
+    amenities: [],
+    isAvailable: true,
+    approvalStatus: 'approved',
+    showPending: false,
+    minViews: 0,
+    hasImages: false
   });
 
-  const propertyTypes = ['All', 'Villa', 'Flat', 'Room', 'Hostels'];
+  const propertyTypes = ['All', 'Apartment', 'Villa', 'Flat', 'Room', 'House', 'Condo'];
   
   const sortOptions = [
-    { value: '', label: 'Default' },
-    { value: 'price', label: 'Price' },
-    { value: 'rating', label: 'Rating' },
-    { value: 'date', label: 'Availability Date' },
-    { value: 'newest', label: 'Recently Added' },
-    { value: 'bedrooms', label: 'Bedrooms' },
-    { value: 'popularity', label: 'Popularity' }
+    { value: 'created_at', label: 'Newest First' },
+    { value: 'price', label: 'Price: Low to High' },
+    { value: 'price_desc', label: 'Price: High to Low' },
+    { value: 'views_count', label: 'Most Viewed' },
+    { value: 'rating', label: 'Highest Rated' },
+    { value: 'updated_at', label: 'Recently Updated' },
+    { value: 'available_from', label: 'Available Soon' }
   ];
 
-  const propertyStats = useMemo(() => {
-    return getPropertyStats(properties);
-  }, [properties]);
+  const availableAmenities = [
+    'WiFi', 'Air Conditioning', 'Heating', 'TV', 'Kitchen', 'Refrigerator',
+    'Washing Machine', 'Dryer', 'Dishwasher', 'Microwave', 'Coffee Maker',
+    'Iron', 'Hair Dryer', 'Towels', 'Bed Linens', 'Parking', 'Gym',
+    'Swimming Pool', 'Security', 'Elevator', 'Balcony', 'Garden', 'Pet Friendly',
+    'Furnished', 'Utilities Included', 'Internet Included', 'Cable TV'
+  ];
 
-  const filterOptions = useMemo(() => {
-    if (!properties.length) return { locations: [], amenities: [] };
-    
-    return {
-      locations: getUniqueFilterValues(properties, 'address')
-        .map(addr => {
-          const parts = addr.split(',');
-          return parts[parts.length - 1]?.trim();
-        })
-        .filter(location => location && location !== 'Unknown')
-        .filter((location, index, arr) => arr.indexOf(location) === index),
-      amenities: getUniqueFilterValues(properties, 'amenities')
-        .filter(amenity => amenity && amenity !== 'Unknown')
-    };
-  }, [properties]);
+  const approvalStatusOptions = [
+    { value: 'approved', label: 'Approved Properties' },
+    { value: 'pending', label: 'Pending Approval' },
+    { value: 'all', label: 'All Statuses' }
+  ];
 
   useEffect(() => {
     fetchProperties();
-  }, []);
+  }, [appliedFilters, sortBy, sortOrder, selectedTab]);
 
-  const fetchProperties = async () => {
+  useEffect(() => {
+    const searchFromUrl = searchParams.get('search');
+    if (searchFromUrl && searchFromUrl !== searchQuery) {
+      setSearchQuery(searchFromUrl);
+      handleSearch(searchFromUrl);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (properties.length > 0) {
+      enrichPropertiesWithInteractionData();
+    }
+  }, [properties]);
+
+  const fetchProperties = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getAllProperties();
-      setProperties(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('Error fetching properties:', err);
+
+      const queryParams = {
+        page: 1,
+        limit: 100,
+        sortBy: sortBy === 'price_desc' ? 'price' : sortBy,
+        sortOrder: sortBy === 'price_desc' ? 'desc' : sortOrder,
+        includeInactive: appliedFilters.showPending,
+        includeDetails: true,
+        includeOwnerInfo: true,
+        includeStats: true,
+        ...appliedFilters
+      };
+
+      if (selectedTab > 0) {
+        queryParams.property_type = propertyTypes[selectedTab];
+      }
+
+      if (searchQuery.trim()) {
+        queryParams.search = searchQuery.trim();
+      }
+
+      if (appliedFilters.approvalStatus !== 'all') {
+        queryParams.approval_status = appliedFilters.approvalStatus;
+      }
+
+      if (appliedFilters.minViews > 0) {
+        queryParams.min_views = appliedFilters.minViews;
+      }
+
+      if (appliedFilters.hasImages) {
+        queryParams.has_images = true;
+      }
+
+      if (appliedFilters.amenities.length > 0) {
+        queryParams.amenities = appliedFilters.amenities.join(',');
+      }
+
+      const response = await getAllPublicProperties(queryParams);
+      const propertyList = Array.isArray(response) ? response : response.properties || [];
+      
+      setProperties(propertyList);
+    } catch (error) {
+      console.error('Error fetching properties:', error);
       setError('Failed to load properties. Please try again.');
       setProperties([]);
     } finally {
       setLoading(false);
     }
+  }, [appliedFilters, sortBy, sortOrder, selectedTab, searchQuery]);
+
+  const enrichPropertiesWithInteractionData = useCallback(async () => {
+    if (!properties.length) return;
+    
+    setEnriching(true);
+    try {
+      const enrichmentPromises = properties.map(async (property) => {
+        try {
+          const [ratingData, favoriteStatus] = await Promise.all([
+            getPropertyRating(property.id).catch(() => ({ average_rating: 0, total_ratings: 0 })),
+            checkFavoriteStatus(property.id).catch(() => false)
+          ]);
+
+          return {
+            ...property,
+            enriched_rating: ratingData.average_rating || 0,
+            enriched_rating_count: ratingData.total_ratings || 0,
+            enriched_is_favorite: favoriteStatus,
+            enriched_view_count: property.views_count || property.view_count || 0,
+            enriched_approval_status: property.approval_status || 'unknown',
+            enriched_is_active: property.is_active !== false,
+            enriched_available_from: property.available_from,
+            enriched_available_to: property.available_to,
+            enriched_owner_name: property.owner_username || property.owner_name || 'Unknown Owner',
+            enriched_created_at: property.created_at,
+            enriched_updated_at: property.updated_at,
+            enriched_image_count: (property.images && Array.isArray(property.images)) ? property.images.length : 0,
+            enriched_amenities: property.amenities || property.facilities || [],
+            enriched_property_details: {
+              bedrooms: property.bedrooms || property.bedroom_count || 0,
+              bathrooms: property.bathrooms || property.bathroom_count || 0,
+              square_feet: property.square_feet || property.area || null,
+              furnished: property.furnished || false,
+              parking: property.parking || false,
+              pet_friendly: property.pet_friendly || false,
+              utilities_included: property.utilities_included || false
+            }
+          };
+        } catch (error) {
+          console.error(`Error enriching property ${property.id}:`, error);
+          return {
+            ...property,
+            enriched_rating: 0,
+            enriched_rating_count: 0,
+            enriched_is_favorite: false,
+            enriched_view_count: property.views_count || 0,
+            enriched_approval_status: property.approval_status || 'approved',
+            enriched_is_active: property.is_active !== false,
+            enriched_image_count: 0,
+            enriched_amenities: [],
+            enriched_property_details: {}
+          };
+        }
+      });
+
+      const enriched = await Promise.all(enrichmentPromises);
+      setEnrichedProperties(enriched);
+    } catch (error) {
+      console.error('Error enriching properties:', error);
+      setEnrichedProperties(properties);
+    } finally {
+      setEnriching(false);
+    }
+  }, [properties]);
+
+  const handleSearch = useCallback((query = searchQuery) => {
+    const newSearchParams = new URLSearchParams(searchParams);
+    if (query.trim()) {
+      newSearchParams.set('search', query.trim());
+    } else {
+      newSearchParams.delete('search');
+    }
+    setSearchParams(newSearchParams);
+    fetchProperties();
+  }, [searchQuery, searchParams, setSearchParams, fetchProperties]);
+
+  const handlePropertyView = async (property) => {
+    try {
+      await recordPropertyView(property.id, { 
+        duration: null,
+        source: 'property_list',
+        user_location: null 
+      });
+      navigate(`/user-property-view/${property.id}`);
+    } catch (error) {
+      console.error('Error recording property view:', error);
+      navigate(`/user-property-view/${property.id}`);
+    }
   };
 
-  const handleTabChange = useCallback((event, newValue) => {
-    setSelectedTab(newValue);
-  }, []);
-
-  const handleSearch = useCallback((event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-    }
-  }, []);
-
-  const handleFilterChange = useCallback((filterName, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterName]: value
-    }));
-  }, []);
-
-  const applyFilters = useCallback(() => {
+  const applyFilters = () => {
     setAppliedFilters({ ...filters });
     setFilterDrawerOpen(false);
-  }, [filters]);
+  };
 
-  const resetFilters = useCallback(() => {
+  const clearFilters = () => {
     const defaultFilters = {
-      priceRange: [0, 100000],
-      starRating: 0,
+      priceRange: [0, 200000],
+      minRating: 0,
       availabilityDate: '',
       location: '',
       bedrooms: 0,
       bathrooms: 0,
-      requiredAmenities: [],
-      isAvailable: true
+      amenities: [],
+      isAvailable: true,
+      approvalStatus: 'approved',
+      showPending: false,
+      minViews: 0,
+      hasImages: false
     };
     setFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
-  }, []);
+    setFilterDrawerOpen(false);
+  };
 
   const filteredAndSortedProperties = useMemo(() => {
-    let filtered = [...properties];
+    let filtered = [...enrichedProperties];
 
-    // Apply tab-based property type filtering
-    const selectedPropertyType = propertyTypes[selectedTab];
-    if (selectedPropertyType && selectedPropertyType !== 'All') {
-      filtered = filtered.filter(property => {
-        const propertyType = property.property_type;
-        if (!propertyType) return false;
-        
-        // Handle different property type names and case variations
-        const normalizedPropertyType = propertyType.toLowerCase().trim();
-        const normalizedSelectedType = selectedPropertyType.toLowerCase().trim();
-        
-        // Handle plural/singular variations
-        if (normalizedSelectedType === 'hostels' && normalizedPropertyType === 'hostel') return true;
-        if (normalizedSelectedType === 'hostel' && normalizedPropertyType === 'hostels') return true;
-        
-        return normalizedPropertyType === normalizedSelectedType;
-      });
+    if (appliedFilters.minRating > 0) {
+      filtered = filtered.filter(p => p.enriched_rating >= appliedFilters.minRating);
     }
 
-    // Apply search query filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase().trim();
-      filtered = filtered.filter(property =>
-        property.property_type?.toLowerCase().includes(query) ||
-        property.unit_type?.toLowerCase().includes(query) ||
-        property.address?.toLowerCase().includes(query) ||
-        property.description?.toLowerCase().includes(query)
-      );
+    if (appliedFilters.minViews > 0) {
+      filtered = filtered.filter(p => p.enriched_view_count >= appliedFilters.minViews);
     }
 
-    // Apply price range filter
-    if (appliedFilters.priceRange && appliedFilters.priceRange[0] > 0 || appliedFilters.priceRange[1] < 100000) {
-      filtered = filtered.filter(property => {
-        const price = parseFloat(property.price);
-        return price >= appliedFilters.priceRange[0] && price <= appliedFilters.priceRange[1];
-      });
+    if (appliedFilters.hasImages) {
+      filtered = filtered.filter(p => p.enriched_image_count > 0);
     }
 
-    // Apply star rating filter
-    if (appliedFilters.starRating > 0) {
-      filtered = filtered.filter(property => {
-        const rating = parseFloat(property.rating) || 0;
-        return rating >= appliedFilters.starRating;
-      });
-    }
-
-    // Apply location filter
-    if (appliedFilters.location) {
-      filtered = filtered.filter(property =>
-        property.address?.toLowerCase().includes(appliedFilters.location.toLowerCase())
-      );
-    }
-
-    // Apply bedroom filter
-    if (appliedFilters.bedrooms > 0) {
-      filtered = filtered.filter(property => {
-        try {
-          const facilities = typeof property.facilities === 'string' 
-            ? JSON.parse(property.facilities) 
-            : property.facilities || {};
-          const bedrooms = parseInt(facilities.Bedroom || facilities.bedroom || 0);
-          return bedrooms >= appliedFilters.bedrooms;
-        } catch (e) {
-          return false;
-        }
-      });
-    }
-
-    // Apply bathroom filter
-    if (appliedFilters.bathrooms > 0) {
-      filtered = filtered.filter(property => {
-        try {
-          const facilities = typeof property.facilities === 'string' 
-            ? JSON.parse(property.facilities) 
-            : property.facilities || {};
-          const bathrooms = parseInt(facilities.Bathroom || facilities.bathroom || 0);
-          return bathrooms >= appliedFilters.bathrooms;
-        } catch (e) {
-          return false;
-        }
-      });
-    }
-
-    // Apply amenities filter
-    if (appliedFilters.requiredAmenities.length > 0) {
-      filtered = filtered.filter(property => {
-        try {
-          const amenities = typeof property.amenities === 'string' 
-            ? JSON.parse(property.amenities) 
-            : property.amenities || {};
-          
-          return appliedFilters.requiredAmenities.every(requiredAmenity =>
-            Object.keys(amenities).some(key =>
-              key.toLowerCase().includes(requiredAmenity.toLowerCase()) && amenities[key]
-            )
-          );
-        } catch (e) {
-          return false;
-        }
-      });
-    }
-
-    // Apply availability filter
-    if (appliedFilters.isAvailable) {
-      filtered = filtered.filter(property => 
-        property.is_available !== false && property.is_active !== false
-      );
-    }
-
-    // Apply sorting
-    if (sortBy) {
-      filtered.sort((a, b) => {
-        let aValue, bValue;
-
-        switch (sortBy) {
-          case 'price':
-            aValue = parseFloat(a.price) || 0;
-            bValue = parseFloat(b.price) || 0;
-            break;
-          case 'rating':
-            aValue = parseFloat(a.rating) || 0;
-            bValue = parseFloat(b.rating) || 0;
-            break;
-          case 'date':
-            aValue = new Date(a.available_from || a.created_at);
-            bValue = new Date(b.available_from || b.created_at);
-            break;
-          case 'newest':
-            aValue = new Date(a.created_at);
-            bValue = new Date(b.created_at);
-            break;
-          case 'bedrooms':
-            try {
-              const aFacilities = typeof a.facilities === 'string' ? JSON.parse(a.facilities) : a.facilities || {};
-              const bFacilities = typeof b.facilities === 'string' ? JSON.parse(b.facilities) : b.facilities || {};
-              aValue = parseInt(aFacilities.Bedroom || aFacilities.bedroom || 0);
-              bValue = parseInt(bFacilities.Bedroom || bFacilities.bedroom || 0);
-            } catch (e) {
-              aValue = 0;
-              bValue = 0;
-            }
-            break;
-          case 'popularity':
-            aValue = parseInt(a.total_ratings) || 0;
-            bValue = parseInt(b.total_ratings) || 0;
-            break;
-          default:
-            return 0;
-        }
-
-        if (sortOrder === 'asc') {
-          return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-        } else {
-          return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-        }
-      });
+    if (!appliedFilters.showPending) {
+      filtered = filtered.filter(p => p.enriched_is_active && p.enriched_approval_status === 'approved');
     }
 
     return filtered;
-  }, [properties, selectedTab, searchQuery, appliedFilters, sortBy, sortOrder, propertyTypes]);
+  }, [enrichedProperties, appliedFilters]);
 
-  const activeFiltersCount = useMemo(() => {
-    let count = 0;
-    if (appliedFilters.priceRange[0] > 0 || appliedFilters.priceRange[1] < 100000) count++;
-    if (appliedFilters.starRating > 0) count++;
-    if (appliedFilters.location) count++;
-    if (appliedFilters.bedrooms > 0) count++;
-    if (appliedFilters.bathrooms > 0) count++;
-    if (appliedFilters.requiredAmenities.length > 0) count++;
-    if (!appliedFilters.isAvailable) count++;
-    return count;
-  }, [appliedFilters]);
+  const renderPropertyCard = (property) => {
+    const statusColor = property.enriched_approval_status === 'approved' ? 'success' : 
+                       property.enriched_approval_status === 'pending' ? 'warning' : 'error';
+    
+    return (
+      <Card 
+        key={property.id} 
+        sx={{ 
+          mb: 2, 
+          cursor: 'pointer',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            transform: 'translateY(-2px)',
+            boxShadow: theme.shadows[8]
+          }
+        }}
+        onClick={() => handlePropertyView(property)}
+      >
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+            <Typography variant="h6" component="h2" sx={{ fontWeight: 600 }}>
+              {property.property_type} - {property.unit_type}
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
+              <Chip
+                icon={statusColor === 'approved' ? <CheckCircleIcon /> : <PendingIcon />}
+                label={property.enriched_approval_status}
+                color={statusColor}
+                size="small"
+              />
+              {property.enriched_is_favorite && (
+                <Chip label="Favorite" color="primary" size="small" />
+              )}
+            </Box>
+          </Box>
+
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            {property.address}
+          </Typography>
+
+          <Typography variant="h5" color="primary" sx={{ mb: 2, fontWeight: 700 }}>
+            LKR {property.price?.toLocaleString()} /month
+          </Typography>
+
+          <Grid container spacing={2} sx={{ mb: 2 }}>
+            <Grid item xs={6}>
+              <Typography variant="body2">
+                <strong>Bedrooms:</strong> {property.enriched_property_details.bedrooms || 'N/A'}
+              </Typography>
+            </Grid>
+            <Grid item xs={6}>
+              <Typography variant="body2">
+                <strong>Bathrooms:</strong> {property.enriched_property_details.bathrooms || 'N/A'}
+              </Typography>
+            </Grid>
+            {property.enriched_property_details.square_feet && (
+              <Grid item xs={6}>
+                <Typography variant="body2">
+                  <strong>Area:</strong> {property.enriched_property_details.square_feet} sq ft
+                </Typography>
+              </Grid>
+            )}
+            <Grid item xs={6}>
+              <Typography variant="body2">
+                <strong>Owner:</strong> {property.enriched_owner_name}
+              </Typography>
+            </Grid>
+          </Grid>
+
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Rating value={property.enriched_rating} precision={0.1} readOnly size="small" />
+              <Typography variant="body2" color="text.secondary">
+                ({property.enriched_rating_count})
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <VisibilityIcon fontSize="small" color="action" />
+              <Typography variant="body2" color="text.secondary">
+                {property.enriched_view_count} views
+              </Typography>
+            </Box>
+            {property.enriched_image_count > 0 && (
+              <Chip label={`${property.enriched_image_count} photos`} size="small" variant="outlined" />
+            )}
+          </Box>
+
+          {property.enriched_amenities.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+                Amenities:
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {property.enriched_amenities.slice(0, 4).map((amenity, index) => (
+                  <Chip key={index} label={amenity} size="small" variant="outlined" />
+                ))}
+                {property.enriched_amenities.length > 4 && (
+                  <Chip label={`+${property.enriched_amenities.length - 4} more`} size="small" />
+                )}
+              </Box>
+            </Box>
+          )}
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+            <Typography variant="caption" color="text.secondary">
+              Available: {property.enriched_available_from ? 
+                new Date(property.enriched_available_from).toLocaleDateString() : 'Now'}
+              {property.enriched_available_to && 
+                ` - ${new Date(property.enriched_available_to).toLocaleDateString()}`}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Listed: {new Date(property.enriched_created_at).toLocaleDateString()}
+            </Typography>
+          </Box>
+
+          {property.enriched_property_details.furnished && (
+            <Box sx={{ mt: 1 }}>
+              <Chip label="Furnished" color="primary" size="small" />
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
+  const renderFilterDrawer = () => (
+    <Drawer
+      anchor="right"
+      open={filterDrawerOpen}
+      onClose={() => setFilterDrawerOpen(false)}
+      PaperProps={{
+        sx: { width: { xs: '100%', sm: 400 }, p: 2 }
+      }}
+    >
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h6">Filters</Typography>
+        <IconButton onClick={() => setFilterDrawerOpen(false)}>
+          <CloseIcon />
+        </IconButton>
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <Typography gutterBottom>Price Range (LKR)</Typography>
+        <Slider
+          value={filters.priceRange}
+          onChange={(e, newValue) => setFilters(prev => ({ ...prev, priceRange: newValue }))}
+          valueLabelDisplay="auto"
+          min={0}
+          max={500000}
+          step={5000}
+          valueLabelFormat={(value) => `LKR ${value.toLocaleString()}`}
+        />
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+          <Typography variant="caption">LKR {filters.priceRange[0].toLocaleString()}</Typography>
+          <Typography variant="caption">LKR {filters.priceRange[1].toLocaleString()}</Typography>
+        </Box>
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <Typography gutterBottom>Minimum Rating</Typography>
+        <Rating
+          value={filters.minRating}
+          onChange={(e, newValue) => setFilters(prev => ({ ...prev, minRating: newValue || 0 }))}
+          precision={0.5}
+        />
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <Typography gutterBottom>Minimum Views</Typography>
+        <Slider
+          value={filters.minViews}
+          onChange={(e, newValue) => setFilters(prev => ({ ...prev, minViews: newValue }))}
+          valueLabelDisplay="auto"
+          min={0}
+          max={1000}
+          step={10}
+        />
+      </Box>
+
+      <FormControl fullWidth sx={{ mb: 3 }}>
+        <InputLabel>Approval Status</InputLabel>
+        <Select
+          value={filters.approvalStatus}
+          label="Approval Status"
+          onChange={(e) => setFilters(prev => ({ ...prev, approvalStatus: e.target.value }))}
+        >
+          {approvalStatusOptions.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControlLabel
+        control={
+          <Switch
+            checked={filters.hasImages}
+            onChange={(e) => setFilters(prev => ({ ...prev, hasImages: e.target.checked }))}
+          />
+        }
+        label="Has Images Only"
+        sx={{ mb: 2 }}
+      />
+
+      <FormControlLabel
+        control={
+          <Switch
+            checked={filters.showPending}
+            onChange={(e) => setFilters(prev => ({ ...prev, showPending: e.target.checked }))}
+          />
+        }
+        label="Show Pending Properties"
+        sx={{ mb: 3 }}
+      />
+
+      <Box sx={{ mb: 3 }}>
+        <Typography gutterBottom>Amenities</Typography>
+        <Box sx={{ maxHeight: 200, overflow: 'auto' }}>
+          {availableAmenities.map((amenity) => (
+            <FormControlLabel
+              key={amenity}
+              control={
+                <Switch
+                  checked={filters.amenities.includes(amenity)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setFilters(prev => ({ 
+                        ...prev, 
+                        amenities: [...prev.amenities, amenity] 
+                      }));
+                    } else {
+                      setFilters(prev => ({ 
+                        ...prev, 
+                        amenities: prev.amenities.filter(a => a !== amenity) 
+                      }));
+                    }
+                  }}
+                  size="small"
+                />
+              }
+              label={amenity}
+              sx={{ display: 'block', mb: 0.5 }}
+            />
+          ))}
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
+        <Button onClick={clearFilters} variant="outlined" fullWidth>
+          Clear All
+        </Button>
+        <Button onClick={applyFilters} variant="contained" fullWidth>
+          Apply Filters
+        </Button>
+      </Box>
+    </Drawer>
+  );
 
   if (loading) {
     return (
-      <Container sx={{ mt: 4, textAlign: 'center' }}>
-        <Typography variant="h6">Loading properties...</Typography>
-      </Container>
-    );
-  }
-
-  if (error) {
-    return (
-      <Container sx={{ mt: 4 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-        <Button variant="contained" onClick={fetchProperties}>
-          Retry
-        </Button>
+      <Container maxWidth="lg" sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
       </Container>
     );
   }
 
   return (
-    <Container sx={{ mt: 4 }}>
-      <Typography variant="h4" gutterBottom>
-        Find Your Perfect Stay
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
+        All Properties
+        {enrichedProperties.length > 0 && (
+          <Typography component="span" variant="h6" color="text.secondary" sx={{ ml: 2 }}>
+            ({enrichedProperties.length} properties)
+          </Typography>
+        )}
       </Typography>
 
-      {properties.length > 0 && (
-        <Paper sx={{ p: 2, mb: 3, backgroundColor: isDark ? 'grey.900' : 'grey.50' }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary">Total Properties</Typography>
-              <Typography variant="h6">{propertyStats.total}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary">Average Price</Typography>
-              <Typography variant="h6">LKR {propertyStats.averagePrice.toLocaleString()}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary">Average Rating</Typography>
-              <Typography variant="h6">{propertyStats.averageRating.toFixed(1)}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary">Available Now</Typography>
-              <Typography variant="h6">{propertyStats.availableCount}</Typography>
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
+      <Box sx={{ mb: 3 }}>
+        <TextField
+          fullWidth
+          placeholder="Search properties by location, type, or features..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+            endAdornment: searchQuery && (
+              <InputAdornment position="end">
+                <IconButton onClick={() => setSearchQuery('')} size="small">
+                  <ClearIcon />
+                </IconButton>
+              </InputAdornment>
+            )
+          }}
+        />
+      </Box>
 
       <Paper sx={{ mb: 3 }}>
         <Tabs
           value={selectedTab}
-          onChange={handleTabChange}
+          onChange={(e, newValue) => setSelectedTab(newValue)}
           variant="scrollable"
           scrollButtons="auto"
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
           {propertyTypes.map((type, index) => (
             <Tab key={type} label={type} />
@@ -402,35 +641,16 @@ const UserAllProperties = () => {
         </Tabs>
       </Paper>
 
-      <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
-        <TextField
-          fullWidth
-          placeholder="Search properties by location, type, or amenities..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyPress={handleSearch}
-          InputProps={{
-            startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
-          }}
-        />
-        
-        <Button
-          variant="outlined"
-          startIcon={<FilterListIcon />}
-          onClick={() => setFilterDrawerOpen(true)}
-          sx={{ minWidth: 120 }}
-        >
-          Filters {activeFiltersCount > 0 && `(${activeFiltersCount})`}
-        </Button>
-
-        <FormControl sx={{ minWidth: 150 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>Sort By</InputLabel>
           <Select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
             label="Sort By"
+            onChange={(e) => setSortBy(e.target.value)}
+            startAdornment={<SortIcon fontSize="small" />}
           >
-            {sortOptions.map(option => (
+            {sortOptions.map((option) => (
               <MenuItem key={option.value} value={option.value}>
                 {option.label}
               </MenuItem>
@@ -438,177 +658,56 @@ const UserAllProperties = () => {
           </Select>
         </FormControl>
 
-        {sortBy && (
-          <Button
-            variant="outlined"
-            startIcon={<SortIcon />}
-            onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-            sx={{ minWidth: 100 }}
-          >
-            {sortOrder === 'asc' ? 'Asc' : 'Desc'}
-          </Button>
-        )}
+        <Button
+          variant="outlined"
+          startIcon={<FilterListIcon />}
+          onClick={() => setFilterDrawerOpen(true)}
+          sx={{ minWidth: 120 }}
+        >
+          Filters
+          {Object.values(appliedFilters).some(value => 
+            Array.isArray(value) ? value.length > 0 : 
+            typeof value === 'boolean' ? value : 
+            value !== '' && value !== 0 && value !== 'approved'
+          ) && <Badge color="primary" variant="dot" sx={{ ml: 1 }} />}
+        </Button>
       </Box>
 
-      {(searchQuery || activeFiltersCount > 0 || propertyTypes[selectedTab] !== 'All') && (
-        <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Typography variant="body2" color="text.secondary">
-            Active filters:
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {enriching && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+          <CircularProgress size={24} />
+          <Typography variant="body2" sx={{ ml: 2 }}>
+            Loading additional property data...
           </Typography>
-          
-          {propertyTypes[selectedTab] !== 'All' && (
-            <Chip 
-              label={`Type: ${propertyTypes[selectedTab]}`}
-              size="small"
-              onDelete={() => setSelectedTab(0)}
-            />
-          )}
-          
-          {searchQuery && (
-            <Chip 
-              label={`Search: ${searchQuery}`}
-              size="small"
-              onDelete={() => setSearchQuery('')}
-            />
-          )}
-          
-          {activeFiltersCount > 0 && (
-            <Chip 
-              label={`${activeFiltersCount} filter${activeFiltersCount > 1 ? 's' : ''}`}
-              size="small"
-              onDelete={resetFilters}
-            />
-          )}
         </Box>
       )}
 
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        {filteredAndSortedProperties.length} Properties Found
-        {propertyTypes[selectedTab] !== 'All' && ` in ${propertyTypes[selectedTab]}`}
-      </Typography>
+      {filteredAndSortedProperties.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" color="text.secondary">
+            No properties found matching your criteria
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Try adjusting your filters or search terms
+          </Typography>
+        </Paper>
+      ) : (
+        <Grid container spacing={3}>
+          {filteredAndSortedProperties.map((property) => (
+            <Grid item xs={12} md={6} lg={4} key={property.id}>
+              {renderPropertyCard(property)}
+            </Grid>
+          ))}
+        </Grid>
+      )}
 
-      <PropertyGrid 
-        properties={filteredAndSortedProperties} 
-        loading={loading}
-        onPropertyClick={(property) => navigate(`/user-viewproperty/${property.id}`)}
-      />
-
-      <Drawer
-        anchor="right"
-        open={filterDrawerOpen}
-        onClose={() => setFilterDrawerOpen(false)}
-        sx={{ '& .MuiDrawer-paper': { width: 350, p: 3 } }}
-      >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h6">Filters</Typography>
-          <IconButton onClick={() => setFilterDrawerOpen(false)}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
-
-        <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-          <Button variant="contained" onClick={applyFilters} fullWidth>
-            Apply
-          </Button>
-          <Button variant="outlined" onClick={resetFilters} fullWidth>
-            Reset
-          </Button>
-        </Box>
-
-        <Divider sx={{ mb: 3 }} />
-
-        <Box sx={{ mb: 3 }}>
-          <Typography gutterBottom>Price Range (LKR)</Typography>
-          <Slider
-            value={filters.priceRange}
-            onChange={(e, newValue) => handleFilterChange('priceRange', newValue)}
-            valueLabelDisplay="auto"
-            min={0}
-            max={100000}
-            step={1000}
-            valueLabelFormat={(value) => `${value.toLocaleString()}`}
-          />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-            <Typography variant="caption">LKR 0</Typography>
-            <Typography variant="caption">LKR 100,000+</Typography>
-          </Box>
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography gutterBottom>Minimum Rating</Typography>
-          <Rating
-            value={filters.starRating}
-            onChange={(e, newValue) => handleFilterChange('starRating', newValue)}
-            precision={0.5}
-          />
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <FormControl fullWidth>
-            <InputLabel>Location</InputLabel>
-            <Select
-              value={filters.location}
-              onChange={(e) => handleFilterChange('location', e.target.value)}
-              label="Location"
-            >
-              <MenuItem value="">Any Location</MenuItem>
-              {filterOptions.locations.map(location => (
-                <MenuItem key={location} value={location}>{location}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography gutterBottom>Minimum Bedrooms</Typography>
-          <Slider
-            value={filters.bedrooms}
-            onChange={(e, newValue) => handleFilterChange('bedrooms', newValue)}
-            valueLabelDisplay="auto"
-            min={0}
-            max={5}
-            step={1}
-            marks={[
-              { value: 0, label: 'Any' },
-              { value: 1, label: '1+' },
-              { value: 2, label: '2+' },
-              { value: 3, label: '3+' },
-              { value: 4, label: '4+' },
-              { value: 5, label: '5+' }
-            ]}
-          />
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography gutterBottom>Minimum Bathrooms</Typography>
-          <Slider
-            value={filters.bathrooms}
-            onChange={(e, newValue) => handleFilterChange('bathrooms', newValue)}
-            valueLabelDisplay="auto"
-            min={0}
-            max={3}
-            step={1}
-            marks={[
-              { value: 0, label: 'Any' },
-              { value: 1, label: '1+' },
-              { value: 2, label: '2+' },
-              { value: 3, label: '3+' }
-            ]}
-          />
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={filters.isAvailable}
-                onChange={(e) => handleFilterChange('isAvailable', e.target.checked)}
-              />
-            }
-            label="Show only available properties"
-          />
-        </Box>
-      </Drawer>
+      {renderFilterDrawer()}
     </Container>
   );
 };

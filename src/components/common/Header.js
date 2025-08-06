@@ -15,21 +15,17 @@ const Header = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Get authentication status and user role
   const authenticated = isAuthenticated();
   const roleValue = localStorage.getItem('userRole');
   
-  // Don't show navigation elements on authentication pages
   const isAuthPage = ['/login', '/signup', '/forgot-password'].includes(location.pathname);
 
   const handleLogoClick = () => {
     if (!authenticated) {
-      // For non-authenticated users, go to public home page
       navigate('/user-home');
       return;
     }
 
-    // Route to appropriate home page based on user role
     switch (roleValue) {
       case 'user':
         navigate('/user-home');
@@ -67,6 +63,14 @@ const Header = () => {
     }
   };
 
+  const handleLoginClick = () => {
+    navigate('/login');
+  };
+
+  const handleSignupClick = () => {
+    navigate('/signup');
+  };
+
   return (
     <AppBar
       position="static"
@@ -78,7 +82,6 @@ const Header = () => {
       }}
     >
       <Toolbar sx={{ display: 'flex', justifyContent: 'space-between', py: 1 }}>
-        {/* Logo Section with Smart Navigation */}
         <Box
           component="img"
           src={logo}
@@ -98,10 +101,8 @@ const Header = () => {
           title={authenticated ? `Go to ${roleValue || 'user'} dashboard` : 'Go to home page'}
         />
 
-        {/* Navigation Controls Section */}
-        {!isAuthPage ? (
+        {!isAuthPage && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            {/* Theme Toggle Button */}
             <Tooltip title={`Switch to ${isDark ? 'light' : 'dark'} theme`}>
               <IconButton
                 onClick={toggleTheme}
@@ -118,17 +119,14 @@ const Header = () => {
               </IconButton>
             </Tooltip>
             
-            {/* Show different content for authenticated vs non-authenticated users */}
             {authenticated ? (
               <>
-                {/* Hamburger Menu for Authenticated Users */}
                 <HamburgerMenuDropdown />
                 
-                {/* User Avatar/Profile Access */}
-                <Tooltip title={getPageTitle()}>
+                <Tooltip title={`${getPageTitle()} - Click to view profile`}>
                   <IconButton
                     onClick={handleAvatarClick}
-                    sx={{ 
+                    sx={{
                       p: 0,
                       ml: 1,
                       '&:hover': {
@@ -137,14 +135,14 @@ const Header = () => {
                       transition: 'transform 0.2s ease-in-out',
                     }}
                   >
-                    <Avatar 
-                      sx={{ 
-                        width: 40, 
-                        height: 40,
-                        bgcolor: theme.accent,
+                    <Avatar
+                      sx={{
+                        bgcolor: roleValue === 'admin' ? theme.accent : 
+                               roleValue === 'propertyowner' ? theme.secondary : theme.primary,
                         color: 'white',
-                        fontWeight: 600,
-                        border: `2px solid rgba(255, 255, 255, 0.2)`,
+                        fontWeight: 'bold',
+                        border: '2px solid rgba(255, 255, 255, 0.3)',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                       }}
                     >
                       {roleValue === 'admin' ? 'A' : 
@@ -155,14 +153,12 @@ const Header = () => {
               </>
             ) : (
               <>
-                {/* Hamburger Menu for Non-Authenticated Users */}
                 <HamburgerMenuDropdown />
                 
-                {/* Login and Signup Buttons for Non-Authenticated Users */}
                 <Button
                   startIcon={<LoginIcon />}
                   variant="outlined"
-                  onClick={() => navigate('/login')}
+                  onClick={handleLoginClick}
                   sx={{
                     color: 'white',
                     borderColor: 'rgba(255, 255, 255, 0.5)',
@@ -179,7 +175,7 @@ const Header = () => {
                 <Button
                   startIcon={<PersonAddIcon />}
                   variant="contained"
-                  onClick={() => navigate('/signup')}
+                  onClick={handleSignupClick}
                   sx={{
                     backgroundColor: theme.accent,
                     color: 'white',
@@ -196,7 +192,7 @@ const Header = () => {
               </>
             )}
           </Box>
-        ) : null}
+        )}
       </Toolbar>
     </AppBar>
   );

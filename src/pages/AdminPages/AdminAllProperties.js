@@ -3,86 +3,91 @@ import {
   Container,
   Typography,
   Grid,
-  Card,
-  CardMedia,
-  CardContent,
-  CardActions,
-  Button,
-  Box,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   TextField,
-  Chip,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Alert
+  Button,
+  Box,
+  Card,
+  CardMedia,
+  CardContent,
+  CardActions,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Chip,
+  Rating
 } from '@mui/material';
-import HotelIcon from '@mui/icons-material/Hotel';
-import BathtubIcon from '@mui/icons-material/Bathtub';
+import SearchIcon from '@mui/icons-material/Search';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RemoveCircleIcon from '@mui/icons-material/RemoveCircle';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import SearchIcon from '@mui/icons-material/Search';
+import HotelIcon from '@mui/icons-material/Hotel';
+import BathtubIcon from '@mui/icons-material/Bathtub';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import { useNavigate } from 'react-router-dom';
 import { getApprovedProperties, removeProperty } from '../../api/adminAPI';
 import AppSnackbar from '../../components/common/AppSnackbar';
+import Room from '../../assets/images/Room.jpg';
 
-// when the database contains malformed JSON data
 const safeParse = (str) => {
   try {
-    return JSON.parse(str);
+    return typeof str === 'string' ? JSON.parse(str) : (str || []);
   } catch (error) {
     return [];
   }
 };
 
-// Component for the property removal confirmation dialog
 const RemovePropertyDialog = ({ open, onClose, property, onConfirm }) => {
-  const [removalReason, setRemovalReason] = useState('');
+  const [reason, setReason] = useState('');
 
   const handleConfirm = () => {
-    if (removalReason.trim()) {
-      onConfirm(property.id, removalReason);
+    if (reason.trim()) {
+      onConfirm(property.id, reason);
+      setReason('');
       onClose();
-      setRemovalReason('');
     }
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        Remove Property Listing
-      </DialogTitle>
+      <DialogTitle>Remove Property</DialogTitle>
       <DialogContent>
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          This will hide the property from users and notify the property owner.
-        </Alert>
         <Typography variant="body1" sx={{ mb: 2 }}>
-          Property: <strong>{property?.property_type} - {property?.unit_type}</strong>
+          Are you sure you want to remove this property?
         </Typography>
+        {property && (
+          <Box sx={{ mb: 2, p: 2, backgroundColor: 'grey.100', borderRadius: 1 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+              {property.property_type} - {property.unit_type}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {property.address}
+            </Typography>
+          </Box>
+        )}
         <TextField
           fullWidth
           multiline
           rows={3}
-          label="Reason for Removal"
-          value={removalReason}
-          onChange={(e) => setRemovalReason(e.target.value)}
-          placeholder="Please provide a clear reason for removing this property..."
+          label="Reason for removal"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Please provide a reason for removing this property..."
           required
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose} color="inherit">
-          Cancel
-        </Button>
+        <Button onClick={onClose}>Cancel</Button>
         <Button 
           onClick={handleConfirm} 
           color="error" 
           variant="contained"
-          disabled={!removalReason.trim()}
+          disabled={!reason.trim()}
         >
           Remove Property
         </Button>
@@ -92,27 +97,30 @@ const RemovePropertyDialog = ({ open, onClose, property, onConfirm }) => {
 };
 
 const AdminAllProperties = () => {
-  // State management for the component
   const [properties, setProperties] = useState([]);
   const [filteredProperties, setFilteredProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [propertyTypeFilter, setPropertyTypeFilter] = useState('');
-  const [selectedProperty, setSelectedProperty] = useState(null);
   const [removeDialogOpen, setRemoveDialogOpen] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  
+  const navigate = useNavigate();
 
-  // Effect hook to fetch data when component mounts
+  const uniquePropertyTypes = React.useMemo(() => {
+    const types = properties.map(property => property.property_type).filter(Boolean);
+    return [...new Set(types)].sort();
+  }, [properties]);
+
   useEffect(() => {
     fetchApprovedProperties();
   }, []);
 
-  // Effect hook to handle filtering when search or filter criteria change
   useEffect(() => {
     let filtered = properties;
 
-    // Apply text search filter
     if (searchTerm) {
       filtered = filtered.filter(property =>
         property.property_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -121,7 +129,6 @@ const AdminAllProperties = () => {
       );
     }
 
-    // Apply property type filter
     if (propertyTypeFilter) {
       filtered = filtered.filter(property => property.property_type === propertyTypeFilter);
     }
@@ -129,7 +136,6 @@ const AdminAllProperties = () => {
     setFilteredProperties(filtered);
   }, [properties, searchTerm, propertyTypeFilter]);
 
-  // Function to fetch approved properties from the server
   const fetchApprovedProperties = async () => {
     setLoading(true);
     try {
@@ -146,7 +152,6 @@ const AdminAllProperties = () => {
     }
   };
 
-  // Function to handle property removal
   const handleRemoveProperty = async (propertyId, reason) => {
     try {
       const token = localStorage.getItem('token');
@@ -154,8 +159,8 @@ const AdminAllProperties = () => {
       setSnackbarMessage('Property removed successfully');
       setSnackbarOpen(true);
       
-      // Update the local state to reflect the change immediately
       setProperties(prev => prev.filter(p => p.id !== propertyId));
+      setFilteredProperties(prev => prev.filter(p => p.id !== propertyId));
     } catch (error) {
       console.error('Error removing property:', error);
       setSnackbarMessage('Error removing property');
@@ -163,49 +168,26 @@ const AdminAllProperties = () => {
     }
   };
 
-  // Function to open the removal confirmation dialog
   const handleRemoveClick = (property) => {
     setSelectedProperty(property);
     setRemoveDialogOpen(true);
   };
 
-  // Helper function to format dates for display
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString();
+  const handleViewProperty = (propertyId) => {
+    navigate(`/property/${propertyId}`);
   };
 
-  // Get unique property types for the filter dropdown
-  const uniquePropertyTypes = [...new Set(properties.map(p => p.property_type))];
-
-  // Loading state display
-  if (loading) {
-    return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
-        <Typography variant="h6">Loading approved properties...</Typography>
-      </Container>
-    );
-  }
-
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      {/* Breadcrumb navigation for user orientation */}
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Home / All Properties
+    <Container sx={{ mt: 4 }}>
+      <Typography variant="h4" gutterBottom>
+        All Properties Management
       </Typography>
 
-      <Typography variant="h4" align="center" gutterBottom>
-        All Listings
-      </Typography>
-      
-      <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 4 }}>
-        Manage all approved properties currently visible to users
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        Manage all approved properties in the system. You can view details and remove properties if necessary.
       </Typography>
 
-      {/* Search and Filter Controls */}
-      <Box sx={{ mb: 4, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* Search by text */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <TextField
           label="Search properties"
           variant="outlined"
@@ -218,7 +200,6 @@ const AdminAllProperties = () => {
           sx={{ flexGrow: 1, minWidth: 250 }}
         />
 
-        {/* Filter by property type */}
         <FormControl sx={{ minWidth: 200 }}>
           <InputLabel>Property Type</InputLabel>
           <Select
@@ -234,7 +215,6 @@ const AdminAllProperties = () => {
           </Select>
         </FormControl>
 
-        {/* Clear filters button */}
         {(searchTerm || propertyTypeFilter) && (
           <Button 
             variant="outlined" 
@@ -248,14 +228,16 @@ const AdminAllProperties = () => {
         )}
       </Box>
 
-      {/* Results summary */}
       <Typography variant="h6" sx={{ mb: 3 }}>
         {filteredProperties.length} Properties
         {(searchTerm || propertyTypeFilter) && ` (filtered from ${properties.length} total)`}
       </Typography>
 
-      {/* Properties grid display */}
-      {filteredProperties.length === 0 ? (
+      {loading ? (
+        <Typography variant="body1" sx={{ textAlign: 'center', mt: 4 }}>
+          Loading properties...
+        </Typography>
+      ) : filteredProperties.length === 0 ? (
         <Box sx={{ textAlign: 'center', mt: 6 }}>
           <Typography variant="h6" color="text.secondary">
             {properties.length === 0 ? 'No approved properties found' : 'No properties match your filters'}
@@ -263,17 +245,16 @@ const AdminAllProperties = () => {
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
             {properties.length === 0 
               ? 'Properties will appear here once they are approved' 
-              : 'Try adjusting your search criteria'
-            }
+              : 'Try adjusting your search or filter criteria'}
           </Typography>
         </Box>
       ) : (
         <Grid container spacing={3}>
           {filteredProperties.map((property) => {
-            // Parse JSON data safely for each property
             const amenities = safeParse(property.amenities);
             const facilities = safeParse(property.facilities);
-            const priceRange = safeParse(property.price_range);
+            const images = safeParse(property.images);
+            const primaryImage = images && images.length > 0 ? images[0] : Room;
 
             return (
               <Grid item xs={12} sm={6} md={4} key={property.id}>
@@ -284,54 +265,64 @@ const AdminAllProperties = () => {
                   transition: 'transform 0.2s ease-in-out',
                   '&:hover': {
                     transform: 'translateY(-4px)',
-                    boxShadow: 4
+                    boxShadow: 3
                   }
                 }}>
                   <CardMedia
                     component="img"
-                    height="140"
-                    // image={property.image || 'https://via.placeholder.com/300x200'}
+                    height="180"
+                    image={primaryImage}
                     alt={property.property_type}
+                    sx={{ objectFit: 'cover' }}
                   />
+                  
                   <CardContent sx={{ flexGrow: 1 }}>
-                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                      <Typography variant="h6" component="div">
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                      <Typography variant="h6" component="h3" gutterBottom>
                         {property.property_type}
                       </Typography>
-                      <Chip label="Active" color="success" size="small" />
+                      <Chip 
+                        label={property.status || 'Active'} 
+                        color="success" 
+                        size="small" 
+                      />
                     </Box>
-                    
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
+
+                    <Typography variant="subtitle1" color="text.secondary" gutterBottom>
                       {property.unit_type}
                     </Typography>
-                    
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      <strong>Address:</strong> {property.address?.substring(0, 50)}
-                      {property.address?.length > 50 && '...'}
-                    </Typography>
-                    
-                    <Typography variant="body2" color="text.secondary" gutterBottom>
-                      <strong>Available:</strong> {formatDate(property.available_from)} – {formatDate(property.available_to)}
-                    </Typography>
-                    
-                    {priceRange?.length === 2 && (
-                      <Typography variant="body2" color="text.secondary" gutterBottom>
-                        <strong>Price:</strong> LKR {priceRange[0]} - {priceRange[1]}
+
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <LocationOnIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
+                      <Typography variant="body2" color="text.secondary" noWrap>
+                        {property.address}
                       </Typography>
+                    </Box>
+
+                    {property.rating && parseFloat(property.rating) > 0 && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        <Rating value={parseFloat(property.rating)} precision={0.1} size="small" readOnly />
+                        <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+                          ({property.total_ratings || 0} reviews)
+                        </Typography>
+                      </Box>
                     )}
 
-                    {/* Property statistics display */}
-                    <Box display="flex" justifyContent="space-around" mt={2}>
+                    <Typography variant="h6" color="primary" sx={{ mb: 1, fontWeight: 'bold' }}>
+                      LKR {parseFloat(property.price || 0).toLocaleString()}/month
+                    </Typography>
+
+                    <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
                       <Box display="flex" alignItems="center">
-                        <HotelIcon fontSize="small" />
-                        <Typography variant="body2" ml={0.5}>
-                          {facilities?.Bedroom || 0}
+                        <HotelIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
+                        <Typography variant="body2">
+                          {facilities?.Bedroom || facilities?.bedroom || 0}
                         </Typography>
                       </Box>
                       <Box display="flex" alignItems="center">
-                        <BathtubIcon fontSize="small" />
-                        <Typography variant="body2" ml={0.5}>
-                          {facilities?.Bathroom || 0}
+                        <BathtubIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
+                        <Typography variant="body2">
+                          {facilities?.Bathroom || facilities?.bathroom || 0}
                         </Typography>
                       </Box>
                       <Box display="flex" alignItems="center">
@@ -347,7 +338,7 @@ const AdminAllProperties = () => {
                       size="small" 
                       color="primary" 
                       startIcon={<VisibilityIcon />}
-                      onClick={() => window.open(`/user-viewproperty/${property.id}`, '_blank')}
+                      onClick={() => handleViewProperty(property.id)}
                     >
                       View
                     </Button>
@@ -367,7 +358,6 @@ const AdminAllProperties = () => {
         </Grid>
       )}
 
-      {/* Property removal confirmation dialog */}
       <RemovePropertyDialog
         open={removeDialogOpen}
         onClose={() => setRemoveDialogOpen(false)}
@@ -375,7 +365,6 @@ const AdminAllProperties = () => {
         onConfirm={handleRemoveProperty}
       />
 
-      {/* Notification snackbar */}
       <AppSnackbar
         open={snackbarOpen}
         message={snackbarMessage}

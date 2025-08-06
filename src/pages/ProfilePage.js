@@ -29,7 +29,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LockIcon from '@mui/icons-material/Lock';
 import { useTheme } from '../contexts/ThemeContext';
-import { getUserProfile, updateUserProfile, changePassword } from '../api/profileApi';
+import { getUserProfile, updateUserProfile, changePasswordProfile } from '../api';
 import AppSnackbar from '../components/common/AppSnackbar';
 import { useNavigate } from 'react-router-dom';
 
@@ -44,45 +44,33 @@ const ProfilePage = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
-  // Get user role to determine which fields to show
   const userRole = localStorage.getItem('userRole');
 
-  // Profile state - this will hold different fields based on user role
   const [profile, setProfile] = useState({
-    // Common fields for all users
     username: '',
     email: '',
     phone: '',
-    
-    // Fields for regular users
-    firstName: '',
-    lastName: '',
+    first_name: '',
+    last_name: '',
     gender: '',
     birthdate: '',
     nationality: '',
-    
-    // Fields for property owners
-    businessName: '',
-    contactPerson: '',
-    businessAddress: '',
-    
-    // Additional fields for property owners
-    businessType: '',
-    businessRegistration: '',
-    
-    // Admin-specific fields
+    business_name: '',
+    contact_person: '',
+    business_type: '',
+    business_registration: '',
+    business_address: '',
     department: '',
-    adminLevel: ''
+    admin_level: '',
+    profile_image: ''
   });
 
-  // Password change state
   const [passwordData, setPasswordData] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
 
-  // Error states for form validation
   const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
@@ -99,31 +87,43 @@ const ProfilePage = () => {
     } catch (error) {
       console.error('Error fetching profile:', error);
       setError('Failed to load profile data. Please try again.');
+      if (error.message.includes('Authentication') || error.message.includes('login')) {
+        navigate('/login');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const validateForm = () => {
+  const validateProfile = () => {
     const errors = {};
     
-    // Common validations
-    if (!profile.email) errors.email = 'Email is required';
-    if (!profile.username) errors.username = 'Username is required';
-    
-    // Email format validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (profile.email && !emailRegex.test(profile.email)) {
-      errors.email = 'Please enter a valid email address';
+    if (!profile.phone || profile.phone.trim() === '') {
+      errors.phone = 'Phone number is required';
     }
 
-    // Role-specific validations
     if (userRole === 'user') {
-      if (!profile.firstName) errors.firstName = 'First name is required';
-      if (!profile.lastName) errors.lastName = 'Last name is required';
-    } else if (userRole === 'propertyowner') {
-      if (!profile.businessName) errors.businessName = 'Business name is required';
-      if (!profile.contactPerson) errors.contactPerson = 'Contact person is required';
+      if (!profile.first_name || profile.first_name.trim() === '') {
+        errors.first_name = 'First name is required';
+      }
+      if (!profile.last_name || profile.last_name.trim() === '') {
+        errors.last_name = 'Last name is required';
+      }
+    }
+
+    if (userRole === 'propertyowner') {
+      if (!profile.business_name || profile.business_name.trim() === '') {
+        errors.business_name = 'Business name is required';
+      }
+      if (!profile.contact_person || profile.contact_person.trim() === '') {
+        errors.contact_person = 'Contact person is required';
+      }
+    }
+
+    if (userRole === 'admin') {
+      if (!profile.department || profile.department.trim() === '') {
+        errors.department = 'Department is required';
+      }
     }
 
     setFieldErrors(errors);
@@ -131,8 +131,8 @@ const ProfilePage = () => {
   };
 
   const handleSave = async () => {
-    if (!validateForm()) {
-      setSnackbarMessage('Please correct the errors in the form');
+    if (!validateProfile()) {
+      setSnackbarMessage('Please fill in all required fields');
       setSnackbarOpen(true);
       return;
     }
@@ -140,11 +140,10 @@ const ProfilePage = () => {
     setSaving(true);
     try {
       const token = localStorage.getItem('token');
-      await updateUserProfile(profile, token);
-      setSnackbarMessage('Profile updated successfully!');
-      setSnackbarOpen(true);
+      await updateUserProfile(token, profile);
       setIsEditing(false);
-      setFieldErrors({});
+      setSnackbarMessage('Profile updated successfully');
+      setSnackbarOpen(true);
     } catch (error) {
       console.error('Error updating profile:', error);
       setSnackbarMessage('Failed to update profile. Please try again.');
@@ -157,11 +156,16 @@ const ProfilePage = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setFieldErrors({});
-    // Refetch original data to reset any changes
     fetchUserProfile();
   };
 
   const handlePasswordChange = async () => {
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      setSnackbarMessage('Please fill in all password fields');
+      setSnackbarOpen(true);
+      return;
+    }
+
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setSnackbarMessage('New passwords do not match');
       setSnackbarOpen(true);
@@ -169,15 +173,18 @@ const ProfilePage = () => {
     }
 
     if (passwordData.newPassword.length < 6) {
-      setSnackbarMessage('Password must be at least 6 characters long');
+      setSnackbarMessage('New password must be at least 6 characters long');
       setSnackbarOpen(true);
       return;
     }
 
     try {
       const token = localStorage.getItem('token');
-      await changePassword(passwordData, token);
-      setSnackbarMessage('Password changed successfully!');
+      await changePasswordProfile(token, {
+        currentPassword: passwordData.currentPassword,
+        newPassword: passwordData.newPassword
+      });
+      setSnackbarMessage('Password changed successfully');
       setSnackbarOpen(true);
       setPasswordDialogOpen(false);
       setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
@@ -260,11 +267,6 @@ const ProfilePage = () => {
                 multiline={field.multiline}
                 rows={field.rows}
                 InputLabelProps={field.type === 'date' ? { shrink: true } : undefined}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    backgroundColor: isEditing ? theme.inputBackground : theme.surfaceBackground,
-                  },
-                }}
               />
             )}
           </Grid>
@@ -275,267 +277,221 @@ const ProfilePage = () => {
 
   const getFieldsForRole = () => {
     const commonFields = [
-      { key: 'username', label: 'Username', required: true },
-      { key: 'email', label: 'Email Address', type: 'email', required: true },
-      { key: 'phone', label: 'Phone Number' }
+      { key: 'username', label: 'Username', disabled: true },
+      { key: 'email', label: 'Email Address', type: 'email', disabled: true },
+      { key: 'phone', label: 'Phone Number', required: true }
     ];
 
-    if (userRole === 'user') {
-      return [
-        { key: 'firstName', label: 'First Name', required: true },
-        { key: 'lastName', label: 'Last Name', required: true },
-        { key: 'gender', label: 'Gender', type: 'select', options: [
-          { value: 'Male', label: 'Male' },
-          { value: 'Female', label: 'Female' },
-          { value: 'Other', label: 'Other' }
-        ]},
-        { key: 'birthdate', label: 'Date of Birth', type: 'date' },
-        { key: 'nationality', label: 'Nationality' },
-        ...commonFields
-      ];
-    } else if (userRole === 'propertyowner') {
-      return [
-        { key: 'businessName', label: 'Business/Property Name', required: true },
-        { key: 'contactPerson', label: 'Contact Person Name', required: true },
-        { key: 'businessType', label: 'Business Type', type: 'select', options: [
-          { value: 'Individual', label: 'Individual Property Owner' },
-          { value: 'Company', label: 'Property Management Company' },
-          { value: 'Agency', label: 'Real Estate Agency' }
-        ]},
-        { key: 'businessRegistration', label: 'Business Registration Number' },
-        { key: 'businessAddress', label: 'Business Address', fullWidth: true, multiline: true, rows: 3 },
-        ...commonFields
-      ];
-    } else if (userRole === 'admin') {
-      return [
-        { key: 'firstName', label: 'First Name', required: true },
-        { key: 'lastName', label: 'Last Name', required: true },
-        { key: 'department', label: 'Department' },
-        { key: 'adminLevel', label: 'Admin Level', type: 'select', options: [
-          { value: 'Junior', label: 'Junior Administrator' },
-          { value: 'Senior', label: 'Senior Administrator' },
-          { value: 'Manager', label: 'Manager' }
-        ]},
-        ...commonFields
-      ];
-    }
+    switch (userRole) {
+      case 'user':
+        return [
+          ...commonFields,
+          { key: 'first_name', label: 'First Name', required: true },
+          { key: 'last_name', label: 'Last Name', required: true },
+          { 
+            key: 'gender', 
+            label: 'Gender', 
+            type: 'select',
+            options: [
+              { value: '', label: 'Select Gender' },
+              { value: 'male', label: 'Male' },
+              { value: 'female', label: 'Female' },
+              { value: 'other', label: 'Other' }
+            ]
+          },
+          { key: 'birthdate', label: 'Birth Date', type: 'date' },
+          { key: 'nationality', label: 'Nationality' }
+        ];
 
-    return commonFields;
+      case 'propertyowner':
+        return [
+          ...commonFields,
+          { key: 'business_name', label: 'Business Name', required: true },
+          { key: 'contact_person', label: 'Contact Person', required: true },
+          { key: 'business_type', label: 'Business Type' },
+          { key: 'business_registration', label: 'Registration Number' },
+          { key: 'business_address', label: 'Business Address', multiline: true, rows: 3, fullWidth: true }
+        ];
+
+      case 'admin':
+        return [
+          ...commonFields,
+          { key: 'first_name', label: 'First Name', required: true },
+          { key: 'last_name', label: 'Last Name', required: true },
+          { key: 'department', label: 'Department', required: true },
+          { 
+            key: 'admin_level', 
+            label: 'Admin Level', 
+            type: 'select',
+            options: [
+              { value: '', label: 'Select Level' },
+              { value: 'super_admin', label: 'Super Admin' },
+              { value: 'admin', label: 'Admin' },
+              { value: 'moderator', label: 'Moderator' }
+            ]
+          }
+        ];
+
+      default:
+        return commonFields;
+    }
   };
 
   if (loading) {
     return (
-      <Box sx={{ 
-        background: isDark 
-          ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)`
-          : `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}05 50%, ${theme.background} 100%)`,
-        minHeight: '100vh',
-        py: 4,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-      }}>
-        <Typography variant="h4" sx={{ color: theme.textPrimary }}>
-          Loading Profile...
-        </Typography>
-      </Box>
+      <Container sx={{ mt: 4 }}>
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <Typography variant="h6">Loading profile...</Typography>
+        </Box>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container sx={{ mt: 4 }}>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+        <Button variant="contained" onClick={fetchUserProfile}>
+          Retry
+        </Button>
+      </Container>
     );
   }
 
   return (
-    <Box sx={{ 
-      background: isDark 
-        ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)`
-        : `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}05 50%, ${theme.background} 100%)`,
-      minHeight: '100vh',
-      py: 4
-    }}>
-      <Container maxWidth="md">
-        {/* Breadcrumb */}
-        <Typography variant="body2" sx={{ color: theme.textSecondary, mb: 2 }}>
-          Home / {isEditing ? 'Edit Account Details' : 'Account Details'}
-        </Typography>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Card sx={{ boxShadow: 3, borderRadius: 3 }}>
+        <CardContent sx={{ p: 4 }}>
+          <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <Avatar
+              sx={{
+                width: 120,
+                height: 120,
+                mx: 'auto',
+                mb: 2,
+                bgcolor: getRoleColor()
+              }}
+              src={profile.profile_image}
+            >
+              {getRoleIcon()}
+            </Avatar>
+            
+            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
+              {userRole === 'user' ? 
+                `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username :
+                userRole === 'propertyowner' ? 
+                profile.business_name || profile.username :
+                `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username
+              }
+            </Typography>
+            
+            <Chip 
+              label={getRoleLabel()} 
+              color="primary" 
+              sx={{ 
+                fontWeight: 'bold',
+                bgcolor: getRoleColor(),
+                color: 'white'
+              }} 
+            />
+          </Box>
 
-        {/* Greeting */}
-        <Typography variant="h4" sx={{ color: theme.textPrimary, mb: 4, fontWeight: 600 }}>
-          Hi {profile.firstName || profile.contactPerson || profile.username}!
-        </Typography>
+          <Divider sx={{ mb: 4 }} />
 
-        {/* Error Display */}
-        {error && (
-          <Alert severity="error" sx={{ mb: 4 }}>
-            {error}
-          </Alert>
-        )}
-
-        {/* Profile Card */}
-        <Card 
-          sx={{ 
-            backgroundColor: theme.cardBackground,
-            border: `1px solid ${theme.border}`,
-            boxShadow: theme.shadows.medium,
-            borderRadius: 3
-          }}
-        >
-          <CardContent sx={{ p: 4 }}>
-            {/* Header Section */}
-            <Box sx={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
-              alignItems: 'center', 
-              mb: 4 
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                <Avatar
-                  sx={{
-                    width: 80,
-                    height: 80,
-                    backgroundColor: theme.surfaceBackground,
-                    border: `3px solid ${getRoleColor()}`
-                  }}
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+              Profile Information
+            </Typography>
+            
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button
+                variant="outlined"
+                startIcon={<LockIcon />}
+                onClick={() => setPasswordDialogOpen(true)}
+              >
+                Change Password
+              </Button>
+              
+              {!isEditing ? (
+                <Button
+                  variant="contained"
+                  startIcon={<EditIcon />}
+                  onClick={() => setIsEditing(true)}
                 >
-                  {getRoleIcon()}
-                </Avatar>
-                <Box>
-                  <Typography variant="h4" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-                    Account Details
-                  </Typography>
-                  <Chip 
-                    label={getRoleLabel()}
-                    sx={{
-                      backgroundColor: `${getRoleColor()}20`,
-                      color: getRoleColor(),
-                      fontWeight: 600,
-                      mt: 1
-                    }}
-                  />
-                </Box>
-              </Box>
-
-              {/* Action Buttons */}
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                {isEditing ? (
-                  <>
-                    <Button
-                      variant="outlined"
-                      startIcon={<CancelIcon />}
-                      onClick={handleCancel}
-                      sx={{
-                        borderColor: theme.textSecondary,
-                        color: theme.textSecondary,
-                        '&:hover': {
-                          backgroundColor: `${theme.textSecondary}10`,
-                        }
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="contained"
-                      startIcon={<SaveIcon />}
-                      onClick={handleSave}
-                      disabled={saving}
-                      sx={{
-                        backgroundColor: theme.success,
-                        color: '#FFFFFF',
-                        '&:hover': {
-                          backgroundColor: theme.success,
-                          filter: 'brightness(0.9)'
-                        }
-                      }}
-                    >
-                      {saving ? 'Saving...' : 'Save Changes'}
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <Button
-                      variant="contained"
-                      startIcon={<EditIcon />}
-                      onClick={() => setIsEditing(true)}
-                      sx={{
-                        backgroundColor: theme.primary,
-                        color: isDark ? theme.textPrimary : '#FFFFFF',
-                        '&:hover': {
-                          backgroundColor: theme.secondary,
-                        }
-                      }}
-                    >
-                      Edit Profile
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      startIcon={<LockIcon />}
-                      onClick={() => setPasswordDialogOpen(true)}
-                      sx={{
-                        borderColor: theme.primary,
-                        color: theme.primary,
-                        '&:hover': {
-                          backgroundColor: `${theme.primary}10`,
-                        }
-                      }}
-                    >
-                      Change Password
-                    </Button>
-                  </>
-                )}
-              </Box>
+                  Edit Profile
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="outlined"
+                    startIcon={<CancelIcon />}
+                    onClick={handleCancel}
+                    disabled={saving}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSave}
+                    disabled={saving}
+                  >
+                    {saving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                </>
+              )}
             </Box>
+          </Box>
 
-            <Divider sx={{ mb: 4, borderColor: theme.border }} />
+          {renderFieldGroup('Account Information', getFieldsForRole())}
+        </CardContent>
+      </Card>
 
-            {/* Profile Fields */}
-            {renderFieldGroup("Profile Information", getFieldsForRole())}
-          </CardContent>
-        </Card>
+      <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Change Password</DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Current Password"
+            type="password"
+            fullWidth
+            margin="normal"
+            value={passwordData.currentPassword}
+            onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+          />
+          <TextField
+            label="New Password"
+            type="password"
+            fullWidth
+            margin="normal"
+            value={passwordData.newPassword}
+            onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
+            helperText="Minimum 6 characters"
+          />
+          <TextField
+            label="Confirm New Password"
+            type="password"
+            fullWidth
+            margin="normal"
+            value={passwordData.confirmPassword}
+            onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handlePasswordChange} variant="contained">
+            Change Password
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-        {/* Password Change Dialog */}
-        <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle sx={{ color: theme.textPrimary }}>Change Password</DialogTitle>
-          <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
-              <TextField
-                label="Current Password"
-                type="password"
-                fullWidth
-                value={passwordData.currentPassword}
-                onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
-              />
-              <TextField
-                label="New Password"
-                type="password"
-                fullWidth
-                value={passwordData.newPassword}
-                onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-                helperText="Password must be at least 6 characters long"
-              />
-              <TextField
-                label="Confirm New Password"
-                type="password"
-                fullWidth
-                value={passwordData.confirmPassword}
-                onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-              />
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setPasswordDialogOpen(false)} sx={{ color: theme.textSecondary }}>
-              Cancel
-            </Button>
-            <Button onClick={handlePasswordChange} variant="contained" sx={{ backgroundColor: theme.primary }}>
-              Change Password
-            </Button>
-          </DialogActions>
-        </Dialog>
-
-        <AppSnackbar
-          open={snackbarOpen}
-          message={snackbarMessage}
-          autoHideDuration={4000}
-          onClose={() => setSnackbarOpen(false)}
-        />
-      </Container>
-    </Box>
+      <AppSnackbar 
+        open={snackbarOpen}
+        message={snackbarMessage}
+        onClose={() => setSnackbarOpen(false)}
+      />
+    </Container>
   );
 };
 

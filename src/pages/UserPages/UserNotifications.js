@@ -28,67 +28,11 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import DeleteIcon from '@mui/icons-material/Delete';
 import MarkAsUnreadIcon from '@mui/icons-material/MarkAsUnread';
 import DraftsIcon from '@mui/icons-material/Drafts';
+import SystemUpdateIcon from '@mui/icons-material/SystemUpdate';
+import StarIcon from '@mui/icons-material/Star';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import { formatDistanceToNow } from 'date-fns';
-
-// Notification API functions (mock implementation - replace with actual API calls)
-const notificationApi = {
-  getUserNotifications: async () => {
-    // Mock data - replace with actual API call
-    return [
-      {
-        id: 1,
-        type: 'booking_status',
-        title: 'Booking Request Updated',
-        message: 'Your booking request for Luxury Apartment in Colombo has been approved!',
-        created_at: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-        read: false,
-        property_name: 'Luxury Apartment in Colombo',
-        booking_id: 123
-      },
-      {
-        id: 2,
-        type: 'property_update',
-        title: 'New Property Available',
-        message: 'A new property matching your preferences has been listed.',
-        created_at: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-        read: true,
-        property_name: 'Modern Studio in Kandy'
-      },
-      {
-        id: 3,
-        type: 'system',
-        title: 'Profile Update Required',
-        message: 'Please update your profile to improve your booking success rate.',
-        created_at: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-        read: false
-      }
-    ];
-  },
-  
-  markAsRead: async (notificationId) => {
-    // Mock implementation - replace with actual API call
-    console.log(`Marking notification ${notificationId} as read`);
-    return { success: true };
-  },
-  
-  markAsUnread: async (notificationId) => {
-    // Mock implementation - replace with actual API call
-    console.log(`Marking notification ${notificationId} as unread`);
-    return { success: true };
-  },
-  
-  deleteNotification: async (notificationId) => {
-    // Mock implementation - replace with actual API call
-    console.log(`Deleting notification ${notificationId}`);
-    return { success: true };
-  },
-  
-  markAllAsRead: async () => {
-    // Mock implementation - replace with actual API call
-    console.log('Marking all notifications as read');
-    return { success: true };
-  }
-};
+import { useNavigate } from 'react-router-dom';
 
 const UserNotifications = () => {
   const [notifications, setNotifications] = useState([]);
@@ -96,8 +40,8 @@ const UserNotifications = () => {
   const [error, setError] = useState(null);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const navigate = useNavigate();
 
-  // Load notifications on component mount
   useEffect(() => {
     loadNotifications();
   }, []);
@@ -106,8 +50,61 @@ const UserNotifications = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await notificationApi.getUserNotifications();
-      setNotifications(data);
+      
+      const mockNotifications = [
+        {
+          id: 1,
+          type: 'booking_status',
+          title: 'Booking Request Updated',
+          message: 'Your booking request for Luxury Apartment in Colombo has been approved!',
+          created_at: new Date(Date.now() - 1000 * 60 * 30),
+          read: false,
+          property_name: 'Luxury Apartment in Colombo',
+          booking_id: 123,
+          property_id: 1
+        },
+        {
+          id: 2,
+          type: 'property_update',
+          title: 'New Property Available',
+          message: 'A new property matching your preferences has been listed in your favorite area.',
+          created_at: new Date(Date.now() - 1000 * 60 * 60 * 2),
+          read: true,
+          property_name: 'Modern Studio in Kandy',
+          property_id: 2
+        },
+        {
+          id: 3,
+          type: 'system',
+          title: 'Profile Update Required',
+          message: 'Please update your profile information to improve your booking success rate.',
+          created_at: new Date(Date.now() - 1000 * 60 * 60 * 24),
+          read: false
+        },
+        {
+          id: 4,
+          type: 'booking_reminder',
+          title: 'Booking Reminder',
+          message: 'Your booking check-in is tomorrow. Please contact the property owner for details.',
+          created_at: new Date(Date.now() - 1000 * 60 * 60 * 6),
+          read: false,
+          property_name: 'Cozy Room in Galle',
+          booking_id: 124,
+          property_id: 3
+        },
+        {
+          id: 5,
+          type: 'favorite_update',
+          title: 'Favorite Property Updated',
+          message: 'A property in your favorites list has updated its price and availability.',
+          created_at: new Date(Date.now() - 1000 * 60 * 60 * 12),
+          read: true,
+          property_name: 'Sea View Apartment',
+          property_id: 4
+        }
+      ];
+      
+      setNotifications(mockNotifications);
     } catch (err) {
       console.error('Error loading notifications:', err);
       setError('Failed to load notifications. Please try again.');
@@ -116,16 +113,8 @@ const UserNotifications = () => {
     }
   };
 
-  // Mark notification as read/unread
   const toggleReadStatus = async (notificationId, currentReadStatus) => {
     try {
-      if (currentReadStatus) {
-        await notificationApi.markAsUnread(notificationId);
-      } else {
-        await notificationApi.markAsRead(notificationId);
-      }
-      
-      // Update local state
       setNotifications(prev => 
         prev.map(notification => 
           notification.id === notificationId 
@@ -135,92 +124,104 @@ const UserNotifications = () => {
       );
     } catch (err) {
       console.error('Error updating notification status:', err);
+      setError('Failed to update notification status.');
     }
   };
 
-  // Delete notification
   const deleteNotification = async (notificationId) => {
     try {
-      await notificationApi.deleteNotification(notificationId);
-      
-      // Remove from local state
       setNotifications(prev => 
         prev.filter(notification => notification.id !== notificationId)
       );
     } catch (err) {
       console.error('Error deleting notification:', err);
+      setError('Failed to delete notification.');
     }
   };
 
-  // Mark all notifications as read
   const markAllAsRead = async () => {
     try {
-      await notificationApi.markAllAsRead();
-      
-      // Update local state
       setNotifications(prev => 
         prev.map(notification => ({ ...notification, read: true }))
       );
     } catch (err) {
       console.error('Error marking all as read:', err);
+      setError('Failed to mark all notifications as read.');
     }
   };
 
-  // Open notification details dialog
   const openNotificationDialog = (notification) => {
     setSelectedNotification(notification);
     setDialogOpen(true);
     
-    // Mark as read when opened
     if (!notification.read) {
       toggleReadStatus(notification.id, false);
     }
   };
 
-  // Get icon based on notification type
   const getNotificationIcon = (type) => {
     switch (type) {
       case 'booking_status':
+      case 'booking_reminder':
         return <BookingIcon color="primary" />;
       case 'property_update':
-        return <HomeIcon color="secondary" />;
+        return <HomeIcon color="info" />;
+      case 'favorite_update':
+        return <FavoriteIcon color="secondary" />;
       case 'system':
-        return <NotificationsIcon color="action" />;
+        return <SystemUpdateIcon color="warning" />;
+      case 'rating':
+        return <StarIcon color="success" />;
       default:
         return <MessageIcon color="action" />;
     }
   };
 
-  // Get color based on notification type
   const getNotificationColor = (type) => {
     switch (type) {
       case 'booking_status':
-        return 'success';
+      case 'booking_reminder':
+        return 'primary';
       case 'property_update':
         return 'info';
+      case 'favorite_update':
+        return 'secondary';
       case 'system':
         return 'warning';
+      case 'rating':
+        return 'success';
       default:
         return 'default';
     }
   };
 
-  // Calculate unread count
+  const handleNotificationAction = (notification) => {
+    setDialogOpen(false);
+    
+    if (notification.booking_id) {
+      console.log('Navigate to booking details:', notification.booking_id);
+    } else if (notification.property_id) {
+      navigate(`/user-property-view/${notification.property_id}`);
+    } else if (notification.type === 'system') {
+      navigate('/profile');
+    }
+  };
+
   const unreadCount = notifications.filter(n => !n.read).length;
 
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-          <CircularProgress />
-        </Box>
+      <Container maxWidth="md" sx={{ py: 4, textAlign: 'center' }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ mt: 2 }}>
+          Loading notifications...
+        </Typography>
       </Container>
     );
   }
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
           <Typography variant="h4" component="h1">
@@ -246,14 +247,12 @@ const UserNotifications = () => {
         </Typography>
       </Box>
 
-      {/* Error Alert */}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
 
-      {/* Notifications List */}
       {notifications.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <NotificationsIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
@@ -280,6 +279,30 @@ const UserNotifications = () => {
                     }
                   }}
                   onClick={() => openNotificationDialog(notification)}
+                  secondaryAction={
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleReadStatus(notification.id, notification.read);
+                        }}
+                        title={notification.read ? 'Mark as unread' : 'Mark as read'}
+                      >
+                        {notification.read ? <MarkAsUnreadIcon /> : <DraftsIcon />}
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteNotification(notification.id);
+                        }}
+                        title="Delete notification"
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                  }
                 >
                   <ListItemIcon>
                     {getNotificationIcon(notification.type)}
@@ -292,14 +315,14 @@ const UserNotifications = () => {
                           variant="subtitle1" 
                           sx={{ 
                             fontWeight: notification.read ? 'normal' : 'bold',
-                            flexGrow: 1
+                            flex: 1
                           }}
                         >
                           {notification.title}
                         </Typography>
-                        <Chip
-                          label={notification.type.replace('_', ' ')}
-                          size="small"
+                        <Chip 
+                          label={notification.type.replace('_', ' ')} 
+                          size="small" 
                           color={getNotificationColor(notification.type)}
                           variant="outlined"
                         />
@@ -307,41 +330,22 @@ const UserNotifications = () => {
                     }
                     secondary={
                       <Box>
-                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        <Typography variant="body2" color="text.secondary" paragraph>
                           {notification.message}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        
+                        {notification.property_name && (
+                          <Typography variant="caption" color="primary.main">
+                            {notification.property_name}
+                          </Typography>
+                        )}
+                        
+                        <Typography variant="caption" display="block" color="text.secondary">
                           {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                         </Typography>
                       </Box>
                     }
                   />
-                  
-                  {/* Action buttons */}
-                  <Box display="flex" gap={1}>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleReadStatus(notification.id, notification.read);
-                      }}
-                      title={notification.read ? 'Mark as unread' : 'Mark as read'}
-                    >
-                      {notification.read ? <MarkAsUnreadIcon /> : <DraftsIcon />}
-                    </IconButton>
-                    
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deleteNotification(notification.id);
-                      }}
-                      title="Delete notification"
-                      color="error"
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
                 </ListItem>
                 
                 {index < notifications.length - 1 && <Divider />}
@@ -351,7 +355,6 @@ const UserNotifications = () => {
         </Paper>
       )}
 
-      {/* Notification Details Dialog */}
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
@@ -394,16 +397,14 @@ const UserNotifications = () => {
                 Close
               </Button>
               
-              {selectedNotification.booking_id && (
+              {(selectedNotification.property_id || selectedNotification.booking_id || selectedNotification.type === 'system') && (
                 <Button 
                   variant="contained" 
-                  onClick={() => {
-                    // Navigate to booking details - implement based on your routing
-                    console.log('Navigate to booking:', selectedNotification.booking_id);
-                    setDialogOpen(false);
-                  }}
+                  onClick={() => handleNotificationAction(selectedNotification)}
                 >
-                  View Booking
+                  {selectedNotification.booking_id ? 'View Booking' : 
+                   selectedNotification.property_id ? 'View Property' : 
+                   'Update Profile'}
                 </Button>
               )}
             </DialogActions>

@@ -89,7 +89,19 @@ const HamburgerMenuDropdown = () => {
         if (!authenticated) {
           navigate('/user-allproperties');
         } else {
-          navigate(roleValue === "propertyowner" ? '/myproperties' : '/user-allproperties');
+          switch (roleValue) {
+            case 'user':
+              navigate('/user-allproperties');
+              break;
+            case 'propertyowner':
+              navigate('/myproperties');
+              break;
+            case 'admin':
+              navigate('/admin/all-properties');
+              break;
+            default:
+              navigate('/user-allproperties');
+          }
         }
         break;
       
@@ -107,360 +119,345 @@ const HamburgerMenuDropdown = () => {
         if (!authenticated) {
           navigate('/login');
         } else {
-          navigate(roleValue === "propertyowner" ? '/notifications' : '/user-notifications');
+          switch (roleValue) {
+            case 'user':
+              navigate('/user-notifications');
+              break;
+            case 'propertyowner':
+              navigate('/notifications');
+              break;
+            case 'admin':
+              navigate('/notifications');
+              break;
+            default:
+              navigate('/login');
+          }
         }
         break;
 
-      case 'theme':
-        toggleTheme();
-        break;
-      
       case 'favourites':
         if (!authenticated) {
           navigate('/login');
-        } else if (roleValue === 'user') {
+        } else if (roleValue === "user") {
           navigate('/user-favourites');
         } else {
           navigate('/login');
         }
         break;
-      
-      case 'admin-home':
-        if (roleValue === 'admin') {
-          navigate('/admin/home');
+
+      case 'bookings':
+        if (!authenticated) {
+          navigate('/login');
+        } else {
+          switch (roleValue) {
+            case 'user':
+              navigate('/user-bookings');
+              break;
+            case 'propertyowner':
+              navigate('/bookings');
+              break;
+            case 'admin':
+              navigate('/bookings');
+              break;
+            default:
+              navigate('/login');
+          }
         }
         break;
-      
-      case 'review-listings':
+
+      case 'admin-new-listings':
         if (roleValue === 'admin') {
           navigate('/admin/new-listings');
         }
         break;
-      
-      case 'all-properties':
+
+      case 'admin-all-properties':
         if (roleValue === 'admin') {
           navigate('/admin/all-properties');
         }
         break;
 
-      case 'booking-requests':
-        if (!authenticated) {
-          navigate('/login');
-        } else if (roleValue === "propertyowner") {
-          navigate('/bookings');
-        } else if (roleValue === "user") {
-          navigate('/user-bookings');
+      case 'profile':
+        if (authenticated) {
+          navigate('/profile');
         } else {
           navigate('/login');
         }
         break;
-      
+
+      case 'messages':
+        if (authenticated) {
+          navigate('/messages');
+        } else {
+          navigate('/login');
+        }
+        break;
+
+      case 'transactions':
+        if (authenticated) {
+          navigate('/transactions');
+        } else {
+          navigate('/login');
+        }
+        break;
+
       case 'logout':
         localStorage.removeItem('token');
         localStorage.removeItem('userRole');
-        localStorage.removeItem('userId');
         localStorage.removeItem('tokenExpiry');
-        localStorage.clear();
         navigate('/user-home');
-        window.location.reload();
         break;
-      
-      case 'account':
-        if (!authenticated) {
-          navigate('/login');
-        } else {
-          navigate('/profile');
-        }
-        break;
-      
-      case 'messages':
-        if (!authenticated) {
-          navigate('/login');
-        } else {
-          navigate('/messages');
-        }
-        break;
-        
-      case 'transactions':
-        if (!authenticated) {
-          navigate('/login');
-        } else {
-          navigate('/transactions');
-        }
-        break;
-      
+
       default:
-        console.warn('Unknown menu action:', action);
+        console.warn('Unknown action:', action);
     }
   };
 
   const getMenuItems = () => {
-    const baseItems = [
+    const commonItems = [
       {
         label: 'Home',
         icon: <HomeIcon />,
-        action: 'home',
-        show: true
+        action: 'home'
       },
       {
         label: 'Theme',
         icon: isDark ? <Brightness7Icon /> : <Brightness4Icon />,
-        action: 'theme',
-        show: true
+        action: () => toggleTheme(),
+        onClick: true
       }
     ];
 
     if (!authenticated) {
       return [
-        ...baseItems,
+        ...commonItems,
         {
           label: 'All Properties',
           icon: <ViewListIcon />,
-          action: 'properties',
-          show: true
+          action: 'properties'
         }
       ];
     }
 
-    const authenticatedItems = [
+    const userItems = [
+      ...commonItems,
       {
-        label: 'Account',
+        label: 'All Properties',
+        icon: <ViewListIcon />,
+        action: 'properties'
+      },
+      {
+        label: 'Favourites',
+        icon: <FavoriteIcon />,
+        action: 'favourites'
+      },
+      {
+        label: 'Notifications',
+        icon: <NotificationsIcon />,
+        action: 'notifications',
+        badge: notificationCount > 0 ? notificationCount : null
+      },
+      { divider: true },
+      {
+        label: 'Profile',
         icon: <PersonIcon />,
-        action: 'account',
-        show: true
+        action: 'profile'
       },
       {
         label: 'Messages',
         icon: <MessageIcon />,
-        action: 'messages',
-        show: true
+        action: 'messages'
       },
       {
         label: 'Transactions',
         icon: <AccountBalanceWalletIcon />,
-        action: 'transactions',
-        show: true
+        action: 'transactions'
+      },
+      { divider: true },
+      {
+        label: 'Logout',
+        icon: <LogoutIcon />,
+        action: 'logout'
+      }
+    ];
+
+    const propertyOwnerItems = [
+      ...commonItems,
+      {
+        label: 'My Properties',
+        icon: <BusinessIcon />,
+        action: 'properties'
+      },
+      {
+        label: 'Add Property',
+        icon: <AddHomeIcon />,
+        action: 'add-property'
+      },
+      {
+        label: 'Booking Requests',
+        icon: <BookmarkIcon />,
+        action: 'bookings'
+      },
+      {
+        label: 'Notifications',
+        icon: <NotificationsIcon />,
+        action: 'notifications',
+        badge: notificationCount > 0 ? notificationCount : null
+      },
+      { divider: true },
+      {
+        label: 'Profile',
+        icon: <PersonIcon />,
+        action: 'profile'
+      },
+      {
+        label: 'Messages',
+        icon: <MessageIcon />,
+        action: 'messages'
+      },
+      {
+        label: 'Transactions',
+        icon: <AccountBalanceWalletIcon />,
+        action: 'transactions'
+      },
+      { divider: true },
+      {
+        label: 'Logout',
+        icon: <LogoutIcon />,
+        action: 'logout'
+      }
+    ];
+
+    const adminItems = [
+      ...commonItems,
+      {
+        label: 'Admin Dashboard',
+        icon: <AdminPanelSettingsIcon />,
+        action: 'home'
+      },
+      {
+        label: 'Review New Listings',
+        icon: <PendingActionsIcon />,
+        action: 'admin-new-listings'
+      },
+      {
+        label: 'All Properties',
+        icon: <ViewListIcon />,
+        action: 'admin-all-properties'
+      },
+      {
+        label: 'Notifications',
+        icon: <NotificationsIcon />,
+        action: 'notifications',
+        badge: notificationCount > 0 ? notificationCount : null
+      },
+      { divider: true },
+      {
+        label: 'Profile',
+        icon: <PersonIcon />,
+        action: 'profile'
+      },
+      {
+        label: 'Messages',
+        icon: <MessageIcon />,
+        action: 'messages'
+      },
+      {
+        label: 'Transactions',
+        icon: <AccountBalanceWalletIcon />,
+        action: 'transactions'
+      },
+      { divider: true },
+      {
+        label: 'Logout',
+        icon: <LogoutIcon />,
+        action: 'logout'
       }
     ];
 
     switch (roleValue) {
       case 'user':
-        return [
-          ...baseItems,
-          {
-            label: 'All Properties',
-            icon: <ViewListIcon />,
-            action: 'properties',
-            show: true
-          },
-          {
-            label: 'Favourites',
-            icon: <FavoriteIcon />,
-            action: 'favourites',
-            show: true
-          },
-          {
-            label: 'My Bookings',
-            icon: <BookmarkIcon />,
-            action: 'booking-requests',
-            show: true
-          },
-          {
-            label: 'Notifications',
-            icon: notificationCount > 0 ? (
-              <Badge badgeContent={notificationCount} color="error">
-                <NotificationsIcon />
-              </Badge>
-            ) : (
-              <NotificationsIcon />
-            ),
-            action: 'notifications',
-            show: true
-          },
-          { divider: true },
-          ...authenticatedItems,
-          { divider: true },
-          {
-            label: 'Logout',
-            icon: <LogoutIcon />,
-            action: 'logout',
-            show: true
-          }
-        ];
-
+        return userItems;
       case 'propertyowner':
-        return [
-          ...baseItems,
-          {
-            label: 'My Properties',
-            icon: <BusinessIcon />,
-            action: 'properties',
-            show: true
-          },
-          {
-            label: 'Add Property',
-            icon: <AddHomeIcon />,
-            action: 'add-property',
-            show: true
-          },
-          {
-            label: 'Booking Requests',
-            icon: <PendingActionsIcon />,
-            action: 'booking-requests',
-            show: true
-          },
-          {
-            label: 'Notifications',
-            icon: notificationCount > 0 ? (
-              <Badge badgeContent={notificationCount} color="error">
-                <NotificationsIcon />
-              </Badge>
-            ) : (
-              <NotificationsIcon />
-            ),
-            action: 'notifications',
-            show: true
-          },
-          { divider: true },
-          ...authenticatedItems,
-          { divider: true },
-          {
-            label: 'Logout',
-            icon: <LogoutIcon />,
-            action: 'logout',
-            show: true
-          }
-        ];
-
+        return propertyOwnerItems;
       case 'admin':
-        return [
-          ...baseItems,
-          {
-            label: 'Admin Dashboard',
-            icon: <AdminPanelSettingsIcon />,
-            action: 'admin-home',
-            show: true
-          },
-          {
-            label: 'Review New Listings',
-            icon: <PendingActionsIcon />,
-            action: 'review-listings',
-            show: true
-          },
-          {
-            label: 'All Properties',
-            icon: <ViewListIcon />,
-            action: 'all-properties',
-            show: true
-          },
-          { divider: true },
-          ...authenticatedItems,
-          { divider: true },
-          {
-            label: 'Logout',
-            icon: <LogoutIcon />,
-            action: 'logout',
-            show: true
-          }
-        ];
-
+        return adminItems;
       default:
-        return [
-          ...authenticatedItems,
-          { divider: true },
-          {
-            label: 'Logout',
-            icon: <LogoutIcon />,
-            action: 'logout',
-            show: true
-          }
-        ];
+        return commonItems;
     }
   };
 
   const menuItems = getMenuItems();
 
   return (
-    <>
+    <Box ref={menuRef}>
       <IconButton
         edge="start"
         color="inherit"
         aria-label="menu"
         onClick={handleMenuOpen}
-        sx={{ 
-          mr: 2,
-          '&:hover': {
-            backgroundColor: 'rgba(255, 255, 255, 0.1)'
-          }
-        }}
+        sx={{ mr: 2 }}
       >
         <MenuIcon />
       </IconButton>
       
       <Menu
-        ref={menuRef}
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
         PaperProps={{
           sx: {
-            minWidth: 200,
             mt: 1,
+            minWidth: 220,
             '& .MuiMenuItem-root': {
               px: 2,
-              py: 1,
-              '&:hover': {
-                backgroundColor: 'action.hover'
-              }
+              py: 1
             }
           }
         }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'left'
-        }}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'left'
-        }}
+        transformOrigin={{ horizontal: 'left', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'left', vertical: 'bottom' }}
       >
         {authenticated && (
           <>
-            <Box sx={{ px: 2, py: 1 }}>
+            <Box sx={{ px: 2, py: 1, backgroundColor: 'grey.100' }}>
               <Typography variant="caption" color="text.secondary">
-                {roleValue === 'propertyowner' ? 'Property Owner' : 
-                 roleValue === 'admin' ? 'Administrator' : 'User'}
+                Logged in as: {roleValue || 'Unknown'}
               </Typography>
             </Box>
             <Divider />
           </>
         )}
-
+        
         {menuItems.map((item, index) => {
           if (item.divider) {
-            return <Divider key={`divider-${index}`} />;
+            return <Divider key={index} />;
           }
 
-          if (!item.show) return null;
+          if (item.onClick) {
+            return (
+              <MenuItem key={index} onClick={() => {
+                handleMenuClose();
+                item.action();
+              }}>
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.label} />
+              </MenuItem>
+            );
+          }
 
           return (
-            <MenuItem
-              key={item.action || index}
-              onClick={() => handleMenuItemClick(item.action)}
-              sx={{
-                minHeight: 48,
-                gap: 1
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 40 }}>
-                {item.icon}
-              </ListItemIcon>
+            <MenuItem key={index} onClick={() => handleMenuItemClick(item.action)}>
+              <ListItemIcon>{item.icon}</ListItemIcon>
               <ListItemText primary={item.label} />
+              {item.badge && (
+                <Badge badgeContent={item.badge} color="error" sx={{ ml: 1 }} />
+              )}
             </MenuItem>
           );
         })}
       </Menu>
-    </>
+    </Box>
   );
 };
 

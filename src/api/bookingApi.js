@@ -10,7 +10,6 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor to add auth token
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -24,7 +23,6 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for error handling
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -32,6 +30,7 @@ apiClient.interceptors.response.use(
       localStorage.removeItem('token');
       localStorage.removeItem('userRole');
       localStorage.removeItem('userId');
+      localStorage.removeItem('tokenExpiry');
       
       if (!window.location.pathname.includes('/login')) {
         window.location.href = '/login';
@@ -41,419 +40,518 @@ apiClient.interceptors.response.use(
   }
 );
 
-/**
- * Get property availability status with detailed information
- * @param {number} propertyId - Property ID
- * @returns {Promise<Object>} Availability status and statistics
- */
-export const getPropertyAvailabilityStatus = async (propertyId) => {
+const validateBookingId = (bookingId) => {
+  const id = parseInt(bookingId);
+  if (isNaN(id) || id <= 0) {
+    throw new Error('Invalid booking ID provided');
+  }
+  return id;
+};
+
+const validatePropertyId = (propertyId) => {
+  const id = parseInt(propertyId);
+  if (isNaN(id) || id <= 0) {
+    throw new Error('Invalid property ID provided');
+  }
+  return id;
+};
+
+const handleBookingError = (error, operation) => {
+  console.error(`Error ${operation}:`, error);
+  
+  if (error.response?.status === 400) {
+    throw new Error(error.response.data?.message || `Invalid data for ${operation}`);
+  } else if (error.response?.status === 401) {
+    throw new Error('Please log in to access booking features');
+  } else if (error.response?.status === 403) {
+    throw new Error('Access denied. You do not have permission for this action.');
+  } else if (error.response?.status === 404) {
+    throw new Error('Booking not found');
+  } else if (error.response?.status >= 500) {
+    throw new Error('Server error. Please try again later.');
+  }
+  
+  throw new Error(error.response?.data?.message || `Failed to ${operation}`);
+};
+
+export const submitBookingRequest = async (bookingData) => {
   try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
+    if (!bookingData || typeof bookingData !== 'object') {
+      throw new Error('Booking data is required');
+    }
+
+    const requiredFields = ['property_id', 'first_name', 'last_name', 'email', 'mobile_number', 'check_in_date', 'check_out_date'];
+    
+    for (const field of requiredFields) {
+      if (!bookingData[field]) {
+        throw new Error(`${field.replace('_', ' ')} is required`);
+      }
+    }
+
+    const response = await apiClient.post('/bookings', bookingData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    const response = await apiClient.get(`/bookings/property/${propertyId}/status`);
     return response.data;
   } catch (error) {
-    console.error('Error fetching property availability status:', error);
-    
-    if (error.response?.status === 404) {
-      throw new Error('Property not found');
-    }
-    
-    throw new Error(error.response?.data?.error || 'Failed to fetch property availability status');
+    handleBookingError(error, 'submitting booking request');
   }
 };
 
-/**
- * Get property availability calendar with bookings  
- * @param {number} propertyId - Property ID
- * @param {Object} params - Optional date range parameters
- * @returns {Promise<Object>} Availability calendar data
- */
-export const getPropertyAvailability = async (propertyId, params = {}) => {
+export const getUserBookings = async (options = {}) => {
   try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
+    const { page = 1, limit = 20, status, property_id, date_from, date_to } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    
+    if (status) params.append('status', status);
+    if (property_id) params.append('property_id', property_id.toString());
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+
+    const response = await apiClient.get(`/bookings/user?${params.toString()}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    const response = await apiClient.get(`/bookings/property/${propertyId}/availability`, {
-      params
-    });
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'fetching user bookings');
+  }
+};
+
+export const getOwnerBookings = async (options = {}) => {
+  try {
+    const { page = 1, limit = 20, status, property_id, date_from, date_to } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    
+    if (status) params.append('status', status);
+    if (property_id) params.append('property_id', property_id.toString());
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+
+    const response = await apiClient.get(`/bookings/owner?${params.toString()}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'fetching owner bookings');
+  }
+};
+
+export const respondToBookingRequest = async (bookingId, responseData) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    if (!responseData || typeof responseData !== 'object') {
+      throw new Error('Response data is required');
+    }
+
+    if (!responseData.action || !['approve', 'reject'].includes(responseData.action)) {
+      throw new Error('Action must be either "approve" or "reject"');
+    }
+
+    const response = await apiClient.put(`/bookings/${validatedId}/respond`, responseData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'responding to booking request');
+  }
+};
+
+export const submitPayment = async (bookingId, paymentData) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    if (!paymentData || typeof paymentData !== 'object') {
+      throw new Error('Payment data is required');
+    }
+
+    const response = await apiClient.post(`/bookings/${validatedId}/payment`, paymentData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'submitting payment');
+  }
+};
+
+export const verifyPayment = async (bookingId, verificationData = {}) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const response = await apiClient.post(`/bookings/${validatedId}/verify-payment`, verificationData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'verifying payment');
+  }
+};
+
+export const getBookingDetails = async (bookingId) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const response = await apiClient.get(`/bookings/${validatedId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'fetching booking details');
+  }
+};
+
+export const getPropertyAvailability = async (propertyId, options = {}) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    const { date_from, date_to } = options;
+    
+    const params = new URLSearchParams();
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+    
+    const url = `/bookings/property/${validatedId}/availability${params.toString() ? `?${params}` : ''}`;
+    
+    const response = await apiClient.get(url);
+    
+    if (!response.data) {
+      return {
+        available: true,
+        conflicting_bookings: [],
+        available_periods: []
+      };
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error fetching property availability:', error);
-    throw new Error(error.response?.data?.error || 'Failed to fetch property availability');
+    
+    return {
+      available: true,
+      conflicting_bookings: [],
+      available_periods: []
+    };
   }
 };
 
-/**
- * Submit a new booking request
- * @param {Object} bookingData - Booking request data
- * @returns {Promise<Object>} Booking submission response
- */
-export const submitBookingRequest = async (bookingData) => {
+export const getPropertyAvailabilityStatus = async (propertyId) => {
   try {
-    if (!bookingData) {
-      throw new Error('Booking data is required');
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/bookings/property/${validatedId}/status`);
+    
+    if (!response.data) {
+      return {
+        property_id: validatedId,
+        is_available: true,
+        pending_requests: 0,
+        confirmed_bookings: [],
+        statistics: {
+          total_bookings: 0,
+          pending_requests: 0,
+          confirmed_bookings: 0,
+          revenue_generated: 0
+        }
+      };
     }
     
-    // Validate required fields
-    const requiredFields = ['propertyId', 'checkInDate', 'checkOutDate', 'personalDetails'];
-    const missingFields = requiredFields.filter(field => !bookingData[field]);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching property availability status:', error);
+    const validatedId = parseInt(propertyId); 
+    return {
+      property_id: validatedId,
+      is_available: true,
+      pending_requests: 0,
+      confirmed_bookings: [],
+      statistics: {
+        total_bookings: 0,
+        pending_requests: 0,
+        confirmed_bookings: 0,
+        revenue_generated: 0
+      }
+    };
+  }
+};
+
+export const updateBookingStatus = async (bookingId, statusData) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
     
-    if (missingFields.length > 0) {
-      throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+    if (!statusData || typeof statusData !== 'object') {
+      throw new Error('Status data is required');
+    }
+
+    if (!statusData.status) {
+      throw new Error('Status is required');
+    }
+
+    const validStatuses = ['pending', 'approved', 'payment_submitted', 'confirmed', 'rejected', 'auto_rejected', 'payment_rejected', 'cancelled'];
+    
+    if (!validStatuses.includes(statusData.status)) {
+      throw new Error('Invalid status provided');
+    }
+
+    const response = await apiClient.put(`/bookings/${validatedId}/status`, statusData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    // Validate personal details
-    const requiredPersonalFields = ['firstName', 'lastName', 'email'];
-    const missingPersonalFields = requiredPersonalFields.filter(
-      field => !bookingData.personalDetails[field]
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'updating booking status');
+  }
+};
+
+export const cancelBooking = async (bookingId, cancellationData = {}) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const payload = {
+      status: 'cancelled',
+      cancellation_reason: cancellationData.reason || '',
+      cancelled_by: cancellationData.cancelled_by || 'user'
+    };
+
+    const response = await apiClient.put(`/bookings/${validatedId}/cancel`, payload);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'cancelling booking');
+  }
+};
+
+export const getBookingStatistics = async (options = {}) => {
+  try {
+    const { period = 'monthly', year, month, property_id } = options;
+    
+    const params = new URLSearchParams();
+    params.append('period', period);
+    
+    if (year) params.append('year', year.toString());
+    if (month) params.append('month', month.toString());
+    if (property_id) params.append('property_id', property_id.toString());
+
+    const response = await apiClient.get(`/bookings/owner/statistics?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        total_bookings: 0,
+        confirmed_bookings: 0,
+        pending_bookings: 0,
+        cancelled_bookings: 0,
+        total_revenue: 0,
+        average_booking_value: 0,
+        occupancy_rate: 0,
+        monthly_breakdown: [],
+        property_breakdown: [],
+        status_breakdown: {}
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching booking statistics:', error);
+    
+    return {
+      total_bookings: 0,
+      confirmed_bookings: 0,
+      pending_bookings: 0,
+      cancelled_bookings: 0,
+      total_revenue: 0,
+      average_booking_value: 0,
+      occupancy_rate: 0,
+      monthly_breakdown: [],
+      property_breakdown: [],
+      status_breakdown: {}
+    };
+  }
+};
+
+export const uploadBookingDocuments = async (bookingId, documentData) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const formData = new FormData();
+    
+    if (documentData.paymentProof) {
+      formData.append('payment_proof', documentData.paymentProof);
+    }
+    
+    if (documentData.verificationDocument) {
+      formData.append('verification_document', documentData.verificationDocument);
+    }
+    
+    if (documentData.documentType) {
+      formData.append('document_type', documentData.documentType);
+    }
+    
+    const response = await axios.post(
+      `${API_BASE_URL}/bookings/${validatedId}/documents`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        timeout: 60000
+      }
     );
     
-    if (missingPersonalFields.length > 0) {
-      throw new Error(`Missing required personal details: ${missingPersonalFields.join(', ')}`);
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    const response = await apiClient.post('/bookings', bookingData);
     return response.data;
   } catch (error) {
-    console.error('Error submitting booking request:', error);
-    
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data?.error || 'Invalid booking data');
-    } else if (error.response?.status === 401) {
-      throw new Error('Please log in to submit a booking request');
-    } else if (error.response?.status === 404) {
-      throw new Error('Property not found or not available');
-    } else if (error.response?.status === 409) {
-      throw new Error(error.response.data?.error || 'Booking conflict with existing reservations');
-    }
-    
-    throw new Error(error.response?.data?.error || 'Failed to submit booking request');
+    handleBookingError(error, 'uploading booking documents');
   }
 };
 
-/**
- * Get user's booking requests
- * @returns {Promise<Array>} User's booking requests
- */
-export const getUserBookings = async () => {
+export const getBookingsByDateRange = async (dateFrom, dateTo, options = {}) => {
   try {
-    const response = await apiClient.get('/bookings/user');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching user bookings:', error);
-    
-    if (error.response?.status === 401) {
-      throw new Error('Please log in to view your bookings');
+    if (!dateFrom || !dateTo) {
+      throw new Error('Date range is required');
     }
     
-    throw new Error('Failed to fetch your booking requests');
+    const { property_id, status, include_user_info = true, include_property_info = true } = options;
+    
+    const params = new URLSearchParams();
+    params.append('date_from', dateFrom);
+    params.append('date_to', dateTo);
+    
+    if (property_id) params.append('property_id', property_id.toString());
+    if (status) params.append('status', status);
+    if (include_user_info) params.append('include_user_info', 'true');
+    if (include_property_info) params.append('include_property_info', 'true');
+
+    const response = await apiClient.get(`/bookings/date-range?${params.toString()}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'fetching bookings by date range');
   }
 };
 
-/**
- * Get property owner's booking requests
- * @returns {Promise<Array>} Property owner's booking requests
- */
-export const getOwnerBookings = async () => {
+export const getBookingHistory = async (options = {}) => {
   try {
-    const response = await apiClient.get('/bookings/owner');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching owner bookings:', error);
+    const { 
+      page = 1, 
+      limit = 50, 
+      include_cancelled = true, 
+      include_completed = true,
+      sort_by = 'created_at',
+      sort_order = 'desc'
+    } = options;
     
-    if (error.response?.status === 401) {
-      throw new Error('Please log in to view booking requests');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Property owner role required.');
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    params.append('include_cancelled', include_cancelled.toString());
+    params.append('include_completed', include_completed.toString());
+    params.append('sort_by', sort_by);
+    params.append('sort_order', sort_order);
+
+    const response = await apiClient.get(`/bookings/history?${params.toString()}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    throw new Error('Failed to fetch booking requests');
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'fetching booking history');
   }
 };
 
-/**
- * Respond to a booking request (approve/reject)
- * @param {number} requestId - Booking request ID
- * @param {Object} responseData - Response data (action, message, payment_account_info)
- * @returns {Promise<Object>} Response result
- */
-export const respondToBookingRequest = async (requestId, responseData) => {
+export const exportBookingData = async (options = {}) => {
   try {
-    if (!requestId) {
-      throw new Error('Request ID is required');
-    }
+    const { 
+      format = 'csv', 
+      date_from, 
+      date_to, 
+      property_id, 
+      status,
+      include_personal_data = false 
+    } = options;
     
-    if (!responseData.action || !['approve', 'reject'].includes(responseData.action)) {
-      throw new Error('Valid action (approve/reject) is required');
-    }
+    const params = new URLSearchParams();
+    params.append('format', format);
     
-    if (responseData.action === 'approve' && !responseData.payment_account_info) {
-      throw new Error('Payment account information is required for approval');
-    }
-    
-    const response = await apiClient.put(`/bookings/respond/${requestId}`, responseData);
-    return response.data;
-  } catch (error) {
-    console.error('Error responding to booking request:', error);
-    
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data?.error || 'Invalid response data');
-    } else if (error.response?.status === 401) {
-      throw new Error('Please log in to respond to booking requests');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Property owner role required.');
-    } else if (error.response?.status === 404) {
-      throw new Error('Booking request not found');
-    } else if (error.response?.status === 409) {
-      throw new Error(error.response.data?.error || 'Booking conflict detected');
-    }
-    
-    throw new Error(error.response?.data?.error || 'Failed to respond to booking request');
-  }
-};
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+    if (property_id) params.append('property_id', property_id.toString());
+    if (status) params.append('status', status);
+    if (include_personal_data) params.append('include_personal_data', 'true');
 
-/**
- * Submit payment proof for approved booking
- * @param {number} requestId - Booking request ID
- * @param {FormData} paymentData - Payment proof and verification documents
- * @returns {Promise<Object>} Submission result
- */
-export const submitPaymentProof = async (requestId, paymentData) => {
-  try {
-    if (!requestId) {
-      throw new Error('Request ID is required');
-    }
-    
-    if (!paymentData || !(paymentData instanceof FormData)) {
-      throw new Error('Payment data must be provided as FormData');
-    }
-    
-    const response = await apiClient.put(`/bookings/submit-payment/${requestId}`, paymentData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      timeout: 60000, // Extended timeout for file uploads
+    const response = await apiClient.get(`/bookings/export?${params.toString()}`, {
+      responseType: 'blob'
     });
     
     return response.data;
   } catch (error) {
-    console.error('Error submitting payment proof:', error);
-    
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data?.error || 'Invalid payment documents');
-    } else if (error.response?.status === 401) {
-      throw new Error('Please log in to submit payment proof');
-    } else if (error.response?.status === 404) {
-      throw new Error('Booking request not found or not in approved status');
-    } else if (error.response?.status === 413) {
-      throw new Error('File size too large. Please upload smaller files.');
-    }
-    
-    throw new Error(error.response?.data?.error || 'Failed to submit payment proof');
+    handleBookingError(error, 'exporting booking data');
   }
 };
 
-/**
- * Confirm or reject payment verification (property owner)
- * @param {number} requestId - Booking request ID
- * @param {Object} verificationData - Verification action data
- * @returns {Promise<Object>} Verification result
- */
-export const verifyPayment = async (requestId, verificationData) => {
+export const validateBookingRequest = async (bookingData) => {
   try {
-    if (!requestId) {
-      throw new Error('Request ID is required');
+    if (!bookingData || typeof bookingData !== 'object') {
+      throw new Error('Booking data is required');
+    }
+
+    const response = await apiClient.post('/bookings/validate', bookingData);
+    
+    if (!response.data) {
+      return {
+        is_valid: false,
+        errors: ['Invalid response from server'],
+        warnings: []
+      };
     }
     
-    if (!verificationData.action || !['confirm', 'reject'].includes(verificationData.action)) {
-      throw new Error('Valid verification action (confirm/reject) is required');
-    }
-    
-    const response = await apiClient.put(`/bookings/confirm-payment/${requestId}`, verificationData);
     return response.data;
   } catch (error) {
-    console.error('Error verifying payment:', error);
+    console.error('Error validating booking request:', error);
     
-    if (error.response?.status === 400) {
-      throw new Error(error.response.data?.error || 'Invalid verification data');
-    } else if (error.response?.status === 401) {
-      throw new Error('Please log in to verify payments');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Property owner role required.');
-    } else if (error.response?.status === 404) {
-      throw new Error('Booking request not found or not in payment submitted status');
-    }
-    
-    throw new Error(error.response?.data?.error || 'Failed to verify payment');
+    return {
+      is_valid: false,
+      errors: [error.message || 'Validation failed'],
+      warnings: []
+    };
   }
-};
-
-/**
- * Get specific booking details
- * @param {number} bookingId - Booking ID
- * @returns {Promise<Object>} Booking details
- */
-export const getBookingDetails = async (bookingId) => {
-  try {
-    if (!bookingId) {
-      throw new Error('Booking ID is required');
-    }
-    
-    const response = await apiClient.get(`/bookings/${bookingId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching booking details:', error);
-    
-    if (error.response?.status === 401) {
-      throw new Error('Please log in to view booking details');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. You can only view your own bookings.');
-    } else if (error.response?.status === 404) {
-      throw new Error('Booking not found');
-    }
-    
-    throw new Error('Failed to fetch booking details');
-  }
-};
-
-/**
- * Cancel a booking request
- * @param {number} bookingId - Booking ID
- * @returns {Promise<Object>} Cancellation result
- */
-export const cancelBookingRequest = async (bookingId) => {
-  try {
-    if (!bookingId) {
-      throw new Error('Booking ID is required');
-    }
-    
-    const response = await apiClient.delete(`/bookings/${bookingId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error cancelling booking:', error);
-    
-    if (error.response?.status === 400) {
-      throw new Error('Booking cannot be cancelled at this stage');
-    } else if (error.response?.status === 401) {
-      throw new Error('Please log in to cancel bookings');
-    } else if (error.response?.status === 404) {
-      throw new Error('Booking not found or cannot be cancelled');
-    }
-    
-    throw new Error(error.response?.data?.error || 'Failed to cancel booking');
-  }
-};
-
-/**
- * Calculate booking pricing (client-side helper)
- * This function can be used for immediate feedback before API calls
- * @param {Object} params - Pricing calculation parameters
- * @returns {Object} Pricing breakdown
- */
-export const calculateBookingPrice = (params) => {
-  const {
-    monthlyRent,
-    checkInDate,
-    checkOutDate,
-    serviceFee = 300
-  } = params;
-  
-  if (!monthlyRent || !checkInDate || !checkOutDate) {
-    return null;
-  }
-  
-  const checkIn = new Date(checkInDate);
-  const checkOut = new Date(checkOutDate);
-  const totalDays = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-  
-  if (totalDays <= 0) {
-    return null;
-  }
-  
-  // Business logic: 31+ days under 60 days = 2 months charge
-  let bookingMonths, bookingDays;
-  if (totalDays >= 31 && totalDays < 60) {
-    bookingMonths = 2;
-    bookingDays = 0;
-  } else {
-    const DAYS_PER_MONTH = 30;
-    bookingMonths = Math.floor(totalDays / DAYS_PER_MONTH);
-    bookingDays = totalDays % DAYS_PER_MONTH;
-  }
-  
-  const dailyRate = monthlyRent / 25; // 25 business days per month
-  const monthlyCharge = bookingMonths * monthlyRent;
-  const dailyCharge = totalDays >= 31 && totalDays < 60 ? 0 : bookingDays * dailyRate;
-  
-  const subtotal = monthlyCharge + dailyCharge;
-  const total = subtotal + serviceFee;
-  
-  return {
-    totalDays,
-    bookingMonths,
-    bookingDays,
-    monthlyCharge,
-    dailyCharge,
-    subtotal,
-    serviceFee,
-    total,
-    isSpecialRate: totalDays >= 31 && totalDays < 60
-  };
-};
-
-/**
- * Validate booking dates (client-side helper)
- * @param {Date|string} checkIn - Check-in date
- * @param {Date|string} checkOut - Check-out date
- * @returns {Object} Validation result
- */
-export const validateBookingDates = (checkIn, checkOut) => {
-  const errors = [];
-  
-  if (!checkIn || !checkOut) {
-    errors.push('Both check-in and check-out dates are required');
-    return { isValid: false, errors };
-  }
-  
-  const checkInDate = new Date(checkIn);
-  const checkOutDate = new Date(checkOut);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  
-  if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime())) {
-    errors.push('Invalid date format');
-    return { isValid: false, errors };
-  }
-  
-  if (checkInDate < today) {
-    errors.push('Check-in date cannot be in the past');
-  }
-  
-  if (checkOutDate <= checkInDate) {
-    errors.push('Check-out date must be after check-in date');
-  }
-  
-  return {
-    isValid: errors.length === 0,
-    errors
-  };
-};
-
-export default {
-  getPropertyAvailabilityStatus,
-  getPropertyAvailability,
-  submitBookingRequest,
-  getUserBookings,
-  getOwnerBookings,
-  respondToBookingRequest,
-  submitPaymentProof,
-  verifyPayment,
-  getBookingDetails,
-  cancelBookingRequest,
-  calculateBookingPrice,
-  validateBookingDates
 };

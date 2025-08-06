@@ -9,8 +9,11 @@ import {
   CardContent,
   Typography,
   Button,
-  Tooltip
+  Tooltip,
+  Alert,
+  IconButton
 } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate } from 'react-router-dom';
 import Room from '../assets/images/Room.jpg';
 import { PropertyContext } from '../contexts/PropertyContext';
@@ -20,11 +23,11 @@ const AddProperty = () => {
   const navigate = useNavigate();
   const { propertyType, setPropertyType } = useContext(PropertyContext);
   const { theme } = useContext(ThemeContext);
+  const userRole = localStorage.getItem('userRole');
   
   console.log({propertyType});
   console.log(localStorage.getItem('propertyType'));
 
-  // Property types with detailed descriptions for tooltips
   const propertyTypes = [
     { 
       label: 'Apartment', 
@@ -50,19 +53,56 @@ const AddProperty = () => {
 
   const handleNext = () => {
     if (propertyType) {
-      navigate('/addproperty/details');
+      navigate('/add-property-details/new');
     } else {
       alert('Please select a property type.');
     }
   };
 
+  const handleBackToHome = () => {
+    switch (userRole) {
+      case 'propertyowner':
+        navigate('/home');
+        break;
+      case 'admin':
+        navigate('/admin/home');
+        break;
+      default:
+        navigate('/home');
+    }
+  };
+
+  const handleBackToMyProperties = () => {
+    navigate('/my-properties');
+  };
+
+  if (userRole !== 'propertyowner') {
+    return (
+      <Container sx={{ mt: 4 }}>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          Access denied. Only property owners can add new properties.
+        </Alert>
+        <Button variant="contained" onClick={() => navigate('/user-home')}>
+          Go to Home
+        </Button>
+      </Container>
+    );
+  }
+
   return (
     <Container sx={{ mt: 4 }}>
-      <Typography variant="h4" align="center" gutterBottom>
-        Select Property Type
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+        <IconButton 
+          onClick={handleBackToHome}
+          sx={{ mr: 2, color: theme.primary }}
+        >
+          <ArrowBackIcon />
+        </IconButton>
+        <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
+          Select Property Type
+        </Typography>
+      </Box>
       
-      {/* Helpful instruction text */}
       <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 4 }}>
         Choose the type of property you want to list. Hover over each option to learn more about what each type includes.
       </Typography>
@@ -70,43 +110,49 @@ const AddProperty = () => {
       <Grid container spacing={4} justifyContent="center">
         {propertyTypes.map((property) => (
           <Grid item xs={12} sm={6} md={6} key={property.label}>
-            {/* Tooltip wrapper that shows description on hover */}
             <Tooltip 
               title={property.description} 
               arrow
               sx={{
-                minWidth: 1200, // Limit tooltip width for better readability
-                fontSize: '0.9rem', // Slightly smaller font size for tooltip text
+                minWidth: 1200,
+                fontSize: '0.9rem',
               }} 
               placement="top"
-              enterDelay={500} // Small delay before showing tooltip
-              leaveDelay={200} // Small delay before hiding tooltip
+              enterDelay={500}
+              leaveDelay={200}
             >
               <Card
                 sx={{
                   border: propertyType === property.label ? `2px solid ${theme.secondary}` : '1px solid #ccc',
-                  boxShadow: propertyType === property.label ? `0px 0px 10px ${theme.secondary}` : 'none',
-                  transition: 'all 0.3s ease', // Smooth transition for hover effects
+                  boxShadow: propertyType === property.label ? `0 0 20px ${theme.secondary}30` : '0 2px 8px rgba(0,0,0,0.1)',
+                  cursor: 'pointer',
+                  borderRadius: 3,
+                  transition: 'all 0.3s ease',
                   '&:hover': {
-                    transform: 'translateY(-4px)', // Slight lift effect on hover
-                    boxShadow: '0px 8px 25px rgba(0,0,0,0.15)'
-                  }
+                    transform: 'translateY(-8px)',
+                    boxShadow: `0 8px 25px ${theme.primary}30`,
+                    border: `2px solid ${theme.primary}`,
+                  },
                 }}
+                onClick={() => setPropertyType(property.label)}
               >
-                <CardActionArea onClick={() => setPropertyType(property.label)}>
+                <CardActionArea>
                   <CardMedia
                     component="img"
-                    height="250"
+                    height="200"
                     image={property.image}
                     alt={property.label}
+                    sx={{
+                      objectFit: 'cover',
+                      transition: 'transform 0.3s ease',
+                      '&:hover': {
+                        transform: 'scale(1.05)',
+                      },
+                    }}
                   />
-                  <CardContent>
-                    <Typography variant="h6" align="center">
+                  <CardContent sx={{ textAlign: 'center', p: 3 }}>
+                    <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 'bold', color: theme.textPrimary }}>
                       {property.label}
-                    </Typography>
-                    {/* Show first few words of description as a preview */}
-                    <Typography variant="body2" align="center" color="text.secondary" sx={{ mt: 1 }}>
-                      {property.description.split('.')[0] + '...'}
                     </Typography>
                   </CardContent>
                 </CardActionArea>
@@ -116,9 +162,39 @@ const AddProperty = () => {
         ))}
       </Grid>
 
-      <Box sx={{ mt: 4, display: 'flex', justifyContent: 'flex-start' }}>
-        <Button variant="contained" color="primary" onClick={handleNext}>
-          Next
+      <Box sx={{ textAlign: 'center', mt: 4 }}>
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          onClick={handleNext}
+          disabled={!propertyType}
+          sx={{
+            px: 4,
+            py: 1.5,
+            fontSize: '1.1rem',
+            fontWeight: 'bold',
+            backgroundColor: theme.primary,
+            '&:hover': {
+              backgroundColor: theme.secondary,
+            },
+            '&:disabled': {
+              backgroundColor: '#ccc',
+              color: '#666',
+            },
+          }}
+        >
+          Next: Add Property Details
+        </Button>
+      </Box>
+
+      <Box sx={{ textAlign: 'center', mt: 2 }}>
+        <Button
+          variant="text"
+          onClick={handleBackToMyProperties}
+          sx={{ color: theme.textSecondary }}
+        >
+          Back to My Properties
         </Button>
       </Box>
     </Container>
