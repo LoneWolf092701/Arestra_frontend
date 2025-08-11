@@ -40,12 +40,6 @@ apiClient.interceptors.response.use(
   }
 );
 
-/**
- * Validate image file before upload
- * This function performs client-side validation to prevent unnecessary API calls
- * @param {File} file - Image file to validate
- * @returns {Object} Validation result with isValid boolean and errors array
- */
 export const validateImageFile = (file) => {
   const errors = [];
   
@@ -79,23 +73,27 @@ export const validateImageFile = (file) => {
   };
 };
 
-/**
- * Upload single image to Azure Storage
- * This function handles individual image uploads with progress tracking
- * @param {File} imageFile - Image file to upload
- * @param {Object} options - Upload options including progress callbacks
- * @returns {Promise<Object>} Upload result with image URL and metadata
- */
 export const uploadSingleImage = async (imageFile, options = {}) => {
   try {
+    if (!imageFile) {
+      throw new Error('No image file provided');
+    }
+
     const validation = validateImageFile(imageFile);
-    
     if (!validation.isValid) {
       throw new Error(`Invalid image file: ${validation.errors.join(', ')}`);
     }
 
     const formData = new FormData();
     formData.append('profileImage', imageFile);
+
+    if (options.resize_width) {
+      formData.append('resize_width', options.resize_width.toString());
+    }
+
+    if (options.resize_height) {
+      formData.append('resize_height', options.resize_height.toString());
+    }
 
     const config = {
       headers: {
@@ -107,8 +105,7 @@ export const uploadSingleImage = async (imageFile, options = {}) => {
           options.onUploadProgress({
             loaded: progressEvent.loaded,
             total: progressEvent.total,
-            progress: percentCompleted,
-            fileName: imageFile.name
+            progress: percentCompleted
           });
         }
       }
@@ -126,7 +123,7 @@ export const uploadSingleImage = async (imageFile, options = {}) => {
     console.error('Single image upload error:', error);
     
     if (error.response?.status === 400) {
-      throw new Error(error.response.data?.message || 'Invalid image file. Please check file type and size.');
+      throw new Error(error.response.data?.message || 'Invalid file. Please check file type and size.');
     } else if (error.response?.status === 401) {
       throw new Error('Authentication required. Please log in again.');
     } else if (error.response?.status === 413) {
@@ -139,13 +136,6 @@ export const uploadSingleImage = async (imageFile, options = {}) => {
   }
 };
 
-/**
- * Upload multiple images to Azure Storage
- * This function handles batch uploads with individual progress tracking
- * @param {File[]} files - Array of image files to upload
- * @param {Object} options - Upload options including progress callbacks
- * @returns {Promise<Object[]>} Array of upload results
- */
 export const uploadMultipleImages = async (files, options = {}) => {
   try {
     if (!files || !Array.isArray(files) || files.length === 0) {
@@ -210,85 +200,39 @@ export const uploadMultipleImages = async (files, options = {}) => {
   }
 };
 
-/**
- * Upload mixed file types (profile image, property images, documents)
- * This function handles complex uploads with different file types in one request
- * @param {Object} fileGroups - Object containing different file categories
- * @param {File} fileGroups.profileImage - Single profile image
- * @param {File[]} fileGroups.propertyImages - Array of property images
- * @param {File[]} fileGroups.documents - Array of document files
- * @param {Object} options - Upload options
- * @returns {Promise<Object>} Upload results organized by file type
- */
-export const uploadMixedFiles = async (fileGroups, options = {}) => {
+export const uploadMixedFiles = async (files, options = {}) => {
   try {
-    if (!fileGroups || typeof fileGroups !== 'object') {
-      throw new Error('File groups object is required');
-    }
-
-    const { profileImage, propertyImages = [], documents = [] } = fileGroups;
-    
-    let totalFiles = 0;
-    if (profileImage) totalFiles += 1;
-    if (propertyImages.length) totalFiles += propertyImages.length;
-    if (documents.length) totalFiles += documents.length;
-    
-    if (totalFiles === 0) {
+    if (!files || typeof files !== 'object') {
       throw new Error('No files provided for upload');
     }
 
-    if (totalFiles > 15) {
-      throw new Error('Maximum 15 files allowed per upload');
+    const formData = new FormData();
+    let totalFiles = 0;
+
+    Object.keys(files).forEach(fieldName => {
+      const fileList = Array.isArray(files[fieldName]) ? files[fieldName] : [files[fieldName]];
+      
+      fileList.forEach(file => {
+        if (file) {
+          if (fieldName === 'profileImage' || fieldName === 'propertyImages') {
+            const validation = validateImageFile(file);
+            if (!validation.isValid) {
+              throw new Error(`Invalid ${fieldName}: ${validation.errors.join(', ')}`);
+            }
+          }
+          
+          formData.append(fieldName, file);
+          totalFiles++;
+        }
+      });
+    });
+
+    if (totalFiles === 0) {
+      throw new Error('No valid files provided for upload');
     }
 
-    const formData = new FormData();
-    
-    if (profileImage) {
-      const validation = validateImageFile(profileImage);
-      if (!validation.isValid) {
-        throw new Error(`Invalid profile image: ${validation.errors.join(', ')}`);
-      }
-      formData.append('profileImage', profileImage);
-    }
-    
-    if (propertyImages.length > 0) {
-      if (propertyImages.length > 10) {
-        throw new Error('Maximum 10 property images allowed');
-      }
-      
-      propertyImages.forEach((file, index) => {
-        const validation = validateImageFile(file);
-        if (!validation.isValid) {
-          throw new Error(`Invalid property image ${index + 1}: ${validation.errors.join(', ')}`);
-        }
-        formData.append('propertyImages', file);
-      });
-    }
-    
-    if (documents.length > 0) {
-      if (documents.length > 5) {
-        throw new Error('Maximum 5 documents allowed');
-      }
-      
-      const allowedDocTypes = [
-        'application/pdf',
-        'application/msword',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'text/plain'
-      ];
-      
-      documents.forEach((file, index) => {
-        if (!allowedDocTypes.includes(file.type)) {
-          throw new Error(`Document ${index + 1} must be PDF, Word document, or text file`);
-        }
-        
-        const maxDocSize = 5 * 1024 * 1024;
-        if (file.size > maxDocSize) {
-          throw new Error(`Document ${index + 1} exceeds 5MB size limit`);
-        }
-        
-        formData.append('documents', file);
-      });
+    if (totalFiles > 15) {
+      throw new Error('Maximum 15 files allowed per mixed upload');
     }
 
     const config = {
@@ -301,8 +245,7 @@ export const uploadMixedFiles = async (fileGroups, options = {}) => {
           options.onUploadProgress({
             loaded: progressEvent.loaded,
             total: progressEvent.total,
-            progress: percentCompleted,
-            totalFiles
+            progress: percentCompleted
           });
         }
       }
@@ -324,7 +267,7 @@ export const uploadMixedFiles = async (fileGroups, options = {}) => {
     } else if (error.response?.status === 401) {
       throw new Error('Authentication required. Please log in again.');
     } else if (error.response?.status === 413) {
-      throw new Error('Files too large. Check individual file size limits.');
+      throw new Error('Files too large. Maximum size is 10MB per file.');
     } else if (error.response?.status >= 500) {
       throw new Error('Server error. Please try again later.');
     }
@@ -333,29 +276,18 @@ export const uploadMixedFiles = async (fileGroups, options = {}) => {
   }
 };
 
-/**
- * Delete uploaded file from Azure Storage
- * This function removes files from cloud storage when they are no longer needed
- * @param {string} fileUrl - URL of the file to delete
- * @param {string} fileType - Type of file (profile, property, document)
- * @returns {Promise<Object>} Deletion confirmation
- */
-export const deleteUploadedFile = async (fileUrl, fileType = 'property') => {
+export const deleteUploadedFile = async (fileUrl, options = {}) => {
   try {
     if (!fileUrl) {
-      throw new Error('File URL is required');
+      throw new Error('File URL is required for deletion');
     }
 
-    if (!['profile', 'property', 'document'].includes(fileType)) {
-      throw new Error('Invalid file type specified');
-    }
+    const payload = {
+      file_url: fileUrl,
+      file_type: options.fileType || 'image'
+    };
 
-    const response = await apiClient.delete('/upload/file', {
-      data: {
-        fileUrl,
-        fileType
-      }
-    });
+    const response = await apiClient.delete('/upload/file', { data: payload });
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -367,27 +299,19 @@ export const deleteUploadedFile = async (fileUrl, fileType = 'property') => {
     console.error('File deletion error:', error);
     
     if (error.response?.status === 400) {
-      throw new Error(error.response.data?.message || 'Invalid file deletion request');
+      throw new Error(error.response.data?.message || 'Invalid file URL provided.');
     } else if (error.response?.status === 401) {
       throw new Error('Authentication required. Please log in again.');
     } else if (error.response?.status === 404) {
-      throw new Error('File not found or already deleted');
-    } else if (error.response?.status === 403) {
-      throw new Error('You do not have permission to delete this file');
+      throw new Error('File not found or already deleted.');
     } else if (error.response?.status >= 500) {
       throw new Error('Server error. Please try again later.');
     }
     
-    throw new Error(error.message || 'Failed to delete file');
+    throw new Error(error.message || 'File deletion failed. Please try again.');
   }
 };
 
-/**
- * Get upload progress for ongoing uploads
- * This function can be used to track multiple concurrent uploads
- * @param {string} uploadId - Unique identifier for the upload session
- * @returns {Promise<Object>} Upload progress information
- */
 export const getUploadProgress = async (uploadId) => {
   try {
     if (!uploadId) {
@@ -397,7 +321,13 @@ export const getUploadProgress = async (uploadId) => {
     const response = await apiClient.get(`/upload/progress/${uploadId}`);
     
     if (!response.data) {
-      throw new Error('Invalid response from server');
+      return {
+        upload_id: uploadId,
+        status: 'unknown',
+        progress: 0,
+        total_files: 0,
+        completed_files: 0
+      };
     }
 
     return response.data;
@@ -405,22 +335,17 @@ export const getUploadProgress = async (uploadId) => {
   } catch (error) {
     console.error('Error fetching upload progress:', error);
     
-    if (error.response?.status === 404) {
-      throw new Error('Upload session not found');
-    } else if (error.response?.status === 401) {
-      throw new Error('Authentication required. Please log in again.');
-    }
-    
-    return null;
+    return {
+      upload_id: uploadId,
+      status: 'error',
+      progress: 0,
+      total_files: 0,
+      completed_files: 0,
+      error: error.message
+    };
   }
 };
 
-/**
- * Cancel ongoing upload
- * This function attempts to cancel uploads that are in progress
- * @param {string} uploadId - Unique identifier for the upload session
- * @returns {Promise<Object>} Cancellation confirmation
- */
 export const cancelUpload = async (uploadId) => {
   try {
     if (!uploadId) {
@@ -436,39 +361,77 @@ export const cancelUpload = async (uploadId) => {
     return response.data;
 
   } catch (error) {
-    console.error('Error canceling upload:', error);
+    console.error('Upload cancellation error:', error);
     
-    if (error.response?.status === 404) {
-      throw new Error('Upload session not found or already completed');
-    } else if (error.response?.status === 401) {
-      throw new Error('Authentication required. Please log in again.');
+    if (error.response?.status === 400) {
+      throw new Error(error.response.data?.message || 'Invalid upload ID provided.');
+    } else if (error.response?.status === 404) {
+      throw new Error('Upload not found or already completed.');
+    } else if (error.response?.status >= 500) {
+      throw new Error('Server error. Please try again later.');
     }
     
-    throw new Error(error.message || 'Failed to cancel upload');
+    throw new Error(error.message || 'Upload cancellation failed. Please try again.');
   }
 };
 
-/**
- * Upload image (alias for uploadSingleImage for backward compatibility)
- * This function provides the expected interface for ImageUpload component
- * @param {File} imageFile - Image file to upload
- * @param {Object} options - Upload options
- * @returns {Promise<Object>} Upload result with image URL
- */
+export const createImagePreview = async (file) => {
+  return new Promise((resolve, reject) => {
+    if (!file) {
+      reject(new Error('No file provided'));
+      return;
+    }
+
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      resolve({
+        file: file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        preview: e.target.result,
+        lastModified: file.lastModified
+      });
+    };
+
+    reader.onerror = () => {
+      reject(new Error('Failed to create image preview'));
+    };
+
+    reader.readAsDataURL(file);
+  });
+};
+
+export const uploadWithRetry = async (uploadFunction, maxRetries = 3, retryDelay = 1000) => {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await uploadFunction();
+    } catch (error) {
+      lastError = error;
+      
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        break;
+      }
+
+      console.warn(`Upload attempt ${attempt} failed, retrying in ${retryDelay}ms...`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
+    }
+  }
+  
+  throw lastError;
+};
+
 export const uploadImage = async (imageFile, options = {}) => {
   return uploadSingleImage(imageFile, options);
 };
 
-/**
- * Resize image before upload (client-side processing)
- * This function can reduce file sizes and standardize dimensions
- * @param {File} imageFile - Original image file
- * @param {Object} options - Resize options
- * @param {number} options.maxWidth - Maximum width in pixels
- * @param {number} options.maxHeight - Maximum height in pixels
- * @param {number} options.quality - JPEG quality (0.1 to 1.0)
- * @returns {Promise<File>} Resized image file
- */
 export const resizeImage = async (imageFile, options = {}) => {
   return new Promise((resolve, reject) => {
     try {
@@ -514,8 +477,8 @@ export const resizeImage = async (imageFile, options = {}) => {
             imageFile.type,
             quality
           );
-        } catch (error) {
-          reject(error);
+        } catch (canvasError) {
+          reject(new Error('Error processing image: ' + canvasError.message));
         }
       };
       
@@ -525,7 +488,7 @@ export const resizeImage = async (imageFile, options = {}) => {
       
       img.src = URL.createObjectURL(imageFile);
     } catch (error) {
-      reject(error);
+      reject(new Error('Error setting up image resize: ' + error.message));
     }
   });
 };

@@ -40,14 +40,14 @@ const AddProperty = () => {
       description: 'A large, luxurious house typically situated in a suburban or rural area. Usually features private gardens, multiple bedrooms, and spacious living areas.'
     },
     { 
-      label: 'Flat', 
+      label: 'House', 
       image: Room,
-      description: 'A set of rooms forming a complete residence, typically on one floor of a building. Similar to apartments but often used in different regional contexts.'
+      description: 'A complete residential building designed for occupancy by one family. Offers privacy and space with multiple rooms and often a garden or yard.'
     },
     { 
-      label: 'Room', 
+      label: 'Boarding', 
       image: Room,
-      description: 'A single private room within a shared property. Ideal for students or professionals looking for affordable accommodation with shared common areas.'
+      description: 'Shared accommodation facility providing rooms with common areas. Ideal for students or professionals looking for affordable living arrangements.'
     }
   ];
 
@@ -82,119 +82,127 @@ const AddProperty = () => {
         <Alert severity="error" sx={{ mb: 3 }}>
           Access denied. Only property owners can add new properties.
         </Alert>
-        <Button variant="contained" onClick={() => navigate('/user-home')}>
-          Go to Home
+        <Button
+          variant="contained"
+          startIcon={<ArrowBackIcon />}
+          onClick={handleBackToHome}
+          sx={{ backgroundColor: theme.primary }}
+        >
+          Back to Home
         </Button>
       </Container>
     );
   }
 
   return (
-    <Container sx={{ mt: 4 }}>
+    <Container sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
-        <IconButton 
-          onClick={handleBackToHome}
-          sx={{ mr: 2, color: theme.primary }}
-        >
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
-          Select Property Type
+        <Tooltip title="Back to My Properties">
+          <IconButton onClick={handleBackToMyProperties} sx={{ mr: 2 }}>
+            <ArrowBackIcon />
+          </IconButton>
+        </Tooltip>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+          Add New Property
         </Typography>
       </Box>
       
-      <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 4 }}>
-        Choose the type of property you want to list. Hover over each option to learn more about what each type includes.
+      <Typography 
+        variant="h6" 
+        color="text.secondary" 
+        sx={{ mb: 4, textAlign: 'center' }}
+      >
+        Choose the type of property you want to list
       </Typography>
 
-      <Grid container spacing={4} justifyContent="center">
-        {propertyTypes.map((property) => (
-          <Grid item xs={12} sm={6} md={6} key={property.label}>
-            <Tooltip 
-              title={property.description} 
-              arrow
+      <Grid container spacing={4} sx={{ mb: 4 }}>
+        {propertyTypes.map((type) => (
+          <Grid item xs={12} sm={6} md={3} key={type.label}>
+            <Card
               sx={{
-                minWidth: 1200,
-                fontSize: '0.9rem',
-              }} 
-              placement="top"
-              enterDelay={500}
-              leaveDelay={200}
+                height: '100%',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                border: propertyType === type.label ? `2px solid ${theme.primary}` : '2px solid transparent',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 6,
+                },
+                ...(propertyType === type.label && {
+                  boxShadow: `0 0 0 2px ${theme.primary}`,
+                  backgroundColor: `${theme.primary}10`,
+                }),
+              }}
+              onClick={() => setPropertyType(type.label)}
             >
-              <Card
-                sx={{
-                  border: propertyType === property.label ? `2px solid ${theme.secondary}` : '1px solid #ccc',
-                  boxShadow: propertyType === property.label ? `0 0 20px ${theme.secondary}30` : '0 2px 8px rgba(0,0,0,0.1)',
-                  cursor: 'pointer',
-                  borderRadius: 3,
-                  transition: 'all 0.3s ease',
-                  '&:hover': {
-                    transform: 'translateY(-8px)',
-                    boxShadow: `0 8px 25px ${theme.primary}30`,
-                    border: `2px solid ${theme.primary}`,
-                  },
-                }}
-                onClick={() => setPropertyType(property.label)}
-              >
-                <CardActionArea>
-                  <CardMedia
-                    component="img"
-                    height="200"
-                    image={property.image}
-                    alt={property.label}
-                    sx={{
-                      objectFit: 'cover',
-                      transition: 'transform 0.3s ease',
-                      '&:hover': {
-                        transform: 'scale(1.05)',
-                      },
-                    }}
-                  />
-                  <CardContent sx={{ textAlign: 'center', p: 3 }}>
-                    <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 'bold', color: theme.textPrimary }}>
-                      {property.label}
-                    </Typography>
-                  </CardContent>
-                </CardActionArea>
-              </Card>
-            </Tooltip>
+              <CardActionArea sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <CardMedia
+                  component="img"
+                  height="200"
+                  image={type.image}
+                  alt={type.label}
+                  sx={{ objectFit: 'cover' }}
+                />
+                <CardContent sx={{ flexGrow: 1, textAlign: 'center', p: 3 }}>
+                  <Typography
+                    variant="h5"
+                    component="h2"
+                    gutterBottom
+                    sx={{ fontWeight: 600, color: theme.primary }}
+                  >
+                    {type.label}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    color="text.secondary"
+                    sx={{ lineHeight: 1.6 }}
+                  >
+                    {type.description}
+                  </Typography>
+                </CardContent>
+              </CardActionArea>
+            </Card>
           </Grid>
         ))}
       </Grid>
 
-      <Box sx={{ textAlign: 'center', mt: 4 }}>
+      {propertyType && (
+        <Alert 
+          severity="success" 
+          sx={{ 
+            mb: 4,
+            backgroundColor: `${theme.primary}10`,
+            border: `1px solid ${theme.primary}30`,
+          }}
+        >
+          <Typography variant="body1">
+            <strong>{propertyType}</strong> selected. Click "Continue" to proceed with property details.
+          </Typography>
+        </Alert>
+      )}
+
+      <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+        <Button
+          variant="outlined"
+          onClick={handleBackToMyProperties}
+          sx={{ px: 4, py: 1.5 }}
+        >
+          Cancel
+        </Button>
         <Button
           variant="contained"
-          color="primary"
-          size="large"
           onClick={handleNext}
           disabled={!propertyType}
           sx={{
             px: 4,
             py: 1.5,
-            fontSize: '1.1rem',
-            fontWeight: 'bold',
             backgroundColor: theme.primary,
             '&:hover': {
               backgroundColor: theme.secondary,
             },
-            '&:disabled': {
-              backgroundColor: '#ccc',
-              color: '#666',
-            },
           }}
         >
-          Next: Add Property Details
-        </Button>
-      </Box>
-
-      <Box sx={{ textAlign: 'center', mt: 2 }}>
-        <Button
-          variant="text"
-          onClick={handleBackToMyProperties}
-          sx={{ color: theme.textSecondary }}
-        >
-          Back to My Properties
+          Continue
         </Button>
       </Box>
     </Container>

@@ -19,7 +19,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Chip
+  Chip,
+  CircularProgress
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -29,7 +30,7 @@ import BusinessIcon from '@mui/icons-material/Business';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import LockIcon from '@mui/icons-material/Lock';
 import { useTheme } from '../contexts/ThemeContext';
-import { getUserProfile, updateUserProfile, changePasswordProfile } from '../api';
+import { getUserProfile, updateUserProfile, changePasswordProfile } from '../api/profileApi';
 import AppSnackbar from '../components/common/AppSnackbar';
 import { useNavigate } from 'react-router-dom';
 
@@ -81,371 +82,512 @@ const ProfilePage = () => {
     setLoading(true);
     setError('');
     try {
-      const token = localStorage.getItem('token');
-      const userData = await getUserProfile(token);
-      setProfile(userData);
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      setError('Failed to load profile data. Please try again.');
-      if (error.message.includes('Authentication') || error.message.includes('login')) {
-        navigate('/login');
-      }
+      const userData = await getUserProfile();
+      const formattedBirthdate = userData.birthdate ? 
+        new Date(userData.birthdate).toISOString().split('T')[0] : '';
+      
+      setProfile({
+        username: userData.username || '',
+        email: userData.email || '',
+        phone: userData.phone || '',
+        first_name: userData.first_name || '',
+        last_name: userData.last_name || '',
+        gender: userData.gender || '',
+        birthdate: formattedBirthdate,
+        nationality: userData.nationality || '',
+        business_name: userData.business_name || '',
+        contact_person: userData.contact_person || '',
+        business_type: userData.business_type || '',
+        business_registration: userData.business_registration || '',
+        business_address: userData.business_address || '',
+        department: userData.department || '',
+        admin_level: userData.admin_level || '',
+        profile_image: userData.profile_image || ''
+      });
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+      setError(err.message || 'Failed to load profile data');
     } finally {
       setLoading(false);
     }
   };
 
-  const validateProfile = () => {
+  const validateField = (name, value) => {
     const errors = {};
     
-    if (!profile.phone || profile.phone.trim() === '') {
-      errors.phone = 'Phone number is required';
+    switch (name) {
+      case 'email':
+        if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+          errors.email = 'Please enter a valid email address';
+        }
+        break;
+      case 'phone':
+        if (value && !/^\+?[\d\s-()]{10,}$/.test(value)) {
+          errors.phone = 'Please enter a valid phone number';
+        }
+        break;
+      case 'birthdate':
+        if (value) {
+          const date = new Date(value);
+          const today = new Date();
+          const age = today.getFullYear() - date.getFullYear();
+          if (age < 13 || age > 120) {
+            errors.birthdate = 'Age must be between 13 and 120 years';
+          }
+        }
+        break;
+      case 'business_registration':
+        if (userRole === 'propertyowner' && value && value.length < 5) {
+          errors.business_registration = 'Business registration must be at least 5 characters';
+        }
+        break;
+      default:
+        break;
     }
-
-    if (userRole === 'user') {
-      if (!profile.first_name || profile.first_name.trim() === '') {
-        errors.first_name = 'First name is required';
-      }
-      if (!profile.last_name || profile.last_name.trim() === '') {
-        errors.last_name = 'Last name is required';
-      }
-    }
-
-    if (userRole === 'propertyowner') {
-      if (!profile.business_name || profile.business_name.trim() === '') {
-        errors.business_name = 'Business name is required';
-      }
-      if (!profile.contact_person || profile.contact_person.trim() === '') {
-        errors.contact_person = 'Contact person is required';
-      }
-    }
-
-    if (userRole === 'admin') {
-      if (!profile.department || profile.department.trim() === '') {
-        errors.department = 'Department is required';
-      }
-    }
-
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    
+    return errors;
   };
 
-  const handleSave = async () => {
-    if (!validateProfile()) {
-      setSnackbarMessage('Please fill in all required fields');
-      setSnackbarOpen(true);
-      return;
-    }
+  const handleInputChange = (field, value) => {
+    setProfile(prev => ({
+      ...prev,
+      [field]: value
+    }));
 
+    const fieldError = validateField(field, value);
+    setFieldErrors(prev => ({
+      ...prev,
+      ...fieldError,
+      [field]: fieldError[field] || undefined
+    }));
+  };
+
+  const handleSaveProfile = async () => {
     setSaving(true);
+    setError('');
+    
     try {
-      const token = localStorage.getItem('token');
-      await updateUserProfile(token, profile);
+      const allErrors = {};
+      Object.keys(profile).forEach(field => {
+        const fieldError = validateField(field, profile[field]);
+        Object.assign(allErrors, fieldError);
+      });
+
+      if (Object.keys(allErrors).length > 0) {
+        setFieldErrors(allErrors);
+        throw new Error('Please fix the validation errors');
+      }
+
+      const profilePayload = { ...profile };
+      
+      if (profilePayload.birthdate && profilePayload.birthdate.trim() === '') {
+        profilePayload.birthdate = null;
+      }
+
+      await updateUserProfile(profilePayload);
+      
       setIsEditing(false);
-      setSnackbarMessage('Profile updated successfully');
+      setSnackbarMessage('Profile updated successfully!');
       setSnackbarOpen(true);
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      setSnackbarMessage('Failed to update profile. Please try again.');
-      setSnackbarOpen(true);
+      setFieldErrors({});
+      
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      setError(err.message || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleCancel = () => {
-    setIsEditing(false);
-    setFieldErrors({});
-    fetchUserProfile();
-  };
-
   const handlePasswordChange = async () => {
-    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
-      setSnackbarMessage('Please fill in all password fields');
-      setSnackbarOpen(true);
+    if (!passwordData.currentPassword || !passwordData.newPassword) {
+      setError('Please fill in all password fields');
       return;
     }
 
     if (passwordData.newPassword !== passwordData.confirmPassword) {
-      setSnackbarMessage('New passwords do not match');
-      setSnackbarOpen(true);
+      setError('New passwords do not match');
       return;
     }
 
-    if (passwordData.newPassword.length < 6) {
-      setSnackbarMessage('New password must be at least 6 characters long');
-      setSnackbarOpen(true);
+    if (passwordData.newPassword.length < 8) {
+      setError('New password must be at least 8 characters long');
       return;
     }
 
     try {
-      const token = localStorage.getItem('token');
-      await changePasswordProfile(token, {
+      await changePasswordProfile({
         currentPassword: passwordData.currentPassword,
-        newPassword: passwordData.newPassword
+        newPassword: passwordData.newPassword,
+        confirmPassword: passwordData.confirmPassword
       });
-      setSnackbarMessage('Password changed successfully');
-      setSnackbarOpen(true);
+
       setPasswordDialogOpen(false);
-      setPasswordData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (error) {
-      console.error('Error changing password:', error);
-      setSnackbarMessage('Failed to change password. Please check your current password.');
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      });
+      setSnackbarMessage('Password changed successfully!');
       setSnackbarOpen(true);
+      setError('');
+    } catch (err) {
+      console.error('Error changing password:', err);
+      setError(err.message || 'Failed to change password');
     }
   };
 
-  const getRoleIcon = () => {
-    switch (userRole) {
-      case 'admin':
-        return <AdminPanelSettingsIcon sx={{ fontSize: 60, color: theme.secondary }} />;
-      case 'propertyowner':
-        return <BusinessIcon sx={{ fontSize: 60, color: theme.primary }} />;
-      default:
-        return <PersonIcon sx={{ fontSize: 60, color: theme.accent }} />;
-    }
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setFieldErrors({});
+    setError('');
+    fetchUserProfile();
   };
 
-  const getRoleLabel = () => {
-    switch (userRole) {
-      case 'admin':
-        return 'Administrator';
-      case 'propertyowner':
-        return 'Property Owner';
-      default:
-        return 'Tenant';
-    }
-  };
-
-  const getRoleColor = () => {
-    switch (userRole) {
-      case 'admin':
-        return theme.secondary;
-      case 'propertyowner':
-        return theme.primary;
-      default:
-        return theme.accent;
-    }
-  };
-
-  const renderFieldGroup = (title, fields) => (
-    <Box sx={{ mb: 4 }}>
-      <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 2, fontWeight: 600 }}>
-        {title}
-      </Typography>
-      <Grid container spacing={3}>
-        {fields.map((field) => (
-          <Grid item xs={12} sm={field.fullWidth ? 12 : 6} key={field.key}>
-            {field.type === 'select' ? (
-              <FormControl fullWidth disabled={!isEditing}>
-                <InputLabel>{field.label}</InputLabel>
-                <Select
-                  value={profile[field.key] || ''}
-                  onChange={(e) => setProfile(prev => ({ ...prev, [field.key]: e.target.value }))}
-                  label={field.label}
-                  error={!!fieldErrors[field.key]}
-                >
-                  {field.options.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            ) : (
-              <TextField
-                label={field.label}
-                type={field.type || 'text'}
-                fullWidth
-                variant="outlined"
-                value={profile[field.key] || ''}
-                onChange={(e) => setProfile(prev => ({ ...prev, [field.key]: e.target.value }))}
-                disabled={!isEditing}
-                error={!!fieldErrors[field.key]}
-                helperText={fieldErrors[field.key]}
-                required={field.required}
-                multiline={field.multiline}
-                rows={field.rows}
-                InputLabelProps={field.type === 'date' ? { shrink: true } : undefined}
-              />
-            )}
-          </Grid>
-        ))}
-      </Grid>
-    </Box>
-  );
-
-  const getFieldsForRole = () => {
-    const commonFields = [
-      { key: 'username', label: 'Username', disabled: true },
-      { key: 'email', label: 'Email Address', type: 'email', disabled: true },
-      { key: 'phone', label: 'Phone Number', required: true }
-    ];
-
-    switch (userRole) {
+  const getRoleIcon = (role) => {
+    switch (role) {
       case 'user':
-        return [
-          ...commonFields,
-          { key: 'first_name', label: 'First Name', required: true },
-          { key: 'last_name', label: 'Last Name', required: true },
-          { 
-            key: 'gender', 
-            label: 'Gender', 
-            type: 'select',
-            options: [
-              { value: '', label: 'Select Gender' },
-              { value: 'male', label: 'Male' },
-              { value: 'female', label: 'Female' },
-              { value: 'other', label: 'Other' }
-            ]
-          },
-          { key: 'birthdate', label: 'Birth Date', type: 'date' },
-          { key: 'nationality', label: 'Nationality' }
-        ];
-
+        return <PersonIcon />;
       case 'propertyowner':
-        return [
-          ...commonFields,
-          { key: 'business_name', label: 'Business Name', required: true },
-          { key: 'contact_person', label: 'Contact Person', required: true },
-          { key: 'business_type', label: 'Business Type' },
-          { key: 'business_registration', label: 'Registration Number' },
-          { key: 'business_address', label: 'Business Address', multiline: true, rows: 3, fullWidth: true }
-        ];
-
+        return <BusinessIcon />;
       case 'admin':
-        return [
-          ...commonFields,
-          { key: 'first_name', label: 'First Name', required: true },
-          { key: 'last_name', label: 'Last Name', required: true },
-          { key: 'department', label: 'Department', required: true },
-          { 
-            key: 'admin_level', 
-            label: 'Admin Level', 
-            type: 'select',
-            options: [
-              { value: '', label: 'Select Level' },
-              { value: 'super_admin', label: 'Super Admin' },
-              { value: 'admin', label: 'Admin' },
-              { value: 'moderator', label: 'Moderator' }
-            ]
-          }
-        ];
-
+        return <AdminPanelSettingsIcon />;
       default:
-        return commonFields;
+        return <PersonIcon />;
+    }
+  };
+
+  const getRoleColor = (role) => {
+    switch (role) {
+      case 'user':
+        return 'primary';
+      case 'propertyowner':
+        return 'success';
+      case 'admin':
+        return 'error';
+      default:
+        return 'default';
     }
   };
 
   if (loading) {
     return (
-      <Container sx={{ mt: 4 }}>
-        <Box sx={{ textAlign: 'center', py: 4 }}>
-          <Typography variant="h6">Loading profile...</Typography>
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+          <CircularProgress />
         </Box>
       </Container>
     );
   }
 
-  if (error) {
-    return (
-      <Container sx={{ mt: 4 }}>
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-        <Button variant="contained" onClick={fetchUserProfile}>
-          Retry
-        </Button>
-      </Container>
-    );
-  }
-
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Card sx={{ boxShadow: 3, borderRadius: 3 }}>
+    <Container maxWidth="md" sx={{ py: 4 }}>
+      <Card sx={{ backgroundColor: theme.cardBackground, borderRadius: 3 }}>
         <CardContent sx={{ p: 4 }}>
-          <Box sx={{ textAlign: 'center', mb: 4 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
             <Avatar
               sx={{
-                width: 120,
-                height: 120,
-                mx: 'auto',
-                mb: 2,
-                bgcolor: getRoleColor()
+                width: 80,
+                height: 80,
+                bgcolor: theme.primary,
+                mr: 3,
+                fontSize: '2rem'
               }}
               src={profile.profile_image}
             >
-              {getRoleIcon()}
+              {profile.first_name ? profile.first_name[0] : profile.username[0] || 'U'}
             </Avatar>
-            
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold' }}>
-              {userRole === 'user' ? 
-                `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username :
-                userRole === 'propertyowner' ? 
-                profile.business_name || profile.username :
-                `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || profile.username
-              }
-            </Typography>
-            
-            <Chip 
-              label={getRoleLabel()} 
-              color="primary" 
-              sx={{ 
-                fontWeight: 'bold',
-                bgcolor: getRoleColor(),
-                color: 'white'
-              }} 
-            />
-          </Box>
-
-          <Divider sx={{ mb: 4 }} />
-
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-            <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-              Profile Information
-            </Typography>
-            
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <Button
-                variant="outlined"
-                startIcon={<LockIcon />}
-                onClick={() => setPasswordDialogOpen(true)}
-              >
-                Change Password
-              </Button>
-              
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h4" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
+                {profile.first_name || profile.last_name 
+                  ? `${profile.first_name} ${profile.last_name}`.trim()
+                  : profile.username}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                <Chip
+                  icon={getRoleIcon(userRole)}
+                  label={userRole?.charAt(0).toUpperCase() + userRole?.slice(1) || 'User'}
+                  color={getRoleColor(userRole)}
+                  size="small"
+                />
+              </Box>
+            </Box>
+            <Box>
               {!isEditing ? (
                 <Button
-                  variant="contained"
+                  variant="outlined"
                   startIcon={<EditIcon />}
                   onClick={() => setIsEditing(true)}
+                  sx={{ mr: 1 }}
                 >
                   Edit Profile
                 </Button>
               ) : (
-                <>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<SaveIcon />}
+                    onClick={handleSaveProfile}
+                    disabled={saving}
+                    sx={{ backgroundColor: theme.primary }}
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </Button>
                   <Button
                     variant="outlined"
                     startIcon={<CancelIcon />}
-                    onClick={handleCancel}
+                    onClick={handleCancelEdit}
                     disabled={saving}
                   >
                     Cancel
                   </Button>
-                  <Button
-                    variant="contained"
-                    startIcon={<SaveIcon />}
-                    onClick={handleSave}
-                    disabled={saving}
-                  >
-                    {saving ? 'Saving...' : 'Save Changes'}
-                  </Button>
-                </>
+                </Box>
               )}
+              <Button
+                variant="outlined"
+                startIcon={<LockIcon />}
+                onClick={() => setPasswordDialogOpen(true)}
+                sx={{ ml: 1 }}
+              >
+                Change Password
+              </Button>
             </Box>
           </Box>
 
-          {renderFieldGroup('Account Information', getFieldsForRole())}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {error}
+            </Alert>
+          )}
+
+          <Divider sx={{ my: 3 }} />
+
+          <Typography variant="h6" sx={{ mb: 3, color: theme.textPrimary }}>
+            Personal Information
+          </Typography>
+
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Username"
+                value={profile.username}
+                onChange={(e) => handleInputChange('username', e.target.value)}
+                disabled={!isEditing}
+                error={!!fieldErrors.username}
+                helperText={fieldErrors.username}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={profile.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                disabled={!isEditing}
+                error={!!fieldErrors.email}
+                helperText={fieldErrors.email}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="First Name"
+                value={profile.first_name}
+                onChange={(e) => handleInputChange('first_name', e.target.value)}
+                disabled={!isEditing}
+                error={!!fieldErrors.first_name}
+                helperText={fieldErrors.first_name}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Last Name"
+                value={profile.last_name}
+                onChange={(e) => handleInputChange('last_name', e.target.value)}
+                disabled={!isEditing}
+                error={!!fieldErrors.last_name}
+                helperText={fieldErrors.last_name}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Phone"
+                value={profile.phone}
+                onChange={(e) => handleInputChange('phone', e.target.value)}
+                disabled={!isEditing}
+                error={!!fieldErrors.phone}
+                helperText={fieldErrors.phone}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth disabled={!isEditing}>
+                <InputLabel>Gender</InputLabel>
+                <Select
+                  value={profile.gender}
+                  label="Gender"
+                  onChange={(e) => handleInputChange('gender', e.target.value)}
+                >
+                  <MenuItem value="">Select Gender</MenuItem>
+                  <MenuItem value="male">Male</MenuItem>
+                  <MenuItem value="female">Female</MenuItem>
+                  <MenuItem value="other">Other</MenuItem>
+                  <MenuItem value="prefer_not_to_say">Prefer not to say</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Birth Date"
+                type="date"
+                value={profile.birthdate}
+                onChange={(e) => handleInputChange('birthdate', e.target.value)}
+                disabled={!isEditing}
+                error={!!fieldErrors.birthdate}
+                helperText={fieldErrors.birthdate}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Nationality"
+                value={profile.nationality}
+                onChange={(e) => handleInputChange('nationality', e.target.value)}
+                disabled={!isEditing}
+                error={!!fieldErrors.nationality}
+                helperText={fieldErrors.nationality}
+              />
+            </Grid>
+          </Grid>
+
+          {userRole === 'propertyowner' && (
+            <>
+              <Divider sx={{ my: 4 }} />
+              <Typography variant="h6" sx={{ mb: 3, color: theme.textPrimary }}>
+                Business Information
+              </Typography>
+
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Business Name"
+                    value={profile.business_name}
+                    onChange={(e) => handleInputChange('business_name', e.target.value)}
+                    disabled={!isEditing}
+                    error={!!fieldErrors.business_name}
+                    helperText={fieldErrors.business_name}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Contact Person"
+                    value={profile.contact_person}
+                    onChange={(e) => handleInputChange('contact_person', e.target.value)}
+                    disabled={!isEditing}
+                    error={!!fieldErrors.contact_person}
+                    helperText={fieldErrors.contact_person}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth disabled={!isEditing}>
+                    <InputLabel>Business Type</InputLabel>
+                    <Select
+                      value={profile.business_type}
+                      label="Business Type"
+                      onChange={(e) => handleInputChange('business_type', e.target.value)}
+                    >
+                      <MenuItem value="">Select Business Type</MenuItem>
+                      <MenuItem value="individual">Individual</MenuItem>
+                      <MenuItem value="company">Company</MenuItem>
+                      <MenuItem value="partnership">Partnership</MenuItem>
+                      <MenuItem value="corporation">Corporation</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Business Registration"
+                    value={profile.business_registration}
+                    onChange={(e) => handleInputChange('business_registration', e.target.value)}
+                    disabled={!isEditing}
+                    error={!!fieldErrors.business_registration}
+                    helperText={fieldErrors.business_registration}
+                  />
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Business Address"
+                    value={profile.business_address}
+                    onChange={(e) => handleInputChange('business_address', e.target.value)}
+                    disabled={!isEditing}
+                    multiline
+                    rows={3}
+                    error={!!fieldErrors.business_address}
+                    helperText={fieldErrors.business_address}
+                  />
+                </Grid>
+              </Grid>
+            </>
+          )}
+
+          {userRole === 'admin' && (
+            <>
+              <Divider sx={{ my: 4 }} />
+              <Typography variant="h6" sx={{ mb: 3, color: theme.textPrimary }}>
+                Administrative Information
+              </Typography>
+
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Department"
+                    value={profile.department}
+                    onChange={(e) => handleInputChange('department', e.target.value)}
+                    disabled={!isEditing}
+                    error={!!fieldErrors.department}
+                    helperText={fieldErrors.department}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth disabled={!isEditing}>
+                    <InputLabel>Admin Level</InputLabel>
+                    <Select
+                      value={profile.admin_level}
+                      label="Admin Level"
+                      onChange={(e) => handleInputChange('admin_level', e.target.value)}
+                    >
+                      <MenuItem value="">Select Admin Level</MenuItem>
+                      <MenuItem value="junior">Junior Admin</MenuItem>
+                      <MenuItem value="senior">Senior Admin</MenuItem>
+                      <MenuItem value="super">Super Admin</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+            </>
+          )}
         </CardContent>
       </Card>
 
@@ -453,42 +595,47 @@ const ProfilePage = () => {
         <DialogTitle>Change Password</DialogTitle>
         <DialogContent>
           <TextField
+            fullWidth
             label="Current Password"
             type="password"
-            fullWidth
-            margin="normal"
             value={passwordData.currentPassword}
             onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
+            margin="dense"
           />
           <TextField
+            fullWidth
             label="New Password"
             type="password"
-            fullWidth
-            margin="normal"
             value={passwordData.newPassword}
             onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-            helperText="Minimum 6 characters"
+            margin="dense"
+            helperText="Password must be at least 8 characters long"
           />
           <TextField
+            fullWidth
             label="Confirm New Password"
             type="password"
-            fullWidth
-            margin="normal"
             value={passwordData.confirmPassword}
             onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+            margin="dense"
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handlePasswordChange} variant="contained">
+          <Button 
+            onClick={handlePasswordChange} 
+            variant="contained"
+            sx={{ backgroundColor: theme.primary }}
+          >
             Change Password
           </Button>
         </DialogActions>
       </Dialog>
 
-      <AppSnackbar 
+      <AppSnackbar
         open={snackbarOpen}
         message={snackbarMessage}
+        severity="success"
         onClose={() => setSnackbarOpen(false)}
       />
     </Container>

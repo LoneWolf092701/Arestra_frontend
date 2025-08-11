@@ -12,227 +12,191 @@ import {
   Rating,
   Alert,
   CircularProgress,
-  Container
+  Container,
+  Tooltip
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Visibility as VisibilityIcon,
-  CalendarToday as BookingIcon,
+  BookOnline as BookingIcon,
   LocationOn as LocationIcon,
   Bed as BedIcon,
   Bathtub as BathtubIcon,
-  AttachMoney as PriceIcon
+  AttachMoney as PriceIcon,
+  Favorite as FavoriteIcon,
+  FavoriteBorder as FavoriteBorderIcon,
+  Home as HomeIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { getOwnerProperties } from '../../api/propertyApi';
 import { useTheme } from '../../contexts/ThemeContext';
-
-const PropertyStatsSummary = ({ properties, showMyProperties }) => {
-  const stats = React.useMemo(() => {
-    if (!properties || properties.length === 0) {
-      return { total: 0, available: 0, highDemand: 0, partiallyOccupied: 0, totalRequests: 0, totalBookings: 0 };
-    }
-
-    const total = properties.length;
-    const available = properties.filter(p => p.is_active && p.approval_status === 'approved').length;
-    const highDemand = properties.filter(p => p.views_count && p.views_count > 100).length;
-    const partiallyOccupied = properties.filter(p => p.booking_status === 'partial').length;
-    const totalRequests = properties.reduce((sum, p) => sum + (p.pending_requests || 0), 0);
-    const totalBookings = properties.reduce((sum, p) => sum + (p.confirmed_bookings || 0), 0);
-
-    return { total, available, highDemand, partiallyOccupied, totalRequests, totalBookings };
-  }, [properties]);
-
-  return (
-    <Box sx={{ mb: 4 }}>
-      <Typography variant="h6" gutterBottom>
-        {showMyProperties ? 'Your Properties Overview' : 'Properties Overview'}
-      </Typography>
-      
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="primary.main">{stats.total}</Typography>
-            <Typography variant="body2" color="text.secondary">Total Properties</Typography>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="success.main">{stats.available}</Typography>
-            <Typography variant="body2" color="text.secondary">Available</Typography>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="warning.main">{stats.highDemand}</Typography>
-            <Typography variant="body2" color="text.secondary">High Demand</Typography>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="info.main">{stats.partiallyOccupied}</Typography>
-            <Typography variant="body2" color="text.secondary">Partially Booked</Typography>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {showMyProperties && (stats.totalRequests > 0 || stats.totalBookings > 0) && (
-        <Alert severity="info" sx={{ mb: 2 }}>
-          <Typography variant="body2">
-            You have {stats.totalRequests} pending request{stats.totalRequests !== 1 ? 's' : ''} 
-            {stats.totalBookings > 0 && ` and ${stats.totalBookings} confirmed booking${stats.totalBookings !== 1 ? 's' : ''}`}
-            {stats.totalRequests > 0 && ' awaiting your response'}
-          </Typography>
-        </Alert>
-      )}
-    </Box>
-  );
-};
+import { getMyProperties } from '../../api/propertyApi';
 
 const PropertyGrid = ({ 
-  properties: propProperties, 
-  loading: propLoading = false,
+  properties = [], 
+  loading = false,
   showActions = true,
   showMyProperties = false,
   variant = 'standard',
   onViewProperty,
   onEditProperty,
   showSummary = false,
-  emptyStateMessage,
-  emptyStateSubtitle,
+  emptyStateMessage = 'No properties found',
+  emptyStateSubtitle = '',
   limit
 }) => {
-  const [internalProperties, setInternalProperties] = useState([]);
-  const [internalLoading, setInternalLoading] = useState(false);
   const navigate = useNavigate();
+  const { theme, isDark } = useTheme();
   const userRole = localStorage.getItem('userRole');
-
-  const properties = propProperties || internalProperties;
-  const loading = propLoading || internalLoading;
+  const [myProperties, setMyProperties] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!propProperties && showMyProperties) {
-      fetchOwnerProperties();
+    if (showMyProperties) {
+      fetchMyProperties();
     }
-  }, [propProperties, showMyProperties]);
+  }, [showMyProperties]);
 
-  const fetchOwnerProperties = async () => {
+  const fetchMyProperties = async () => {
     try {
-      setInternalLoading(true);
-      const token = localStorage.getItem('token');
-      const data = await getOwnerProperties(token);
-      setInternalProperties(Array.isArray(data) ? data : []);
+      setIsLoading(true);
+      const response = await getMyProperties();
+      if (response && response.properties) {
+        setMyProperties(response.properties);
+      }
     } catch (error) {
-      console.error('Error fetching owner properties:', error);
-      setInternalProperties([]);
+      console.error('Error fetching my properties:', error);
     } finally {
-      setInternalLoading(false);
+      setIsLoading(false);
     }
   };
 
-  const getRoleBasedNavigationHandlers = () => {
-    const handleView = (propertyId) => {
-      if (onViewProperty) {
-        onViewProperty(propertyId);
-        return;
-      }
-
-      switch (userRole) {
-        case 'user':
-          navigate(`/user-property-view/${propertyId}`);
-          break;
-        case 'propertyowner':
-          navigate(`/propertyowner-viewproperty/${propertyId}`);
-          break;
-        case 'admin':
-          navigate(`/admin-viewproperty/${propertyId}`);
-          break;
-        default:
-          navigate(`/user-property-view/${propertyId}`);
-      }
-    };
-
-    const handleEdit = (propertyId) => {
-      if (onEditProperty) {
-        onEditProperty(propertyId);
-        return;
-      }
-
-      switch (userRole) {
-        case 'propertyowner':
-          navigate(`/update-property/${propertyId}`);
-          break;
-        case 'admin':
-          console.warn('Admin edit functionality not implemented');
-          break;
-        default:
-          console.warn('Edit not allowed for this role');
-      }
-    };
-
-    const handleBook = (propertyId) => {
-      switch (userRole) {
-        case 'user':
-          navigate(`/user-booking/${propertyId}`);
-          break;
-        case 'propertyowner':
-          console.warn('Property owners cannot book their own properties');
-          break;
-        case 'admin':
-          console.warn('Admin booking functionality not implemented');
-          break;
-        default:
-          navigate(`/login`);
-      }
-    };
-
-    return { handleView, handleEdit, handleBook };
-  };
-
-  const { handleView, handleEdit, handleBook } = getRoleBasedNavigationHandlers();
-
-  const sortedProperties = React.useMemo(() => {
-    if (!properties || properties.length === 0) {
+  // Handle different property data structures
+  const normalizeProperties = (props) => {
+    if (!Array.isArray(props)) {
+      console.warn('Properties is not an array:', props);
       return [];
     }
     
-    let sorted = [...properties].sort((a, b) => {
-      const statusPriority = {
-        'available': 1,
-        'high_demand': 2,
-        'partially_occupied': 3,
-        'occupied': 4,
-        'unavailable': 5
-      };
-      
-      return statusPriority[a.availability_status] - statusPriority[b.availability_status];
-    });
-    
-    if (limit && limit > 0) {
-      sorted = sorted.slice(0, limit);
+    return props.map(property => ({
+      id: property.id,
+      property_type: property.property_type || property.type || 'Property',
+      unit_type: property.unit_type || property.subtype || '',
+      description: property.description || '',
+      price: property.price || 0,
+      address: property.address || property.location || '',
+      bedrooms: property.bedrooms || 0,
+      bathrooms: property.bathrooms || 0,
+      images: property.images || [],
+      amenities: property.amenities || [],
+      facilities: property.facilities || [],
+      approval_status: property.approval_status || 'approved',
+      is_active: property.is_active !== false,
+      views_count: property.views_count || 0,
+      average_rating: property.average_rating || 0,
+      total_ratings: property.total_ratings || 0,
+      created_at: property.created_at,
+      updated_at: property.updated_at,
+      user_id: property.user_id,
+      available_from: property.available_from,
+      available_to: property.available_to
+    }));
+  };
+
+  const propertiesToUse = showMyProperties ? myProperties : properties;
+  const normalizedProperties = normalizeProperties(propertiesToUse);
+  const displayProperties = limit ? normalizedProperties.slice(0, limit) : normalizedProperties;
+
+  // Parse JSON data safely
+  const parseJsonSafely = (jsonString) => {
+    if (!jsonString) return [];
+    try {
+      return typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+    } catch (error) {
+      return [];
     }
-    
-    return sorted;
-  }, [properties, limit]);
+  };
 
-  const { theme } = useTheme();
+  // Get image URL from images array - handle both string and object formats
+  const getImageUrl = (images) => {
+    const imageArray = parseJsonSafely(images);
+    if (Array.isArray(imageArray) && imageArray.length > 0) {
+      const firstImage = imageArray[0];
+      if (typeof firstImage === 'string') {
+        return firstImage;
+      }
+      if (typeof firstImage === 'object' && firstImage?.url) {
+        return firstImage.url;
+      }
+      return firstImage;
+    }
+    return '/placeholder-property.jpg';
+  };
 
-  if (loading) {
+  // Format price for display
+  const formatPrice = (price) => {
+    if (!price) return 'Price on request';
+    return new Intl.NumberFormat('en-LK', {
+      style: 'currency',
+      currency: 'LKR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(price);
+  };
+
+  // Format address for display
+  const formatAddress = (address) => {
+    if (!address) return 'Location not specified';
+    return address.length > 60 ? `${address.substring(0, 60)}...` : address;
+  };
+
+  // Handle property view
+  const handleView = (propertyId) => {
+    if (onViewProperty) {
+      onViewProperty(propertyId);
+    } else if (showMyProperties) {
+      navigate(`/property/${propertyId}`);
+    } else {
+      navigate(`/user-property-view/${propertyId}`);
+    }
+  };
+
+  // Handle property edit
+  const handleEdit = (propertyId) => {
+    if (onEditProperty) {
+      onEditProperty(propertyId);
+    } else {
+      navigate(`/update-property/${propertyId}`);
+    }
+  };
+
+  // Handle property booking
+  const handleBook = (propertyId) => {
+    navigate(`/user-booking/${propertyId}`);
+  };
+
+  if (loading || isLoading) {
     return (
-      <Container sx={{ textAlign: 'center', py: 4 }}>
+      <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
         <CircularProgress size={60} />
-        <Typography variant="h6" sx={{ mt: 2, color: 'text.secondary' }}>
+        <Typography variant="h6" sx={{ mt: 2 }}>
           Loading properties...
         </Typography>
       </Container>
     );
   }
 
-  if (!sortedProperties || sortedProperties.length === 0) {
+  if (!displayProperties || displayProperties.length === 0) {
     return (
-      <Box sx={{ textAlign: 'center', py: 8 }}>
-        <Typography variant="h5" color="text.secondary" gutterBottom>
-          {emptyStateMessage || 'No properties found'}
+      <Box sx={{ 
+        textAlign: 'center', 
+        py: 8,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
+        borderRadius: 3,
+        border: `2px dashed ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+      }}>
+        <HomeIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
+        <Typography variant="h5" sx={{ color: 'text.secondary', mb: 1, fontWeight: 500 }}>
+          {emptyStateMessage}
         </Typography>
         {emptyStateSubtitle && (
           <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
@@ -255,142 +219,218 @@ const PropertyGrid = ({
 
   return (
     <Box>
-      {showSummary && <PropertyStatsSummary properties={sortedProperties} showMyProperties={showMyProperties} />}
-      
       <Grid container spacing={3}>
-        {sortedProperties.map((property) => (
-          <Grid item xs={12} sm={6} md={4} lg={3} key={property.id}>
+        {displayProperties.map((property) => (
+          <Grid item xs={12} sm={6} md={4} lg={variant === 'compact' ? 2 : 3} key={property.id}>
             <Card
               sx={{
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
+                borderRadius: 3,
+                boxShadow: `0 4px 20px ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.15)'}`,
                 transition: 'all 0.3s ease',
                 cursor: 'pointer',
                 '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
+                  transform: 'translateY(-8px)',
+                  boxShadow: `0 8px 30px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.25)'}`,
                 },
               }}
               onClick={() => handleView(property.id)}
             >
-              <CardMedia
-                component="img"
-                height="200"
-                image={property.images && property.images.length > 0 ? 
-                  (typeof property.images === 'string' ? 
-                    JSON.parse(property.images)[0] : 
-                    property.images[0]) : 
-                  '/default-property-image.jpg'
-                }
-                alt={property.property_type || property.title}
-                sx={{ objectFit: 'cover' }}
-              />
-              
-              <CardContent sx={{ flexGrow: 1, p: 2 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>
-                  <Typography variant="h6" component="h3" noWrap sx={{ fontWeight: 'bold', flex: 1, mr: 1 }}>
-                    {property.property_type || property.title} - {property.unit_type || 'Property'}
-                  </Typography>
-                  <Chip 
-                    label={property.approval_status || 'approved'} 
-                    size="small"
-                    color={
-                      property.approval_status === 'approved' ? 'success' :
-                      property.approval_status === 'pending' ? 'warning' : 'error'
-                    }
-                  />
-                </Box>
+              <Box sx={{ position: 'relative' }}>
+                <CardMedia
+                  component="img"
+                  height="220"
+                  image={getImageUrl(property.images)}
+                  alt={`${property.property_type} ${property.unit_type}`}
+                  sx={{ objectFit: 'cover' }}
+                />
+                
+                {/* Status chip */}
+                <Chip 
+                  label={property.approval_status || 'approved'} 
+                  size="small"
+                  sx={{
+                    position: 'absolute',
+                    top: 12,
+                    left: 12,
+                    backgroundColor: property.approval_status === 'approved' ? 'success.main' : 
+                                   property.approval_status === 'pending' ? 'warning.main' : 'error.main',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    textTransform: 'uppercase'
+                  }}
+                />
 
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <LocationIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary" noWrap>
-                    {property.address || property.location}
-                  </Typography>
-                </Box>
-
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <PriceIcon sx={{ fontSize: 16, mr: 0.5, color: 'primary.main' }} />
-                  <Typography variant="h6" color="primary.main" sx={{ fontWeight: 'bold' }}>
-                    LKR {property.price ? property.price.toLocaleString() : 'N/A'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
-                    /month
-                  </Typography>
-                </Box>
-
-                <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                  {property.bedrooms !== undefined && (
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <BedIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                      <Typography variant="body2">{property.bedrooms}</Typography>
-                    </Box>
-                  )}
-                  {property.bathrooms !== undefined && (
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <BathtubIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                      <Typography variant="body2">{property.bathrooms}</Typography>
-                    </Box>
-                  )}
-                </Box>
-
-                <Typography variant="body2" color="text.secondary" sx={{ 
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  display: '-webkit-box',
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: 'vertical',
-                  mb: 2
-                }}>
-                  {property.description || 'No description available'}
-                </Typography>
-
+                {/* Action buttons overlay */}
                 {showActions && (
-                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between', mt: 'auto' }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<VisibilityIcon />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleView(property.id);
-                      }}
-                      sx={{ flex: 1 }}
-                    >
-                      View
-                    </Button>
-                    
-                    {userRole === 'propertyowner' && showMyProperties && (
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<EditIcon />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEdit(property.id);
-                        }}
-                        sx={{ flex: 1 }}
-                      >
-                        Edit
-                      </Button>
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 12,
+                      right: 12,
+                      display: 'flex',
+                      gap: 1,
+                      opacity: 0,
+                      transition: 'opacity 0.3s ease',
+                      '.MuiCard-root:hover &': {
+                        opacity: 1,
+                      },
+                    }}
+                  >
+                    {showMyProperties && (
+                      <Tooltip title="Edit Property">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(property.id);
+                          }}
+                          sx={{
+                            backgroundColor: 'rgba(255,255,255,0.9)',
+                            '&:hover': { backgroundColor: 'white' },
+                            color: theme.primary
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     )}
                     
-                    {userRole === 'user' && !showMyProperties && (
-                      <Button
-                        size="small"
-                        variant="contained"
-                        startIcon={<BookingIcon />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleBook(property.id);
-                        }}
-                        sx={{ flex: 1 }}
-                      >
-                        Book
-                      </Button>
+                    {!showMyProperties && userRole === 'user' && (
+                      <Tooltip title="Book Property">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleBook(property.id);
+                          }}
+                          sx={{
+                            backgroundColor: 'rgba(255,255,255,0.9)',
+                            '&:hover': { backgroundColor: 'white' },
+                            color: theme.primary
+                          }}
+                        >
+                          <BookingIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     )}
                   </Box>
                 )}
+              </Box>
+
+              <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                  <Box sx={{ flexGrow: 1 }}>
+                    <Typography 
+                      variant="h6" 
+                      component="h3" 
+                      sx={{ 
+                        fontWeight: 'bold',
+                        color: theme.textPrimary,
+                        mb: 0.5,
+                        lineHeight: 1.2
+                      }}
+                    >
+                      {property.property_type}
+                    </Typography>
+                    <Typography 
+                      variant="subtitle2" 
+                      color="text.secondary"
+                      sx={{ mb: 1 }}
+                    >
+                      {property.unit_type}
+                    </Typography>
+                  </Box>
+                  
+                  {property.average_rating > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', ml: 2 }}>
+                      <Rating 
+                        value={property.average_rating} 
+                        readOnly 
+                        size="small" 
+                        precision={0.1}
+                        sx={{ mr: 0.5 }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        ({property.total_ratings})
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                  <LocationIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ 
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      flexGrow: 1
+                    }}
+                  >
+                    {formatAddress(property.address)}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <BedIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      {property.bedrooms || 0}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <BathtubIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+                    <Typography variant="body2" color="text.secondary">
+                      {property.bathrooms || 0}
+                    </Typography>
+                  </Box>
+                  {property.views_count > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <VisibilityIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+                      <Typography variant="body2" color="text.secondary">
+                        {property.views_count}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 'auto' }}>
+                  <Typography 
+                    variant="h6" 
+                    sx={{ 
+                      fontWeight: 'bold',
+                      color: theme.primary,
+                      fontSize: '1.1rem'
+                    }}
+                  >
+                    {formatPrice(property.price)}
+                  </Typography>
+                  
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<VisibilityIcon />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleView(property.id);
+                    }}
+                    sx={{
+                      borderColor: theme.primary,
+                      color: theme.primary,
+                      '&:hover': {
+                        backgroundColor: `${theme.primary}10`,
+                        borderColor: theme.primary,
+                      },
+                    }}
+                  >
+                    View
+                  </Button>
+                </Box>
               </CardContent>
             </Card>
           </Grid>

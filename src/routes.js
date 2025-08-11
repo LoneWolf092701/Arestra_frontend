@@ -27,6 +27,7 @@ import UserNotifications from './pages/UserPages/UserNotifications';
 import AdminHome from './pages/AdminPages/AdminHome';
 import AdminNewListings from './pages/AdminPages/AdminNewListing';
 import AdminAllProperties from './pages/AdminPages/AdminAllProperties';
+import AdminPropertyView from './pages/AdminPages/AdminPropertyView';
 
 import ProfilePage from './pages/ProfilePage';
 
@@ -178,6 +179,15 @@ const AppRoutes = () => {
           } 
         />
         <Route 
+          path="/add-property-details/:id" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<AddPropertyDetails />} 
+            />
+          } 
+        />
+        <Route 
           path="/update-property/:id" 
           element={
             <RoleProtectedRoute 
@@ -213,6 +223,10 @@ const AppRoutes = () => {
             />
           } 
         />
+        <Route 
+          path="/profile" 
+          element={<PrivateRoute element={<ProfilePage />} />} 
+        />
         
         <Route 
           path="/admin/home" 
@@ -241,46 +255,17 @@ const AppRoutes = () => {
             />
           } 
         />
-        
         <Route 
-          path="/profile" 
-          element={<PrivateRoute element={<ProfilePage />} />} 
-        />
-        
-        <Route 
-          path="*" 
+          path="/admin/property/:id" 
           element={
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              minHeight: '60vh',
-              textAlign: 'center',
-              padding: '20px'
-            }}>
-              <h1 style={{ fontSize: '4rem', margin: '0', color: '#666' }}>404</h1>
-              <h2 style={{ margin: '10px 0', color: '#888' }}>Page Not Found</h2>
-              <p style={{ margin: '10px 0', color: '#999' }}>
-                The page you're looking for doesn't exist or has been moved.
-              </p>
-              <button 
-                onClick={() => window.history.back()}
-                style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '5px',
-                  cursor: 'pointer',
-                  marginTop: '20px'
-                }}
-              >
-                Go Back
-              </button>
-            </div>
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminPropertyView />} 
+            />
           } 
         />
+        
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

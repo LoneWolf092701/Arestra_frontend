@@ -27,12 +27,8 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('tokenExpiry');
-      
-      if (!window.location.pathname.includes('/login')) {
+      clearAuthData();
+      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
         window.location.href = '/login';
       }
     }
@@ -40,19 +36,51 @@ apiClient.interceptors.response.use(
   }
 );
 
+const clearAuthData = () => {
+  try {
+    const authKeys = ['token', 'userRole', 'userId', 'tokenExpiry'];
+    authKeys.forEach(key => localStorage.removeItem(key));
+  } catch (error) {
+    console.error('Error clearing authentication data:', error);
+  }
+};
+
+const setAuthData = (authData) => {
+  try {
+    const { token, user, expires_in } = authData;
+    
+    if (!token || !user) {
+      throw new Error('Invalid authentication data');
+    }
+    
+    localStorage.setItem('token', token);
+    localStorage.setItem('userRole', user.role);
+    localStorage.setItem('userId', user.id.toString());
+    
+    if (expires_in && typeof expires_in === 'number') {
+      const expiryTime = Date.now() + (expires_in * 1000);
+      localStorage.setItem('tokenExpiry', expiryTime.toString());
+    }
+  } catch (error) {
+    console.error('Error storing authentication data:', error);
+    clearAuthData();
+    throw new Error('Failed to store authentication data');
+  }
+};
+
 const handleAuthError = (error, operation) => {
   console.error(`Error ${operation}:`, error);
   
   if (error.response?.status === 400) {
     throw new Error(error.response.data?.message || `Invalid data for ${operation}`);
   } else if (error.response?.status === 401) {
-    throw new Error('Invalid credentials');
+    throw new Error(error.response.data?.message || 'Invalid credentials');
   } else if (error.response?.status === 403) {
-    throw new Error('Access denied');
+    throw new Error('Access denied. Please contact support.');
   } else if (error.response?.status === 404) {
     throw new Error('User not found');
   } else if (error.response?.status === 409) {
-    throw new Error('User already exists');
+    throw new Error(error.response.data?.message || 'Username or email already exists');
   } else if (error.response?.status >= 500) {
     throw new Error('Server error. Please try again later.');
   }
@@ -61,15 +89,13 @@ const handleAuthError = (error, operation) => {
 };
 
 export const loginUser = async (credentials) => {
-
-    console.log('Logging in with credentials:', credentials);
   try {
-    if (!credentials || !credentials.email || !credentials.password) {
-      throw new Error('Email and password are required');
+    if (!credentials || !credentials.username || !credentials.password) {
+      throw new Error('Username and password are required');
     }
 
     const response = await apiClient.post('/auth/login', {
-      email: credentials.email.toLowerCase().trim(),
+      username: credentials.username.trim(),
       password: credentials.password
     });
     
@@ -79,15 +105,8 @@ export const loginUser = async (credentials) => {
 
     const { token, user, expires_in } = response.data;
     
-    if (token) {
-      localStorage.setItem('token', token);
-      localStorage.setItem('userRole', user?.role || '');
-      localStorage.setItem('userId', user?.id?.toString() || '');
-      
-      if (expires_in) {
-        const expiryTime = new Date().getTime() + (expires_in * 1000);
-        localStorage.setItem('tokenExpiry', expiryTime.toString());
-      }
+    if (token && user) {
+      setAuthData({ token, user, expires_in });
     }
     
     return response.data;
@@ -110,21 +129,29 @@ export const registerUser = async (userData) => {
       }
     }
 
-    if (!['user', 'propertyowner'].includes(userData.role)) {
-      throw new Error('Invalid role specified');
+    if (userData.username.trim().length < 3) {
+      throw new Error('Username must be at least 3 characters long');
     }
 
-    const payload = {
+    if (userData.password.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(userData.email)) {
+      throw new Error('Please enter a valid email address');
+    }
+
+    if (!['user', 'propertyowner'].includes(userData.role)) {
+      throw new Error('Invalid role selected');
+    }
+
+    const response = await apiClient.post('/auth/register', {
       username: userData.username.trim(),
       email: userData.email.toLowerCase().trim(),
       password: userData.password,
-      role: userData.role,
-      first_name: userData.firstName?.trim() || '',
-      last_name: userData.lastName?.trim() || '',
-      phone: userData.phone?.trim() || ''
-    };
-
-    const response = await apiClient.post('/auth/register', payload);
+      role: userData.role
+    });
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -138,8 +165,13 @@ export const registerUser = async (userData) => {
 
 export const requestPasswordReset = async (email) => {
   try {
-    if (!email || typeof email !== 'string') {
+    if (!email) {
       throw new Error('Email address is required');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error('Please enter a valid email address');
     }
 
     const response = await apiClient.post('/auth/forgot-password', {
@@ -156,20 +188,23 @@ export const requestPasswordReset = async (email) => {
   }
 };
 
-export const resetPassword = async (resetData) => {
+export const resetPassword = async (token, newPassword) => {
   try {
-    if (!resetData || typeof resetData !== 'object') {
-      throw new Error('Reset data is required');
+    if (!token) {
+      throw new Error('Reset token is required');
     }
 
-    if (!resetData.token || !resetData.password) {
-      throw new Error('Reset token and new password are required');
+    if (!newPassword) {
+      throw new Error('New password is required');
+    }
+
+    if (newPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
     }
 
     const response = await apiClient.post('/auth/reset-password', {
-      token: resetData.token,
-      password: resetData.password,
-      confirm_password: resetData.confirmPassword || resetData.password
+      token: token,
+      password: newPassword
     });
     
     if (!response.data) {
@@ -182,15 +217,13 @@ export const resetPassword = async (resetData) => {
   }
 };
 
-export const verifyEmail = async (verificationToken) => {
+export const verifyEmail = async (token) => {
   try {
-    if (!verificationToken) {
+    if (!token) {
       throw new Error('Verification token is required');
     }
 
-    const response = await apiClient.post('/auth/verify-email', {
-      token: verificationToken
-    });
+    const response = await apiClient.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -208,6 +241,11 @@ export const resendEmailVerification = async (email) => {
       throw new Error('Email address is required');
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error('Please enter a valid email address');
+    }
+
     const response = await apiClient.post('/auth/resend-verification', {
       email: email.toLowerCase().trim()
     });
@@ -222,47 +260,50 @@ export const resendEmailVerification = async (email) => {
   }
 };
 
-export const validateToken = async (token = null) => {
+export const validateToken = async () => {
   try {
-    const authToken = token || localStorage.getItem('token');
+    const token = localStorage.getItem('token');
     
-    if (!authToken) {
+    if (!token) {
       return { valid: false, user: null };
     }
 
-    const response = await apiClient.post('/auth/validate-token', {
-      token: authToken
-    });
+    const response = await apiClient.get('/auth/validate');
     
     if (!response.data) {
+      clearAuthData();
       return { valid: false, user: null };
     }
     
     return response.data;
   } catch (error) {
-    console.error('Error validating token:', error);
+    console.error('Token validation error:', error);
+    clearAuthData();
     return { valid: false, user: null };
   }
 };
 
-export const changePasswordAuth = async (passwordData) => {
+export const changePasswordAuth = async (currentPassword, newPassword) => {
   try {
-    if (!passwordData || typeof passwordData !== 'object') {
-      throw new Error('Password data is required');
+    if (!currentPassword) {
+      throw new Error('Current password is required');
     }
 
-    const requiredFields = ['currentPassword', 'newPassword'];
-    
-    for (const field of requiredFields) {
-      if (!passwordData[field]) {
-        throw new Error(`${field} is required`);
-      }
+    if (!newPassword) {
+      throw new Error('New password is required');
+    }
+
+    if (newPassword.length < 6) {
+      throw new Error('New password must be at least 6 characters long');
+    }
+
+    if (currentPassword === newPassword) {
+      throw new Error('New password must be different from current password');
     }
 
     const response = await apiClient.post('/auth/change-password', {
-      current_password: passwordData.currentPassword,
-      new_password: passwordData.newPassword,
-      confirm_password: passwordData.confirmPassword || passwordData.newPassword
+      currentPassword: currentPassword,
+      newPassword: newPassword
     });
     
     if (!response.data) {
@@ -277,29 +318,11 @@ export const changePasswordAuth = async (passwordData) => {
 
 export const logoutUser = async () => {
   try {
-    const token = localStorage.getItem('token');
-    
-    if (token) {
-      try {
-        await apiClient.post('/auth/logout');
-      } catch (error) {
-        console.warn('Server logout failed, continuing with local cleanup:', error);
-      }
-    }
-    
-    localStorage.removeItem('token');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('tokenExpiry');
-    
-    return { success: true, message: 'Logged out successfully' };
+    await apiClient.post('/auth/logout');
   } catch (error) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('tokenExpiry');
-    
-    return { success: true, message: 'Logged out successfully' };
+    console.error('Logout error:', error);
+  } finally {
+    clearAuthData();
   }
 };
 
@@ -309,68 +332,38 @@ export const checkAuthStatus = async () => {
     const tokenExpiry = localStorage.getItem('tokenExpiry');
     
     if (!token) {
-      return { 
-        authenticated: false, 
-        user: null, 
-        reason: 'No token found' 
-      };
+      return { authenticated: false, user: null };
     }
     
-    if (tokenExpiry) {
-      const expiryTime = parseInt(tokenExpiry);
-      const currentTime = new Date().getTime();
-      
-      if (currentTime >= expiryTime) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('userRole');
-        localStorage.removeItem('userId');
-        localStorage.removeItem('tokenExpiry');
-        
-        return { 
-          authenticated: false, 
-          user: null, 
-          reason: 'Token expired' 
-        };
-      }
+    if (tokenExpiry && Date.now() > parseInt(tokenExpiry)) {
+      clearAuthData();
+      return { authenticated: false, user: null };
     }
     
-    const validation = await validateToken(token);
+    const validationResult = await validateToken();
     
-    if (!validation.valid) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('tokenExpiry');
-      
-      return { 
-        authenticated: false, 
-        user: null, 
-        reason: 'Invalid token' 
-      };
+    if (!validationResult.valid) {
+      clearAuthData();
+      return { authenticated: false, user: null };
     }
     
-    return { 
-      authenticated: true, 
-      user: validation.user,
+    return {
+      authenticated: true,
+      user: validationResult.user,
       token: token
     };
   } catch (error) {
     console.error('Error checking auth status:', error);
-    
-    return { 
-      authenticated: false, 
-      user: null, 
-      reason: error.message 
-    };
+    clearAuthData();
+    return { authenticated: false, user: null };
   }
 };
 
 export const getCurrentUserRole = () => {
   try {
-    const role = localStorage.getItem('userRole');
-    return role || null;
+    return localStorage.getItem('userRole') || null;
   } catch (error) {
-    console.error('Error getting current user role:', error);
+    console.error('Error getting user role:', error);
     return null;
   }
 };
@@ -380,45 +373,29 @@ export const getCurrentUserId = () => {
     const userId = localStorage.getItem('userId');
     return userId ? parseInt(userId) : null;
   } catch (error) {
-    console.error('Error getting current user ID:', error);
+    console.error('Error getting user ID:', error);
     return null;
   }
 };
 
 export const refreshToken = async () => {
   try {
-    const token = localStorage.getItem('token');
-    
-    if (!token) {
-      throw new Error('No token to refresh');
-    }
-
     const response = await apiClient.post('/auth/refresh-token');
     
     if (!response.data) {
       throw new Error('Invalid response from server');
     }
 
-    const { token: newToken, expires_in } = response.data;
+    const { token, user, expires_in } = response.data;
     
-    if (newToken) {
-      localStorage.setItem('token', newToken);
-      
-      if (expires_in) {
-        const expiryTime = new Date().getTime() + (expires_in * 1000);
-        localStorage.setItem('tokenExpiry', expiryTime.toString());
-      }
+    if (token && user) {
+      setAuthData({ token, user, expires_in });
     }
     
     return response.data;
   } catch (error) {
-    console.error('Error refreshing token:', error);
-    
-    localStorage.removeItem('token');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userId');
-    localStorage.removeItem('tokenExpiry');
-    
+    console.error('Token refresh error:', error);
+    clearAuthData();
     throw error;
   }
 };
@@ -463,13 +440,13 @@ export const getAuthConfig = async () => {
         registration_enabled: true,
         email_verification_required: true,
         password_requirements: {
-          min_length: 8,
-          require_uppercase: true,
-          require_lowercase: true,
-          require_numbers: true,
+          min_length: 6,
+          require_uppercase: false,
+          require_lowercase: false,
+          require_numbers: false,
           require_special_chars: false
         },
-        session_timeout: 24 * 60 * 60 * 1000
+        session_timeout: 8 * 60 * 60 * 1000
       };
     }
     
@@ -481,20 +458,20 @@ export const getAuthConfig = async () => {
       registration_enabled: true,
       email_verification_required: true,
       password_requirements: {
-        min_length: 8,
-        require_uppercase: true,
-        require_lowercase: true,
-        require_numbers: true,
+        min_length: 6,
+        require_uppercase: false,
+        require_lowercase: false,
+        require_numbers: false,
         require_special_chars: false
       },
-      session_timeout: 24 * 60 * 60 * 1000
+      session_timeout: 8 * 60 * 60 * 1000
     };
   }
 };
 
 export const validatePasswordStrength = (password) => {
   const checks = {
-    length: password.length >= 8,
+    length: password.length >= 6,
     uppercase: /[A-Z]/.test(password),
     lowercase: /[a-z]/.test(password),
     numbers: /\d/.test(password),
@@ -511,6 +488,6 @@ export const validatePasswordStrength = (password) => {
     score,
     strength,
     checks,
-    isValid: checks.length && checks.uppercase && checks.lowercase && checks.numbers
+    isValid: checks.length
   };
 };

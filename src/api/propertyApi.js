@@ -48,13 +48,43 @@ const validatePropertyId = (propertyId) => {
   return id;
 };
 
+const safeJsonParse = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+    }
+  }
+  return [];
+};
+
+const processPropertyData = (property) => {
+  if (!property) return property;
+  
+  return {
+    ...property,
+    price: parseFloat(property.price) || 0,
+    amenities: safeJsonParse(property.amenities),
+    facilities: safeJsonParse(property.facilities),
+    images: safeJsonParse(property.images),
+    average_rating: parseFloat(property.average_rating) || 0,
+    total_ratings: parseInt(property.total_ratings) || 0,
+    total_favorites: parseInt(property.total_favorites) || 0,
+    views_count: parseInt(property.views_count) || 0,
+  };
+};
+
 const handleApiError = (error, operation) => {
   console.error(`Error ${operation}:`, error);
   
   if (error.response?.status === 400) {
     throw new Error(error.response.data?.message || `Invalid data for ${operation}`);
   } else if (error.response?.status === 401) {
-    throw new Error('Please log in to continue');
+    throw new Error('Please log in to access property features');
   } else if (error.response?.status === 403) {
     throw new Error('Access denied. You do not have permission for this action.');
   } else if (error.response?.status === 404) {
@@ -76,9 +106,6 @@ export const getAllPublicProperties = async (options = {}) => {
           if (value.length > 0) {
             queryParams.append(key, value.join(','));
           }
-        } else if (typeof value === 'object' && key === 'priceRange') {
-          queryParams.append('min_price', value[0]);
-          queryParams.append('max_price', value[1]);
         } else {
           queryParams.append(key, value.toString());
         }
@@ -93,7 +120,12 @@ export const getAllPublicProperties = async (options = {}) => {
       throw new Error('Invalid response from server');
     }
     
-    return response.data;
+    const processedData = {
+      ...response.data,
+      properties: response.data.properties?.map(processPropertyData) || []
+    };
+    
+    return processedData;
   } catch (error) {
     handleApiError(error, 'fetching public properties');
   }
@@ -105,13 +137,13 @@ export const getPropertyDetailsById = async (propertyId) => {
   try {
     const validatedId = validatePropertyId(propertyId);
     
-    const response = await apiClient.get(`/properties/details/${validatedId}`);
+    const response = await apiClient.get(`/properties/public/${validatedId}`);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
     }
     
-    return response.data;
+    return processPropertyData(response.data);
   } catch (error) {
     handleApiError(error, 'fetching property details');
   }
@@ -127,7 +159,7 @@ export const getPublicPropertyById = async (propertyId) => {
       throw new Error('Invalid response from server');
     }
     
-    return response.data;
+    return processPropertyData(response.data);
   } catch (error) {
     handleApiError(error, 'fetching public property');
   }
@@ -205,7 +237,12 @@ export const getMyProperties = async (options = {}) => {
       throw new Error('Invalid response from server');
     }
     
-    return response.data;
+    const processedData = {
+      ...response.data,
+      properties: response.data.properties?.map(processPropertyData) || []
+    };
+    
+    return processedData;
   } catch (error) {
     handleApiError(error, 'fetching owner properties');
   }
@@ -239,7 +276,7 @@ export const togglePropertyStatus = async (propertyId, isActive = null) => {
     
     const payload = isActive !== null ? { is_active: isActive } : {};
     
-    const response = await apiClient.put(`/properties/${validatedId}/status`, payload);
+    const response = await apiClient.patch(`/properties/${validatedId}/status`, payload);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -256,30 +293,38 @@ export const uploadPropertyImages = async (propertyId, imageFiles) => {
     const validatedId = validatePropertyId(propertyId);
     
     if (!imageFiles || imageFiles.length === 0) {
-      throw new Error('Image files are required');
+      throw new Error('At least one image file is required');
     }
 
     const formData = new FormData();
     
     if (Array.isArray(imageFiles)) {
-      imageFiles.forEach((file) => {
-        formData.append('images', file);
+      imageFiles.forEach((file, index) => {
+        formData.append('propertyImages', file);
       });
     } else {
-      formData.append('images', imageFiles);
+      formData.append('propertyImages', imageFiles);
     }
-    
-    const response = await axios.post(
-      `${API_BASE_URL}/properties/${validatedId}/images`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        timeout: 60000
+
+    const uploadClient = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: 120000,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    uploadClient.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
       }
     );
+
+    const response = await uploadClient.post(`/properties/${validatedId}/images`, formData);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -291,15 +336,17 @@ export const uploadPropertyImages = async (propertyId, imageFiles) => {
   }
 };
 
-export const deletePropertyImage = async (propertyId, imageId) => {
+export const deletePropertyImage = async (propertyId, imageUrl) => {
   try {
     const validatedId = validatePropertyId(propertyId);
     
-    if (!imageId) {
-      throw new Error('Image ID is required');
+    if (!imageUrl) {
+      throw new Error('Image URL is required');
     }
 
-    const response = await apiClient.delete(`/properties/${validatedId}/images/${imageId}`);
+    const response = await apiClient.delete(`/properties/${validatedId}/images`, {
+      data: { imageUrl }
+    });
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -363,7 +410,12 @@ export const searchProperties = async (searchOptions) => {
       throw new Error('Invalid response from server');
     }
     
-    return response.data;
+    const processedData = {
+      ...response.data,
+      properties: response.data.properties?.map(processPropertyData) || []
+    };
+    
+    return processedData;
   } catch (error) {
     handleApiError(error, 'searching properties');
   }
@@ -374,14 +426,14 @@ export const getPropertyTypes = async () => {
     const response = await apiClient.get('/properties/types');
     
     if (!response.data) {
-      return ['Apartment', 'Villa', 'House', 'Flat', 'Room', 'Condo'];
+      return ['Apartment', 'Villa', 'House', 'Boarding'];
     }
     
     return response.data;
   } catch (error) {
     console.error('Error fetching property types:', error);
     
-    return ['Apartment', 'Villa', 'House', 'Flat', 'Room', 'Condo'];
+    return ['Apartment', 'Villa', 'House', 'Boarding'];
   }
 };
 
@@ -396,7 +448,7 @@ export const recordPropertyView = async (propertyId, viewData = {}) => {
       user_location: viewData.user_location || null
     };
     
-    const response = await apiClient.post(`/properties/${validatedId}/view`, payload);
+    const response = await apiClient.post(`/user-interactions/view`, payload);
     
     return response.data || true;
   } catch (error) {
@@ -424,7 +476,7 @@ export const getSimilarProperties = async (propertyId, options = {}) => {
       return [];
     }
     
-    return response.data;
+    return response.data.map(processPropertyData);
   } catch (error) {
     console.error('Error fetching similar properties:', error);
     

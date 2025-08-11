@@ -3,207 +3,275 @@ import {
   Container,
   Typography,
   Box,
-  Paper,
+  Card,
+  CardContent,
+  Button,
+  Chip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Menu,
+  MenuItem,
+  IconButton,
+  Alert,
+  CircularProgress,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
-  IconButton,
-  Badge,
-  Chip,
-  Alert,
-  CircularProgress,
   Divider,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions
+  Badge,
+  Tooltip
 } from '@mui/material';
-import NotificationsIcon from '@mui/icons-material/Notifications';
-import BookingIcon from '@mui/icons-material/Book';
-import HomeIcon from '@mui/icons-material/Home';
-import MessageIcon from '@mui/icons-material/Message';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import DeleteIcon from '@mui/icons-material/Delete';
-import MarkAsUnreadIcon from '@mui/icons-material/MarkAsUnread';
-import DraftsIcon from '@mui/icons-material/Drafts';
-import SystemUpdateIcon from '@mui/icons-material/SystemUpdate';
-import StarIcon from '@mui/icons-material/Star';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import { formatDistanceToNow } from 'date-fns';
+import {
+  Notifications as NotificationsIcon,
+  MarkEmailRead as MarkReadIcon,
+  Delete as DeleteIcon,
+  Info as InfoIcon,
+  Warning as WarningIcon,
+  CheckCircle as SuccessIcon,
+  Error as ErrorIcon,
+  Home as PropertyIcon,
+  BookOnline as BookingIcon,
+  Star as RatingIcon,
+  Report as ReportIcon,
+  MoreVert as MoreVertIcon
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../../contexts/ThemeContext';
+import AppSnackbar from '../../components/common/AppSnackbar';
 
 const UserNotifications = () => {
+  const navigate = useNavigate();
+  const { theme } = useTheme();
+  
+  // State management
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [selectedNotification, setSelectedNotification] = useState(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const navigate = useNavigate();
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
 
+  // Mock notifications data - replace with actual API call
+  const mockNotifications = [
+    {
+      id: 1,
+      type: 'booking_confirmed',
+      title: 'Booking Confirmed',
+      message: 'Your booking for Studio Apartment in Colombo has been confirmed.',
+      read: false,
+      created_at: new Date().toISOString(),
+      property_id: 1,
+      booking_id: 1
+    },
+    {
+      id: 2,
+      type: 'property_update',
+      title: 'Property Update',
+      message: 'New photos have been added to your favorite property.',
+      read: true,
+      created_at: new Date(Date.now() - 86400000).toISOString(),
+      property_id: 2
+    },
+    {
+      id: 3,
+      type: 'rating_request',
+      title: 'Rate Your Stay',
+      message: 'How was your recent stay? Please rate the property.',
+      read: false,
+      created_at: new Date(Date.now() - 172800000).toISOString(),
+      property_id: 3
+    }
+  ];
+
+  // Load notifications
   useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        setLoading(true);
+        // Replace with actual API call
+        // const response = await getUserNotifications();
+        // setNotifications(response.data);
+        
+        // Using mock data for now
+        setTimeout(() => {
+          setNotifications(mockNotifications);
+          setLoading(false);
+        }, 1000);
+      } catch (error) {
+        console.error('Error loading notifications:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to load notifications',
+          severity: 'error'
+        });
+        setLoading(false);
+      }
+    };
+
     loadNotifications();
   }, []);
 
-  const loadNotifications = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const mockNotifications = [
-        {
-          id: 1,
-          type: 'booking_status',
-          title: 'Booking Request Updated',
-          message: 'Your booking request for Luxury Apartment in Colombo has been approved!',
-          created_at: new Date(Date.now() - 1000 * 60 * 30),
-          read: false,
-          property_name: 'Luxury Apartment in Colombo',
-          booking_id: 123,
-          property_id: 1
-        },
-        {
-          id: 2,
-          type: 'property_update',
-          title: 'New Property Available',
-          message: 'A new property matching your preferences has been listed in your favorite area.',
-          created_at: new Date(Date.now() - 1000 * 60 * 60 * 2),
-          read: true,
-          property_name: 'Modern Studio in Kandy',
-          property_id: 2
-        },
-        {
-          id: 3,
-          type: 'system',
-          title: 'Profile Update Required',
-          message: 'Please update your profile information to improve your booking success rate.',
-          created_at: new Date(Date.now() - 1000 * 60 * 60 * 24),
-          read: false
-        },
-        {
-          id: 4,
-          type: 'booking_reminder',
-          title: 'Booking Reminder',
-          message: 'Your booking check-in is tomorrow. Please contact the property owner for details.',
-          created_at: new Date(Date.now() - 1000 * 60 * 60 * 6),
-          read: false,
-          property_name: 'Cozy Room in Galle',
-          booking_id: 124,
-          property_id: 3
-        },
-        {
-          id: 5,
-          type: 'favorite_update',
-          title: 'Favorite Property Updated',
-          message: 'A property in your favorites list has updated its price and availability.',
-          created_at: new Date(Date.now() - 1000 * 60 * 60 * 12),
-          read: true,
-          property_name: 'Sea View Apartment',
-          property_id: 4
-        }
-      ];
-      
-      setNotifications(mockNotifications);
-    } catch (err) {
-      console.error('Error loading notifications:', err);
-      setError('Failed to load notifications. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleReadStatus = async (notificationId, currentReadStatus) => {
-    try {
-      setNotifications(prev => 
-        prev.map(notification => 
-          notification.id === notificationId 
-            ? { ...notification, read: !currentReadStatus }
-            : notification
-        )
-      );
-    } catch (err) {
-      console.error('Error updating notification status:', err);
-      setError('Failed to update notification status.');
-    }
-  };
-
-  const deleteNotification = async (notificationId) => {
-    try {
-      setNotifications(prev => 
-        prev.filter(notification => notification.id !== notificationId)
-      );
-    } catch (err) {
-      console.error('Error deleting notification:', err);
-      setError('Failed to delete notification.');
-    }
-  };
-
-  const markAllAsRead = async () => {
-    try {
-      setNotifications(prev => 
-        prev.map(notification => ({ ...notification, read: true }))
-      );
-    } catch (err) {
-      console.error('Error marking all as read:', err);
-      setError('Failed to mark all notifications as read.');
-    }
-  };
-
-  const openNotificationDialog = (notification) => {
-    setSelectedNotification(notification);
-    setDialogOpen(true);
-    
-    if (!notification.read) {
-      toggleReadStatus(notification.id, false);
-    }
-  };
-
+  // Get notification icon based on type
   const getNotificationIcon = (type) => {
     switch (type) {
-      case 'booking_status':
-      case 'booking_reminder':
+      case 'booking_confirmed':
+      case 'booking_update':
         return <BookingIcon color="primary" />;
       case 'property_update':
-        return <HomeIcon color="info" />;
-      case 'favorite_update':
-        return <FavoriteIcon color="secondary" />;
-      case 'system':
-        return <SystemUpdateIcon color="warning" />;
-      case 'rating':
-        return <StarIcon color="success" />;
+        return <PropertyIcon color="info" />;
+      case 'rating_request':
+        return <RatingIcon color="warning" />;
+      case 'report_update':
+        return <ReportIcon color="error" />;
       default:
-        return <MessageIcon color="action" />;
+        return <InfoIcon color="action" />;
     }
   };
 
+  // Get notification color based on type
   const getNotificationColor = (type) => {
     switch (type) {
-      case 'booking_status':
-      case 'booking_reminder':
+      case 'booking_confirmed':
+        return 'success';
+      case 'booking_update':
         return 'primary';
       case 'property_update':
         return 'info';
-      case 'favorite_update':
-        return 'secondary';
-      case 'system':
+      case 'rating_request':
         return 'warning';
-      case 'rating':
-        return 'success';
+      case 'report_update':
+        return 'error';
       default:
         return 'default';
     }
   };
 
-  const handleNotificationAction = (notification) => {
-    setDialogOpen(false);
+  // Format relative time
+  const formatRelativeTime = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now - date) / 1000);
     
-    if (notification.booking_id) {
-      console.log('Navigate to booking details:', notification.booking_id);
-    } else if (notification.property_id) {
-      navigate(`/user-property-view/${notification.property_id}`);
-    } else if (notification.type === 'system') {
-      navigate('/profile');
+    if (diffInSeconds < 60) return 'Just now';
+    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
+    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
+    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    
+    return date.toLocaleDateString();
+  };
+
+  // Handle notification click
+  const handleNotificationClick = (notification) => {
+    setSelectedNotification(notification);
+    setDetailDialogOpen(true);
+    
+    // Mark as read if not already read
+    if (!notification.read) {
+      toggleReadStatus(notification.id, true);
+    }
+  };
+
+  // Handle menu click
+  const handleMenuClick = (event, notification) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+    setSelectedNotification(notification);
+  };
+
+  // Handle menu close
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // Toggle read status
+  const toggleReadStatus = async (notificationId, markAsRead = true) => {
+    try {
+      // Replace with actual API call
+      // await updateNotificationReadStatus(notificationId, markAsRead);
+      
+      setNotifications(prev => prev.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, read: markAsRead }
+          : notification
+      ));
+      
+      setSnackbar({
+        open: true,
+        message: markAsRead ? 'Marked as read' : 'Marked as unread',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error updating notification status:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to update notification',
+        severity: 'error'
+      });
+    }
+  };
+
+  // Delete notification
+  const handleDeleteNotification = async (notificationId) => {
+    try {
+      // Replace with actual API call
+      // await deleteNotification(notificationId);
+      
+      setNotifications(prev => prev.filter(n => n.id !== notificationId));
+      setSnackbar({
+        open: true,
+        message: 'Notification deleted',
+        severity: 'success'
+      });
+      handleMenuClose();
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to delete notification',
+        severity: 'error'
+      });
+    }
+  };
+
+  // Handle action button click
+  const handleActionClick = () => {
+    if (!selectedNotification) return;
+    
+    if (selectedNotification.booking_id) {
+      navigate(`/bookings/${selectedNotification.booking_id}`);
+    } else if (selectedNotification.property_id) {
+      navigate(`/user-property-view/${selectedNotification.property_id}`);
+    }
+    
+    setDetailDialogOpen(false);
+  };
+
+  // Mark all as read
+  const markAllAsRead = async () => {
+    try {
+      // Replace with actual API call
+      // await markAllNotificationsAsRead();
+      
+      setNotifications(prev => prev.map(notification => ({ ...notification, read: true })));
+      setSnackbar({
+        open: true,
+        message: 'All notifications marked as read',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+      setSnackbar({
+        open: true,
+        message: 'Failed to mark all as read',
+        severity: 'error'
+      });
     }
   };
 
@@ -211,196 +279,172 @@ const UserNotifications = () => {
 
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ py: 4, textAlign: 'center' }}>
-        <CircularProgress size={60} />
-        <Typography variant="h6" sx={{ mt: 2 }}>
-          Loading notifications...
-        </Typography>
+      <Container maxWidth="md" sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
       </Container>
     );
   }
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
-        <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-          <Typography variant="h4" component="h1">
-            <Badge badgeContent={unreadCount} color="error" sx={{ mr: 2 }}>
-              <NotificationsIcon sx={{ mr: 1 }} />
-            </Badge>
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Badge badgeContent={unreadCount} color="error">
+            <NotificationsIcon sx={{ fontSize: 32, color: theme.primary }} />
+          </Badge>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
             Notifications
           </Typography>
-          
-          {unreadCount > 0 && (
-            <Button
-              variant="outlined"
-              startIcon={<CheckCircleIcon />}
-              onClick={markAllAsRead}
-            >
-              Mark All Read
-            </Button>
-          )}
         </Box>
         
-        <Typography variant="body1" color="text.secondary">
-          Stay updated with your booking requests and property updates
-        </Typography>
+        {unreadCount > 0 && (
+          <Button
+            variant="outlined"
+            onClick={markAllAsRead}
+            sx={{ borderColor: theme.primary, color: theme.primary }}
+          >
+            Mark All as Read
+          </Button>
+        )}
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
-
+      {/* Notifications List */}
       {notifications.length === 0 ? (
-        <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <NotificationsIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+        <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
+          <NotificationsIcon sx={{ fontSize: 64, color: theme.textSecondary, mb: 2 }} />
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No notifications yet
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            You'll see updates about your bookings and new properties here
+            You'll see notifications about your bookings, properties, and account here.
           </Typography>
-        </Paper>
+        </Card>
       ) : (
-        <Paper sx={{ overflow: 'hidden' }}>
-          <List disablePadding>
-            {notifications.map((notification, index) => (
-              <React.Fragment key={notification.id}>
-                <ListItem
-                  sx={{
-                    backgroundColor: notification.read ? 'transparent' : 'action.hover',
-                    borderLeft: notification.read ? 'none' : '4px solid',
-                    borderLeftColor: 'primary.main',
-                    '&:hover': {
-                      backgroundColor: 'action.selected',
-                      cursor: 'pointer'
-                    }
-                  }}
-                  onClick={() => openNotificationDialog(notification)}
-                  secondaryAction={
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleReadStatus(notification.id, notification.read);
-                        }}
-                        title={notification.read ? 'Mark as unread' : 'Mark as read'}
-                      >
-                        {notification.read ? <MarkAsUnreadIcon /> : <DraftsIcon />}
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteNotification(notification.id);
-                        }}
-                        title="Delete notification"
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </Box>
+        <List sx={{ p: 0 }}>
+          {notifications.map((notification, index) => (
+            <Box key={notification.id}>
+              <Card 
+                sx={{ 
+                  mb: 2, 
+                  borderRadius: 2,
+                  border: notification.read ? 'none' : `2px solid ${theme.primary}`,
+                  backgroundColor: notification.read ? theme.surfaceBackground : theme.paperBackground,
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: theme.shadows.medium
                   }
-                >
-                  <ListItemIcon>
-                    {getNotificationIcon(notification.type)}
-                  </ListItemIcon>
-                  
-                  <ListItemText
-                    primary={
-                      <Box display="flex" alignItems="center" gap={1}>
+                }}
+                onClick={() => handleNotificationClick(notification)}
+              >
+                <CardContent sx={{ p: 3 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                    {/* Notification Icon */}
+                    <Box sx={{ mt: 0.5 }}>
+                      {getNotificationIcon(notification.type)}
+                    </Box>
+                    
+                    {/* Notification Content */}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                         <Typography 
-                          variant="subtitle1" 
+                          variant="h6" 
                           sx={{ 
-                            fontWeight: notification.read ? 'normal' : 'bold',
-                            flex: 1
+                            fontWeight: notification.read ? 500 : 700,
+                            color: notification.read ? theme.textSecondary : theme.textPrimary
                           }}
                         >
                           {notification.title}
                         </Typography>
-                        <Chip 
-                          label={notification.type.replace('_', ' ')} 
-                          size="small" 
-                          color={getNotificationColor(notification.type)}
-                          variant="outlined"
-                        />
-                      </Box>
-                    }
-                    secondary={
-                      <Box>
-                        <Typography variant="body2" color="text.secondary" paragraph>
-                          {notification.message}
-                        </Typography>
                         
-                        {notification.property_name && (
-                          <Typography variant="caption" color="primary.main">
-                            {notification.property_name}
-                          </Typography>
-                        )}
-                        
-                        <Typography variant="caption" display="block" color="text.secondary">
-                          {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip
+                            label={getNotificationColor(notification.type)}
+                            size="small"
+                            color={getNotificationColor(notification.type)}
+                            variant="outlined"
+                          />
+                          
+                          {!notification.read && (
+                            <Box
+                              sx={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                backgroundColor: theme.primary
+                              }}
+                            />
+                          )}
+                          
+                          <Tooltip title="More options">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => handleMenuClick(e, notification)}
+                              sx={{ color: theme.textSecondary }}
+                            >
+                              <MoreVertIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </Box>
-                    }
-                  />
-                </ListItem>
-                
-                {index < notifications.length - 1 && <Divider />}
-              </React.Fragment>
-            ))}
-          </List>
-        </Paper>
+                      
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: theme.textSecondary,
+                          mb: 1,
+                          lineHeight: 1.5
+                        }}
+                      >
+                        {notification.message}
+                      </Typography>
+                      
+                      <Typography variant="caption" sx={{ color: theme.textSecondary }}>
+                        {formatRelativeTime(notification.created_at)}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+            </Box>
+          ))}
+        </List>
       )}
 
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
+      {/* Notification Detail Dialog */}
+      <Dialog 
+        open={detailDialogOpen} 
+        onClose={() => setDetailDialogOpen(false)}
         maxWidth="sm"
         fullWidth
       >
         {selectedNotification && (
-          <>
+          <React.Fragment>
             <DialogTitle>
-              <Box display="flex" alignItems="center" gap={1}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 {getNotificationIcon(selectedNotification.type)}
                 {selectedNotification.title}
               </Box>
             </DialogTitle>
-            
             <DialogContent>
-              <Typography variant="body1" paragraph>
+              <Typography variant="body1" sx={{ mb: 2 }}>
                 {selectedNotification.message}
               </Typography>
-              
-              {selectedNotification.property_name && (
-                <Typography variant="body2" color="text.secondary" paragraph>
-                  <strong>Property:</strong> {selectedNotification.property_name}
-                </Typography>
-              )}
-              
-              {selectedNotification.booking_id && (
-                <Typography variant="body2" color="text.secondary" paragraph>
-                  <strong>Booking ID:</strong> {selectedNotification.booking_id}
-                </Typography>
-              )}
-              
               <Typography variant="caption" color="text.secondary">
-                Received {formatDistanceToNow(new Date(selectedNotification.created_at), { addSuffix: true })}
+                Received {formatRelativeTime(selectedNotification.created_at)}
               </Typography>
             </DialogContent>
-            
             <DialogActions>
-              <Button onClick={() => setDialogOpen(false)}>
+              <Button onClick={() => setDetailDialogOpen(false)}>
                 Close
               </Button>
-              
-              {(selectedNotification.property_id || selectedNotification.booking_id || selectedNotification.type === 'system') && (
+              {(selectedNotification.booking_id || selectedNotification.property_id) && (
                 <Button 
-                  variant="contained" 
-                  onClick={() => handleNotificationAction(selectedNotification)}
+                  onClick={handleActionClick}
+                  variant="contained"
+                  sx={{ backgroundColor: theme.primary }}
                 >
                   {selectedNotification.booking_id ? 'View Booking' : 
                    selectedNotification.property_id ? 'View Property' : 
@@ -408,9 +452,55 @@ const UserNotifications = () => {
                 </Button>
               )}
             </DialogActions>
-          </>
+          </React.Fragment>
         )}
       </Dialog>
+
+      {/* Context Menu - FIXED Fragment Issue */}
+      <Menu
+        anchorEl={anchorEl}
+        open={Boolean(anchorEl)}
+        onClose={handleMenuClose}
+      >
+        {selectedNotification && selectedNotification.read && (
+          <MenuItem 
+            onClick={() => {
+              toggleReadStatus(selectedNotification.id, false);
+              handleMenuClose();
+            }}
+          >
+            <MarkReadIcon sx={{ mr: 1 }} />
+            Mark as Unread
+          </MenuItem>
+        )}
+        {selectedNotification && !selectedNotification.read && (
+          <MenuItem 
+            onClick={() => {
+              toggleReadStatus(selectedNotification.id, true);
+              handleMenuClose();
+            }}
+          >
+            <MarkReadIcon sx={{ mr: 1 }} />
+            Mark as Read
+          </MenuItem>
+        )}
+        <MenuItem 
+          onClick={() => {
+            handleDeleteNotification(selectedNotification?.id);
+          }}
+          sx={{ color: 'error.main' }}
+        >
+          <DeleteIcon sx={{ mr: 1 }} />
+          Delete
+        </MenuItem>
+      </Menu>
+
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+      />
     </Container>
   );
 };

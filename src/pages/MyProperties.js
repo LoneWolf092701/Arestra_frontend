@@ -1,26 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
   Container,
   Button,
-  Alert
+  Alert,
+  CircularProgress
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import AddIcon from '@mui/icons-material/Add';
 import PropertyGrid from '../components/common/PropertyGrid';
-
-const safeParse = (str) => {
-  try {
-    return JSON.parse(str);
-  } catch (error) {
-    return [];
-  }
-};
+import { getMyProperties } from '../api/propertyApi';
 
 const MyProperties = () => {
   const navigate = useNavigate();
   const userRole = localStorage.getItem('userRole');
+  const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    fetchProperties();
+  }, []);
+
+  const fetchProperties = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      const response = await getMyProperties();
+      setProperties(response?.properties || []);
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+      setError(error.message || 'Failed to load properties');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleViewProperty = (propertyId) => {
     navigate(`/property/${propertyId}`);
@@ -68,16 +83,30 @@ const MyProperties = () => {
         </Alert>
       )}
 
-      <PropertyGrid 
-        showMyProperties={true}
-        showActions={true}
-        showEditButton={userRole === 'propertyowner'}
-        showSummary={true}
-        onViewProperty={handleViewProperty}
-        onEditProperty={handleEditProperty}
-        emptyStateMessage="You haven't added any properties yet"
-        emptyStateSubtitle="Click 'Add New Property' to get started with your first listing"
-      />
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <PropertyGrid 
+          properties={properties}
+          loading={loading}
+          showMyProperties={true}
+          showActions={true}
+          showEditButton={userRole === 'propertyowner'}
+          showSummary={true}
+          onViewProperty={handleViewProperty}
+          onEditProperty={handleEditProperty}
+          emptyStateMessage="You haven't added any properties yet"
+          emptyStateSubtitle="Click 'Add New Property' to get started with your first listing"
+        />
+      )}
     </Container>
   );
 };
