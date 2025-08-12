@@ -1,5 +1,5 @@
-import React, { useState, useContext, useEffect } from 'react';
-import { useForm, Controller, useFieldArray } from 'react-hook-form';
+import React, { useState, useContext } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
 import {
@@ -16,28 +16,68 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   Alert,
-  CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Snackbar
+  Chip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ImageUpload from '../components/common/ImageUpload';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
-import { PropertyContext } from '../contexts/PropertyContext';
-import { useNavigate, useParams } from 'react-router-dom';
-import { createProperty, addPropertyDetails } from '../api/propertyApi';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { createProperty } from '../api/propertyApi';
 import { ThemeContext } from '../contexts/ThemeContext';
-import AppSnackbar from '../components/common/AppSnackbar';
+import ImageUpload from '../components/common/ImageUpload';
+
+const validationSchema = yup.object().shape({
+  unitType: yup.string().required('Unit type is required'),
+  address: yup.string().required('Address is required'),
+  description: yup.string().required('Description is required'),
+  price: yup.number().positive('Price must be positive').required('Price is required'),
+  amenities: yup.object(),
+  facilities: yup.object().shape({
+    Bedroom: yup.number().min(0, 'Bedrooms cannot be negative').required('Number of bedrooms is required'),
+    Bathroom: yup.number().min(1, 'At least 1 bathroom is required').required('Number of bathrooms is required'),
+    Kitchen: yup.number().min(0, 'Kitchens cannot be negative'),
+    LivingRoom: yup.number().min(0, 'Living rooms cannot be negative'),
+    DiningRoom: yup.number().min(0, 'Dining rooms cannot be negative'),
+    ParkingSpace: yup.number().min(0, 'Parking spaces cannot be negative')
+  }).required('Facilities information is required'),
+  availableFrom: yup.date().required('Available from date is required'),
+  contractPolicy: yup.string().required('Contract policy is required'),
+  roommates: yup.array().of(yup.object().shape({
+    occupation: yup.string().required('Roommate occupation is required'),
+    field: yup.string().required('Roommate field/industry is required')
+  })),
+  rules: yup.array().of(yup.string())
+});
+
+const unitOptions = [
+  { label: 'Annex', value: 'Annex' },
+  { label: 'Full House', value: 'Full House' },
+  { label: 'Single Room', value: 'Single Room' },
+  { label: 'Shared Room', value: 'Shared Room' },
+  { label: 'Studio Apartment', value: 'Studio Apartment' },
+  { label: 'One Bedroom', value: 'One Bedroom' },
+  { label: 'Two Bedroom', value: 'Two Bedroom' },
+  { label: 'Three Bedroom', value: 'Three Bedroom' },
+];
+
+const availableAmenities = [
+  'WiFi', 'TV', 'Air Conditioning', 'Kitchen', 'Washing Machine', 'Parking',
+  'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished'
+];
+
+const availableFacilities = [
+  'Swimming Pool', 'Recreation Room', 'Bed Linens', 'Hot Water', 
+  'Air Conditioning', 'Kitchen', 'Washing Machine', 'WiFi', 'TV', 
+  'Parking', 'Security', 'Garden'
+];
 
 const RequiredFieldLabel = ({ children, required = false }) => (
   <Box component="span">
@@ -46,725 +86,576 @@ const RequiredFieldLabel = ({ children, required = false }) => (
   </Box>
 );
 
-const FacilityCounter = ({ facility, count, onIncrement, onDecrement }) => (
-  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-    <Typography variant="subtitle1" sx={{ minWidth: 100 }}>{facility}</Typography>
-    <IconButton onClick={onDecrement} disabled={count <= 0}>
-      <RemoveIcon />
-    </IconButton>
-    <Typography variant="h6" sx={{ minWidth: 40, textAlign: 'center' }}>{count}</Typography>
-    <IconButton onClick={onIncrement}>
-      <AddIcon />
-    </IconButton>
+const FacilityCounter = ({ facility, count, onIncrement, onDecrement, error, required = false }) => (
+  <>
+    <Box
+      display="flex"
+      alignItems="center"
+      justifyContent="space-between"
+      p={1}
+      border={error ? "1px solid red" : "1px solid #ccc"}
+      borderRadius={2}
+    >
+      <Typography variant="body1" sx={{ flex: 1 }}>
+        {facility}
+        {required && <Box component="span" sx={{ color: 'error.main', ml: 0.5 }}>*</Box>}
+      </Typography>
+      <Box display="flex" alignItems="center" gap={1}>
+        <IconButton onClick={onDecrement} size="small" disabled={count === 0}>
+          <RemoveIcon />
+        </IconButton>
+        <Typography variant="body1" sx={{ minWidth: 30, textAlign: 'center' }}>
+          {count}
+        </Typography>
+        <IconButton onClick={onIncrement} size="small">
+          <AddIcon />
+        </IconButton>
+      </Box>
+    </Box>
+    {error && (
+      <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+        {error.message}
+      </Typography>
+    )}
+  </>
+);
+
+const AmenityQuantitySelector = ({ amenity, quantity, onQuantityChange, onRemove }) => (
+  <Box
+    display="flex"
+    alignItems="center"
+    justifyContent="space-between"
+    p={1}
+    border="1px solid #ccc"
+    borderRadius={2}
+  >
+    <Typography variant="body2" sx={{ flex: 1 }}>
+      {amenity}
+    </Typography>
+    <Box display="flex" alignItems="center" gap={1}>
+      <IconButton 
+        onClick={() => onQuantityChange(Math.max(0, quantity - 1))} 
+        size="small"
+        disabled={quantity === 0}
+      >
+        <RemoveIcon />
+      </IconButton>
+      <Typography variant="body2" sx={{ minWidth: 20, textAlign: 'center' }}>
+        {quantity}
+      </Typography>
+      <IconButton onClick={() => onQuantityChange(quantity + 1)} size="small">
+        <AddIcon />
+      </IconButton>
+      <IconButton onClick={onRemove} size="small" color="error">
+        <RemoveIcon />
+      </IconButton>
+    </Box>
   </Box>
 );
 
-const validationSchema = yup.object({
-  unitType: yup.string().required('Unit type is required'),
-  address: yup.string().required('Address is required').min(10, 'Address must be at least 10 characters'),
-  price: yup.number().required('Price is required').positive('Price must be positive'),
-  description: yup.string().required('Description is required').min(50, 'Description must be at least 50 characters'),
-  amenities: yup.array().min(1, 'Please select at least one amenity'),
-  facilities: yup.array().min(1, 'Please select at least one facility'),
-  availableFrom: yup.date().required('Available from date is required'),
-  availableTo: yup.date()
-    .nullable()
-    .when('availableFrom', (availableFrom, schema) => {
-      if (availableFrom) {
-        return schema.min(yup.ref('availableFrom'), 'Available to date must be after available from date');
-      }
-      return schema;
-    })
-});
-
 const AddPropertyDetails = () => {
   const navigate = useNavigate();
-  const { id } = useParams();
-  const { propertyType } = useContext(PropertyContext);
+  const location = useLocation();
   const { theme } = useContext(ThemeContext);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState('');
-  const [submitSuccess, setSubmitSuccess] = useState(false);
-  const [uploadedImages, setUploadedImages] = useState([]);
-  const [bedrooms, setBedrooms] = useState(0);
-  const [bathrooms, setBathrooms] = useState(0);
-  const [selectedAmenities, setSelectedAmenities] = useState([]);
+  const propertyType = location.state?.propertyType || '';
+  const [selectedAmenityToAdd, setSelectedAmenityToAdd] = useState('');
   const [selectedFacilities, setSelectedFacilities] = useState([]);
-  const [customAmenityDialog, setCustomAmenityDialog] = useState(false);
-  const [customFacilityDialog, setCustomFacilityDialog] = useState(false);
-  const [customAmenityText, setCustomAmenityText] = useState('');
-  const [customFacilityText, setCustomFacilityText] = useState('');
+  const [loading, setLoading] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [snackbarSeverity, setSnackbarSeverity] = useState('success');
 
-  const unitOptions = [
-    { label: 'Annex', value: 'Annex' },
-    { label: 'Full House', value: 'Full House' },
-    { label: 'Single Room', value: 'Single Room' },
-    { label: 'Shared Room', value: 'Shared Room' },
-    { label: 'Studio Apartment', value: 'Studio Apartment' },
-    { label: 'One Bedroom', value: 'One Bedroom' },
-    { label: 'Two Bedroom', value: 'Two Bedroom' },
-    { label: 'Three Bedroom', value: 'Three Bedroom' }
-  ];
-
-  const availableAmenities = [
-    'WiFi', 'TV', 'Air Conditioning', 'Kitchen', 'Washing Machine', 'Parking',
-    'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished'
-  ];
-
-  const availableFacilities = [
-    'Swimming Pool', 'Recreation Room', 'Bed Linens', 'Hot Water', 'Air Conditioning',
-    'Kitchen', 'Washing Machine', 'WiFi', 'TV', 'Parking', 'Security', 'Garden'
-  ];
-
-  const {
-    control,
-    handleSubmit,
-    formState: { errors },
-    setValue,
-    watch,
-    reset
-  } = useForm({
+  const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm({
     resolver: yupResolver(validationSchema),
     defaultValues: {
       unitType: '',
       address: '',
-      price: '',
       description: '',
-      amenities: [],
-      facilities: [],
+      amenities: {},
+      facilities: {
+        Bedroom: 0,
+        Bathroom: 0,
+        Kitchen: 0,
+        LivingRoom: 0,
+        DiningRoom: 0,
+        ParkingSpace: 0
+      },
+      roommates: [],
+      rules: [],
+      contractPolicy: '',
       availableFrom: null,
-      availableTo: null
+      availableTo: null,
+      price: ''
     }
   });
 
-  const showToast = (message, severity = 'success') => {
-    setSnackbarMessage(message);
-    setSnackbarSeverity(severity);
-    setSnackbarOpen(true);
+  const { fields: roommateFields, append: appendRoommate, remove: removeRoommate } = useFieldArray({
+    control,
+    name: 'roommates'
+  });
+
+  const { fields: ruleFields, append: appendRule, remove: removeRule } = useFieldArray({
+    control,
+    name: 'rules'
+  });
+
+  const amenitiesValue = watch('amenities') || {};
+  const facilitiesValue = watch('facilities') || {};
+
+  const handleBackToPropertySelection = () => {
+    navigate('/add-property');
+  };
+
+  const updateFacilityCount = (facility, increment) => {
+    const currentValue = facilitiesValue[facility] || 0;
+    const newValue = increment ? currentValue + 1 : Math.max(0, currentValue - 1);
+    setValue(`facilities.${facility}`, newValue);
+  };
+
+  const updateAmenityQuantity = (amenity, newQuantity) => {
+    const updatedAmenities = { ...amenitiesValue };
+    if (newQuantity > 0) {
+      updatedAmenities[amenity] = newQuantity;
+    } else {
+      delete updatedAmenities[amenity];
+    }
+    setValue('amenities', updatedAmenities);
+  };
+
+  const removeAmenity = (amenity) => {
+    const updatedAmenities = { ...amenitiesValue };
+    delete updatedAmenities[amenity];
+    setValue('amenities', updatedAmenities);
+  };
+
+  const addAmenity = () => {
+    if (selectedAmenityToAdd && !amenitiesValue[selectedAmenityToAdd]) {
+      updateAmenityQuantity(selectedAmenityToAdd, 1);
+      setSelectedAmenityToAdd('');
+    }
+  };
+
+  const getAvailableAmenitiesForDropdown = () => {
+    return availableAmenities.filter(amenity => !amenitiesValue[amenity]);
+  };
+
+  const handleFacilityToggle = (facility) => {
+    const newFacilities = selectedFacilities.includes(facility)
+      ? selectedFacilities.filter(f => f !== facility)
+      : [...selectedFacilities, facility];
+    setSelectedFacilities(newFacilities);
   };
 
   const handleImageUpload = (uploadedFiles) => {
-    console.log('Images uploaded:', uploadedFiles);
-    setUploadedImages(prev => [...prev, ...uploadedFiles]);
-    showToast(`${uploadedFiles.length} image(s) uploaded successfully!`, 'success');
-  };
-
-  const handleRemoveImage = (indexToRemove) => {
-    setUploadedImages(prev => prev.filter((_, index) => index !== indexToRemove));
-  };
-
-  const toggleAmenity = (amenity) => {
-    setSelectedAmenities(prev => {
-      const newAmenities = prev.includes(amenity) 
-        ? prev.filter(a => a !== amenity)
-        : [...prev, amenity];
-      setValue('amenities', newAmenities);
-      return newAmenities;
-    });
-  };
-
-  const toggleFacility = (facility) => {
-    setSelectedFacilities(prev => {
-      const newFacilities = prev.includes(facility) 
-        ? prev.filter(f => f !== facility)
-        : [...prev, facility];
-      setValue('facilities', newFacilities);
-      return newFacilities;
-    });
-  };
-
-  const addCustomAmenity = () => {
-    if (customAmenityText.trim()) {
-      const newAmenity = customAmenityText.trim();
-      if (!selectedAmenities.includes(newAmenity)) {
-        setSelectedAmenities(prev => {
-          const newAmenities = [...prev, newAmenity];
-          setValue('amenities', newAmenities);
-          return newAmenities;
-        });
-      }
-      setCustomAmenityText('');
-      setCustomAmenityDialog(false);
-    }
-  };
-
-  const addCustomFacility = () => {
-    if (customFacilityText.trim()) {
-      const newFacility = customFacilityText.trim();
-      if (!selectedFacilities.includes(newFacility)) {
-        setSelectedFacilities(prev => {
-          const newFacilities = [...prev, newFacility];
-          setValue('facilities', newFacilities);
-          return newFacilities;
-        });
-      }
-      setCustomFacilityText('');
-      setCustomFacilityDialog(false);
-    }
+    console.log('Uploaded files:', uploadedFiles);
   };
 
   const onSubmit = async (data) => {
-    const formErrors = Object.keys(errors);
-    if (formErrors.length > 0) {
-      const firstError = errors[formErrors[0]];
-      showToast(firstError?.message || 'Please fill in all required fields', 'error');
-      return;
-    }
-
-    if (!data.unitType) {
-      showToast('Please select a unit type', 'error');
-      return;
-    }
-
-    if (!data.address || data.address.length < 10) {
-      showToast('Please enter a valid address (minimum 10 characters)', 'error');
-      return;
-    }
-
-    if (!data.price || parseFloat(data.price) <= 0) {
-      showToast('Please enter a valid price', 'error');
-      return;
-    }
-
-    if (!data.description || data.description.length < 50) {
-      showToast('Please enter a detailed description (minimum 50 characters)', 'error');
-      return;
-    }
-
-    if (!data.availableFrom) {
-      showToast('Please select an available from date', 'error');
-      return;
-    }
-
-    if (uploadedImages.length === 0) {
-      showToast('Please upload at least one image of your property', 'error');
-      return;
-    }
-
-    if (selectedAmenities.length === 0) {
-      showToast('Please select at least one amenity', 'error');
-      return;
-    }
-
-    if (selectedFacilities.length === 0) {
-      showToast('Please select at least one facility', 'error');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmitError('');
-
     try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      
       const propertyData = {
+        ...data,
         property_type: propertyType,
         unit_type: data.unitType,
-        address: data.address,
-        price: parseFloat(data.price),
-        description: data.description,
-        bedrooms: bedrooms,
-        bathrooms: bathrooms,
-        amenities: selectedAmenities,
-        facilities: selectedFacilities,
-        images: uploadedImages.map(img => ({
-          url: img.url || img,
-          filename: img.filename || '',
-          size: img.size || 0
-        })),
-        available_from: data.availableFrom ? dayjs(data.availableFrom).format('YYYY-MM-DD') : '2025-01-05',
+        available_from: data.availableFrom ? dayjs(data.availableFrom).format('YYYY-MM-DD') : null,
         available_to: data.availableTo ? dayjs(data.availableTo).format('YYYY-MM-DD') : null,
-        is_active: true,
-        approval_status: 'pending'
+        contract_policy: data.contractPolicy,
+        amenities: JSON.stringify(data.amenities),
+        facilities: JSON.stringify(data.facilities),
+        roommates: JSON.stringify(data.roommates),
+        rules: JSON.stringify(data.rules),
+        other_facility: selectedFacilities.join(',')
       };
 
-      console.log('Submitting property data:', propertyData);
-
-      const response = await createProperty(propertyData);
+      await createProperty(propertyData, token);
+      setSnackbarMessage('Property added successfully!');
+      setSnackbarOpen(true);
       
-      if (response && (response.success || response.property || response.message?.includes('successfully'))) {
-        showToast('Property added successfully!', 'success');
-        setSubmitSuccess(true);
-        
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 2000);
-      } else {
-        throw new Error(response?.message || 'Failed to create property');
-      }
+      setTimeout(() => {
+        navigate('/myproperties');
+      }, 2000);
     } catch (error) {
-      console.error('Property creation error:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to add property. Please try again.';
-      setSubmitError(errorMessage);
-      showToast(errorMessage, 'error');
+      console.error('Error creating property:', error);
+      setSnackbarMessage('Error creating property. Please try again.');
+      setSnackbarOpen(true);
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
-  if (!propertyType) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Alert severity="error">
-          No property type selected. Please go back and select a property type first.
-        </Alert>
-        <Button 
-          startIcon={<ArrowBackIcon />} 
-          onClick={() => navigate('/add-property')}
-          sx={{ mt: 2 }}
-        >
-          Back to Property Type Selection
-        </Button>
-      </Container>
-    );
-  }
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', gap: 2 }}>
-        <IconButton onClick={() => navigate('/add-property')}>
-          <ArrowBackIcon />
-        </IconButton>
-        <Typography variant="h4" component="h1">
-          Add {propertyType} Details
-        </Typography>
-      </Box>
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+          <IconButton onClick={handleBackToPropertySelection} sx={{ mr: 2 }}>
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: theme.textPrimary }}>
+            Add {propertyType} Details
+          </Typography>
+        </Box>
 
-      <form onSubmit={handleSubmit(onSubmit)}>
-        <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Property Information
-                </Typography>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Controller
-                      name="unitType"
-                      control={control}
-                      render={({ field }) => (
-                        <FormControl fullWidth error={!!errors.unitType}>
-                          <InputLabel>
-                            <RequiredFieldLabel required>Unit Type</RequiredFieldLabel>
-                          </InputLabel>
-                          <Select {...field} label="Unit Type *">
-                            {unitOptions.map((option) => (
-                              <MenuItem key={option.value} value={option.value}>
-                                {option.label}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                          {errors.unitType && (
-                            <Typography variant="caption" color="error">
-                              {errors.unitType.message}
-                            </Typography>
-                          )}
-                        </FormControl>
-                      )}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <Controller
-                      name="price"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          fullWidth
-                          label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
-                          type="number"
-                          error={!!errors.price}
-                          helperText={errors.price?.message}
-                        />
-                      )}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12}>
-                    <Controller
-                      name="address"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          fullWidth
-                          label={<RequiredFieldLabel required>Property Address</RequiredFieldLabel>}
-                          multiline
-                          rows={2}
-                          error={!!errors.address}
-                          helperText={errors.address?.message}
-                        />
-                      )}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12}>
-                    <Controller
-                      name="description"
-                      control={control}
-                      render={({ field }) => (
-                        <TextField
-                          {...field}
-                          fullWidth
-                          label={<RequiredFieldLabel required>Description</RequiredFieldLabel>}
-                          multiline
-                          rows={4}
-                          error={!!errors.description}
-                          helperText={errors.description?.message}
-                          placeholder="Describe your property in detail..."
-                        />
-                      )}
-                    />
-                  </Grid>
+        <form onSubmit={handleSubmit(onSubmit)}>
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Property Information
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth>
+                    <InputLabel>Unit Type *</InputLabel>
+                    <Select
+                      value={watch('unitType')}
+                      onChange={(e) => setValue('unitType', e.target.value)}
+                      error={!!errors.unitType}
+                    >
+                      {unitOptions.map((option) => (
+                        <MenuItem key={option.label} value={option.label}>
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
                 </Grid>
-              </CardContent>
-            </Card>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
+                    variant="outlined"
+                    type="number"
+                    {...register('price')}
+                    error={!!errors.price}
+                    helperText={errors.price?.message}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label={<RequiredFieldLabel required>Property Address</RequiredFieldLabel>}
+                    variant="outlined"
+                    {...register('address')}
+                    error={!!errors.address}
+                    helperText={errors.address?.message}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label={<RequiredFieldLabel required>Description</RequiredFieldLabel>}
+                    variant="outlined"
+                    {...register('description')}
+                    error={!!errors.description}
+                    helperText={errors.description?.message}
+                  />
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
 
-            <Card sx={{ mt: 3 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Property Details
-                </Typography>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Property Details
+              </Typography>
+              <Grid container spacing={3}>
+                {Object.entries(facilitiesValue).map(([facility, count]) => (
+                  <Grid item xs={12} sm={6} md={4} key={facility}>
                     <FacilityCounter
-                      facility="Bedrooms"
-                      count={bedrooms}
-                      onIncrement={() => setBedrooms(prev => prev + 1)}
-                      onDecrement={() => setBedrooms(prev => Math.max(0, prev - 1))}
+                      facility={facility}
+                      count={count || 0}
+                      onIncrement={() => updateFacilityCount(facility, true)}
+                      onDecrement={() => updateFacilityCount(facility, false)}
+                      error={errors.facilities?.[facility]}
+                      required={facility === 'Bedroom' || facility === 'Bathroom'}
                     />
                   </Grid>
+                ))}
+              </Grid>
+            </CardContent>
+          </Card>
 
-                  <Grid item xs={12} sm={6}>
-                    <FacilityCounter
-                      facility="Bathrooms"
-                      count={bathrooms}
-                      onIncrement={() => setBathrooms(prev => prev + 1)}
-                      onDecrement={() => setBathrooms(prev => Math.max(0, prev - 1))}
-                    />
-                  </Grid>
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Availability
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <DatePicker
+                    label={<RequiredFieldLabel required>Available From</RequiredFieldLabel>}
+                    value={watch('availableFrom')}
+                    onChange={(date) => setValue('availableFrom', date)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        fullWidth
+                        error={!!errors.availableFrom}
+                        helperText={errors.availableFrom?.message}
+                      />
+                    )}
+                  />
                 </Grid>
-              </CardContent>
-            </Card>
-
-            <Card sx={{ mt: 3 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Availability
-                </Typography>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Controller
-                      name="availableFrom"
-                      control={control}
-                      render={({ field }) => (
-                        <LocalizationProvider dateAdapter={AdapterDayjs}>
-                          <DatePicker
-                            {...field}
-                            label={<RequiredFieldLabel required>Available From</RequiredFieldLabel>}
-                            slotProps={{
-                              textField: {
-                                fullWidth: true,
-                                error: !!errors.availableFrom,
-                                helperText: errors.availableFrom?.message
-                              }
-                            }}
-                            minDate={dayjs()}
-                          />
-                        </LocalizationProvider>
-                      )}
-                    />
-                  </Grid>
-
-                  <Grid item xs={12} sm={6}>
-                    <Controller
-                      name="availableTo"
-                      control={control}
-                      render={({ field }) => (
-                        <LocalizationProvider dateAdapter={AdapterDayjs}>
-                          <DatePicker
-                            {...field}
-                            label="Available Until (Optional)"
-                            slotProps={{
-                              textField: {
-                                fullWidth: true,
-                                error: !!errors.availableTo,
-                                helperText: errors.availableTo?.message || 'Leave empty for no end date'
-                              }
-                            }}
-                            minDate={watch('availableFrom') ? dayjs(watch('availableFrom')).add(1, 'day') : dayjs()}
-                          />
-                        </LocalizationProvider>
-                      )}
-                    />
-                  </Grid>
+                <Grid item xs={12} sm={6}>
+                  <DatePicker
+                    label="Available Until (Optional)"
+                    value={watch('availableTo')}
+                    onChange={(date) => setValue('availableTo', date)}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        fullWidth
+                        error={!!errors.availableTo}
+                        helperText={errors.availableTo?.message || "Leave empty for no end date"}
+                      />
+                    )}
+                  />
                 </Grid>
-              </CardContent>
-            </Card>
+              </Grid>
+            </CardContent>
+          </Card>
 
-            <Card sx={{ mt: 3 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  <RequiredFieldLabel required>Amenities</RequiredFieldLabel>
-                </Typography>
-
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                  {availableAmenities.map((amenity) => (
-                    <Chip
-                      key={amenity}
-                      label={amenity}
-                      onClick={() => toggleAmenity(amenity)}
-                      color={selectedAmenities.includes(amenity) ? 'primary' : 'default'}
-                      variant={selectedAmenities.includes(amenity) ? 'filled' : 'outlined'}
-                    />
-                  ))}
-                </Box>
-
-                <Button
-                  variant="outlined"
-                  onClick={() => setCustomAmenityDialog(true)}
-                  startIcon={<AddIcon />}
-                >
-                  Add Custom Amenity
-                </Button>
-
-                {selectedAmenities.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2">Selected Amenities:</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                      {selectedAmenities.map((amenity) => (
-                        <Chip
-                          key={amenity}
-                          label={amenity}
-                          onDelete={() => toggleAmenity(amenity)}
-                          color="primary"
-                        />
-                      ))}
-                    </Box>
-                  </Box>
-                )}
-
-                {errors.amenities && (
-                  <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
-                    {errors.amenities.message}
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card sx={{ mt: 3 }}>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  <RequiredFieldLabel required>Facilities</RequiredFieldLabel>
-                </Typography>
-
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                  {availableFacilities.map((facility) => (
-                    <Chip
-                      key={facility}
-                      label={facility}
-                      onClick={() => toggleFacility(facility)}
-                      color={selectedFacilities.includes(facility) ? 'primary' : 'default'}
-                      variant={selectedFacilities.includes(facility) ? 'filled' : 'outlined'}
-                    />
-                  ))}
-                </Box>
-
-                <Button
-                  variant="outlined"
-                  onClick={() => setCustomFacilityDialog(true)}
-                  startIcon={<AddIcon />}
-                >
-                  Add Custom Facility
-                </Button>
-
-                {selectedFacilities.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2">Selected Facilities:</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
-                      {selectedFacilities.map((facility) => (
-                        <Chip
-                          key={facility}
-                          label={facility}
-                          onDelete={() => toggleFacility(facility)}
-                          color="primary"
-                        />
-                      ))}
-                    </Box>
-                  </Box>
-                )}
-
-                {errors.facilities && (
-                  <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block' }}>
-                    {errors.facilities.message}
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} md={4}>
-            <Card>
-              <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  Property Images
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Upload high-quality images of your property (Required)
-                </Typography>
-
-                <ImageUpload
-                  onUpload={handleImageUpload}
-                  maxFiles={10}
-                  maxFileSize={10 * 1024 * 1024}
-                />
-
-                {uploadedImages.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                      Uploaded Images ({uploadedImages.length}):
-                    </Typography>
-                    <Grid container spacing={1}>
-                      {uploadedImages.map((image, index) => (
-                        <Grid item xs={6} key={index}>
-                          <Box
-                            sx={{
-                              position: 'relative',
-                              border: '1px solid',
-                              borderColor: 'divider',
-                              borderRadius: 1,
-                              overflow: 'hidden'
-                            }}
-                          >
-                            <Box
-                              component="img"
-                              src={image.url || image}
-                              alt={`Property ${index + 1}`}
-                              sx={{
-                                width: '100%',
-                                height: 80,
-                                objectFit: 'cover'
-                              }}
-                            />
-                            <IconButton
-                              size="small"
-                              onClick={() => handleRemoveImage(index)}
-                              sx={{
-                                position: 'absolute',
-                                top: 4,
-                                right: 4,
-                                backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                                '&:hover': {
-                                  backgroundColor: 'rgba(255, 255, 255, 0.9)'
-                                }
-                              }}
-                            >
-                              <RemoveIcon fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        </Grid>
-                      ))}
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Amenities
+              </Typography>
+              {Object.keys(amenitiesValue)?.length > 0 && (
+                <Grid container spacing={2} sx={{ mb: 3 }}>
+                  {Object.entries(amenitiesValue).map(([amenity, quantity]) => (
+                    <Grid item xs={12} sm={6} md={4} key={amenity}>
+                      <AmenityQuantitySelector
+                        amenity={amenity}
+                        quantity={quantity}
+                        onQuantityChange={(newQuantity) => updateAmenityQuantity(amenity, newQuantity)}
+                        onRemove={() => removeAmenity(amenity)}
+                      />
                     </Grid>
-                  </Box>
-                )}
-              </CardContent>
-            </Card>
+                  ))}
+                </Grid>
+              )}
 
-            <Card sx={{ mt: 3 }}>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                <FormControl sx={{ minWidth: 250 }}>
+                  <InputLabel>Add Custom Amenity</InputLabel>
+                  <Select
+                    value={selectedAmenityToAdd}
+                    onChange={(e) => setSelectedAmenityToAdd(e.target.value)}
+                    label="Add Custom Amenity"
+                  >
+                    {getAvailableAmenitiesForDropdown().map((amenity) => (
+                      <MenuItem key={amenity} value={amenity}>
+                        {amenity}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={addAmenity}
+                  disabled={!selectedAmenityToAdd}
+                >
+                  Add
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Facilities
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {availableFacilities.map((facility) => (
+                  <Chip
+                    key={facility}
+                    label={facility}
+                    clickable
+                    variant={selectedFacilities.includes(facility) ? "filled" : "outlined"}
+                    color={selectedFacilities.includes(facility) ? "primary" : "default"}
+                    onClick={() => handleFacilityToggle(facility)}
+                  />
+                ))}
+              </Box>
+            </CardContent>
+          </Card>
+
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Property Images
+              </Typography>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Upload high-quality images of your property (Required)
+              </Typography>
+              <ImageUpload onUpload={handleImageUpload} />
+            </CardContent>
+          </Card>
+
+          {(propertyType === 'Rooms' || watch('unitType') === 'Shared Room') && (
+            <Card sx={{ mb: 4 }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom>
-                  Submit Property
+                  Roommate Details
                 </Typography>
-
-                {submitError && (
-                  <Alert severity="error" sx={{ mb: 2 }}>
-                    {submitError}
-                  </Alert>
-                )}
-
-                {submitSuccess && (
-                  <Alert severity="success" sx={{ mb: 2 }} icon={<CheckCircleIcon />}>
-                    Property submitted successfully! Redirecting to dashboard...
-                  </Alert>
-                )}
-
-                <Button
-                  type="submit"
-                  variant="contained"
-                  fullWidth
-                  size="large"
-                  disabled={isSubmitting}
-                  startIcon={isSubmitting ? <CircularProgress size={20} /> : <CheckCircleIcon />}
+                {roommateFields.map((item, index) => (
+                  <Accordion key={item.id} sx={{ mb: 2 }}>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography>
+                        Roommate {index + 1}
+                        {roommateFields.length > 1 && (
+                          <IconButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeRoommate(index);
+                            }}
+                            size="small"
+                            color="error"
+                            sx={{ ml: 2 }}
+                          >
+                            <RemoveIcon />
+                          </IconButton>
+                        )}
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            fullWidth
+                            label="Occupation"
+                            variant="outlined"
+                            {...register(`roommates.${index}.occupation`)}
+                            error={!!errors.roommates?.[index]?.occupation}
+                            helperText={errors.roommates?.[index]?.occupation?.message}
+                          />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField
+                            fullWidth
+                            label="Field/Industry"
+                            variant="outlined"
+                            {...register(`roommates.${index}.field`)}
+                            error={!!errors.roommates?.[index]?.field}
+                            helperText={errors.roommates?.[index]?.field?.message}
+                          />
+                        </Grid>
+                      </Grid>
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
+                <Button 
+                  onClick={() => appendRoommate({ occupation: '', field: '' })} 
+                  startIcon={<AddIcon />}
+                  variant="outlined"
+                  sx={{ mt: 2 }}
                 >
-                  {isSubmitting ? 'Adding Property...' : 'Add Property'}
+                  Add Roommate
                 </Button>
-
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                  Your property will be reviewed before being published
-                </Typography>
               </CardContent>
             </Card>
-          </Grid>
-        </Grid>
-      </form>
+          )}
 
-      <Dialog
-        open={customAmenityDialog}
-        onClose={() => setCustomAmenityDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Add Custom Amenity</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            label="Amenity Name"
-            value={customAmenityText}
-            onChange={(e) => setCustomAmenityText(e.target.value)}
-            sx={{ mt: 1 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCustomAmenityDialog(false)}>Cancel</Button>
-          <Button onClick={addCustomAmenity} variant="contained">Add</Button>
-        </DialogActions>
-      </Dialog>
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                House Rules (Optional)
+              </Typography>
+              {ruleFields.map((item, index) => (
+                <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+                  <TextField
+                    fullWidth
+                    label={`Rule ${index + 1}`}
+                    variant="outlined"
+                    placeholder="e.g., No smoking, No pets, Quiet hours after 10 PM..."
+                    {...register(`rules.${index}`)}
+                    error={!!errors.rules?.[index]}
+                    helperText={errors.rules?.[index]?.message}
+                  />
+                  <IconButton
+                    onClick={() => removeRule(index)}
+                    color="error"
+                    disabled={ruleFields.length === 1}
+                  >
+                    <RemoveIcon />
+                  </IconButton>
+                </Box>
+              ))}
+              <Button
+                onClick={() => appendRule('')}
+                startIcon={<AddIcon />}
+                variant="outlined"
+                sx={{ mt: 1 }}
+              >
+                Add Rule
+              </Button>
+            </CardContent>
+          </Card>
 
-      <Dialog
-        open={customFacilityDialog}
-        onClose={() => setCustomFacilityDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Add Custom Facility</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            label="Facility Name"
-            value={customFacilityText}
-            onChange={(e) => setCustomFacilityText(e.target.value)}
-            sx={{ mt: 1 }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCustomFacilityDialog(false)}>Cancel</Button>
-          <Button onClick={addCustomFacility} variant="contained">Add</Button>
-        </DialogActions>
-      </Dialog>
+          <Card sx={{ mb: 4 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Contract Policy
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                label={<RequiredFieldLabel required>Contract Policy</RequiredFieldLabel>}
+                variant="outlined"
+                placeholder="Describe your rental terms, lease duration, security deposit requirements, payment terms, etc."
+                {...register('contractPolicy')}
+                error={!!errors.contractPolicy}
+                helperText={errors.contractPolicy?.message}
+              />
+            </CardContent>
+          </Card>
 
-      <AppSnackbar
-        open={snackbarOpen}
-        message={snackbarMessage}
-        severity={snackbarSeverity}
-        onClose={() => setSnackbarOpen(false)}
-      />
-    </Container>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Submit Property
+              </Typography>
+              <Button
+                type="submit"
+                variant="contained"
+                fullWidth
+                disabled={loading}
+                sx={{
+                  py: 2,
+                  backgroundColor: theme.primary,
+                  '&:hover': { backgroundColor: theme.secondary }
+                }}
+              >
+                {loading ? 'Adding Property...' : 'Add Property'}
+              </Button>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1, textAlign: 'center' }}>
+                Your property will be reviewed before being published
+              </Typography>
+            </CardContent>
+          </Card>
+        </form>
+
+        {snackbarOpen && (
+          <Alert
+            severity={snackbarMessage.includes('Error') ? 'error' : 'success'}
+            onClose={handleSnackbarClose}
+            sx={{ mt: 2 }}
+          >
+            {snackbarMessage}
+          </Alert>
+        )}
+      </Container>
+    </LocalizationProvider>
   );
 };
 

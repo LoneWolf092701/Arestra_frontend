@@ -1,358 +1,517 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card,
-  CardMedia,
   CardContent,
-  CardActions,
+  CardMedia,
   Typography,
-  Button,
   Box,
   Chip,
-  Rating,
-  Tooltip,
-  IconButton
+  IconButton,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  Grid,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  Divider
 } from '@mui/material';
 import {
   Visibility as VisibilityIcon,
   Edit as EditIcon,
+  Delete as DeleteIcon,
   LocationOn as LocationIcon,
-  Hotel as HotelIcon,
+  CalendarToday as CalendarIcon,
+  Home as HomeIcon,
   Bathtub as BathtubIcon,
-  Star as StarIcon,
-  TrendingUp as TrendingUpIcon,
-  Schedule as ScheduleIcon,
-  CheckCircle as CheckCircleIcon,
-  CalendarToday as CalendarTodayIcon,
-  Block as BlockIcon,
-  Info as InfoIcon
+  Kitchen as KitchenIcon,
+  LocalParking as ParkingIcon,
+  Person as PersonIcon,
+  Work as WorkIcon,
+  Rule as RuleIcon,
+  Policy as PolicyIcon,
+  Info as InfoIcon,
+  ExpandMore as ExpandMoreIcon,
+  Close as CloseIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
-import Room from '../../assets/images/Room.jpg';
-
-const safeParse = (str) => {
-  try {
-    return typeof str === 'string' ? JSON.parse(str) : (str || []);
-  } catch (error) {
-    return [];
-  }
-};
-
-const getAvailabilityDetails = (property) => {
-  const status = property.availability_status || 'available';
-  const pendingRequests = property.pending_requests || 0;
-  const confirmedBookings = property.confirmed_bookings || 0;
-
-  const statusConfig = {
-    available: {
-      color: 'success',
-      icon: <CheckCircleIcon />,
-      label: 'Available',
-      message: 'Ready for booking',
-      severity: 'success'
-    },
-    high_demand: {
-      color: 'warning',
-      icon: <TrendingUpIcon />,
-      label: 'High Demand',
-      message: `${pendingRequests} guest${pendingRequests > 1 ? 's' : ''} interested`,
-      severity: 'warning'
-    },
-    partially_occupied: {
-      color: 'info',
-      icon: <ScheduleIcon />,
-      label: 'Partially Booked',
-      message: `${confirmedBookings} confirmed booking${confirmedBookings > 1 ? 's' : ''}`,
-      severity: 'info'
-    },
-    coming_soon: {
-      color: 'default',
-      icon: <CalendarTodayIcon />,
-      label: 'Coming Soon',
-      message: property.available_from ? `Available from ${new Date(property.available_from).toLocaleDateString()}` : 'Available soon',
-      severity: 'info'
-    },
-    expired: {
-      color: 'error',
-      icon: <BlockIcon />,
-      label: 'Expired',
-      message: 'Availability period expired',
-      severity: 'error'
-    },
-    unavailable: {
-      color: 'error',
-      icon: <BlockIcon />,
-      label: 'Unavailable',
-      message: 'Currently not available',
-      severity: 'error'
-    }
-  };
-
-  return statusConfig[status] || statusConfig.available;
-};
 
 const PropertyCard = ({ 
   property, 
-  variant = 'standard',
-  showActions = true,
-  showEditButton = false,
-  showAvailabilityStatus = true,
-  onView,
-  onEdit,
-  onBook,
-  userRole
+  onView, 
+  onEdit, 
+  onDelete, 
+  showActions = true, 
+  variant = 'default',
+  userRole = 'user'
 }) => {
-  const navigate = useNavigate();
-  
-  if (!property) return null;
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
-  const amenities = safeParse(property.amenities);
-  const facilities = safeParse(property.facilities);
-  const images = safeParse(property.images);
-  
-  const availabilityDetails = getAvailabilityDetails(property);
-  const canBook = ['available', 'high_demand', 'partially_occupied'].includes(property.availability_status);
-
-  const currentUserRole = userRole || localStorage.getItem('userRole');
-
-  const handleView = (e) => {
-    e.stopPropagation();
-    if (onView) {
-      onView(property.id);
-    } else {
-      navigate(`/property/${property.id}`);
-    }
-  };
-
-  const handleEdit = (e) => {
-    e.stopPropagation();
-    if (onEdit) {
-      onEdit(property.id);
-    } else {
-      switch (currentUserRole) {
-        case 'propertyowner':
-          navigate(`/updateproperty/${property.id}`);
-          break;
-        case 'admin':
-          console.warn('Admin edit functionality not implemented');
-          break;
-        default:
-          console.warn('Edit not allowed for this role');
+  const parseJsonField = (field) => {
+    if (!field) return null;
+    if (typeof field === 'string') {
+      try {
+        return JSON.parse(field);
+      } catch {
+        return null;
       }
     }
+    return field;
   };
 
-  const handleBook = (e) => {
-    e.stopPropagation();
-    if (onBook) {
-      onBook(property.id);
-    } else {
-      switch (currentUserRole) {
-        case 'user':
-          navigate(`/user-booking/${property.id}`);
-          break;
-        case 'propertyowner':
-          console.warn('Property owners cannot book their own properties');
-          break;
-        case 'admin':
-          console.warn('Admin booking functionality not implemented');
-          break;
-        default:
-          navigate(`/login`);
-      }
+  const amenities = parseJsonField(property.amenities);
+  const facilities = parseJsonField(property.facilities);
+  const rules = parseJsonField(property.rules);
+  const roommates = parseJsonField(property.roommates);
+  const contractPolicy = property.contract_policy || property.contractPolicy;
+  const images = parseJsonField(property.images);
+
+  const primaryImage = images && images.length > 0 ? 
+    (typeof images[0] === 'string' ? images[0] : images[0]?.url || images[0]?.path) : 
+    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80';
+
+  const handleDetailsOpen = () => {
+    setDetailsOpen(true);
+  };
+
+  const handleDetailsClose = () => {
+    setDetailsOpen(false);
+  };
+
+  const getFacilityIcon = (facility) => {
+    switch (facility.toLowerCase()) {
+      case 'bedroom':
+        return <HomeIcon fontSize="small" />;
+      case 'bathroom':
+        return <BathtubIcon fontSize="small" />;
+      case 'kitchen':
+        return <KitchenIcon fontSize="small" />;
+      case 'parkingspace':
+        return <ParkingIcon fontSize="small" />;
+      default:
+        return <HomeIcon fontSize="small" />;
     }
   };
 
-  const handleCardClick = () => {
-    if (variant !== 'compact') {
-      handleView({ stopPropagation: () => {} });
+  const formatFacilityName = (facility) => {
+    switch (facility) {
+      case 'Bedroom':
+        return 'Bedrooms';
+      case 'Bathroom':
+        return 'Bathrooms';
+      case 'Kitchen':
+        return 'Kitchens';
+      case 'LivingRoom':
+        return 'Living Rooms';
+      case 'DiningRoom':
+        return 'Dining Rooms';
+      case 'ParkingSpace':
+        return 'Parking Spaces';
+      default:
+        return facility;
     }
   };
-
-  const primaryImage = images && images.length > 0 ? images[0] : Room;
-  const bedroomCount = facilities?.Bedroom || facilities?.bedroom || 0;
-  const bathroomCount = facilities?.Bathroom || facilities?.bathroom || 0;
-  const price = property.price || 0;
-  const rating = parseFloat(property.rating) || 0;
-  const reviewCount = parseInt(property.total_ratings) || 0;
 
   return (
-    <Card 
-      sx={{ 
-        height: '100%', 
-        display: 'flex', 
-        flexDirection: 'column',
-        transition: 'all 0.3s ease-in-out',
-        cursor: variant === 'compact' ? 'default' : 'pointer',
-        '&:hover': {
-          transform: variant === 'compact' ? 'none' : 'translateY(-4px)',
-          boxShadow: variant === 'compact' ? 1 : 6,
-          '& .property-image': {
-            transform: 'scale(1.05)'
+    <>
+      <Card 
+        sx={{ 
+          height: '100%', 
+          display: 'flex', 
+          flexDirection: 'column',
+          transition: 'all 0.3s ease',
+          '&:hover': {
+            transform: 'translateY(-4px)',
+            boxShadow: 4
           }
-        },
-        position: 'relative'
-      }}
-      onClick={handleCardClick}
-    >
-      <Box sx={{ position: 'relative', overflow: 'hidden' }}>
+        }}
+      >
         <CardMedia
-          className="property-image"
           component="img"
-          height={variant === 'compact' ? 140 : variant === 'expanded' ? 220 : 180}
+          height="200"
           image={primaryImage}
-          alt={property.property_type || 'Property'}
-          sx={{ 
-            transition: 'transform 0.3s ease-in-out',
-            objectFit: 'cover'
-          }}
+          alt={property.property_type}
+          sx={{ objectFit: 'cover' }}
         />
         
-        {showAvailabilityStatus && (
-          <Chip
-            icon={availabilityDetails.icon}
-            label={availabilityDetails.label}
-            color={availabilityDetails.color}
-            size="small"
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              fontWeight: 'bold',
-              backdropFilter: 'blur(10px)',
-              backgroundColor: 'rgba(255, 255, 255, 0.9)'
-            }}
-          />
-        )}
+        <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+            <Typography variant="h6" component="h3" sx={{ fontWeight: 600 }}>
+              {property.property_type} - {property.unit_type}
+            </Typography>
+            {property.approval_status && (
+              <Chip 
+                label={property.approval_status} 
+                size="small"
+                color={
+                  property.approval_status === 'approved' ? 'success' :
+                  property.approval_status === 'pending' ? 'warning' : 'error'
+                }
+              />
+            )}
+          </Box>
 
-        {property.property_type && (
-          <Chip
-            label={property.property_type}
-            size="small"
-            sx={{
-              position: 'absolute',
-              top: 8,
-              left: 8,
-              fontWeight: 'bold',
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              color: 'white'
-            }}
-          />
-        )}
-      </Box>
-
-      <CardContent sx={{ flexGrow: 1, p: variant === 'compact' ? 1.5 : 2 }}>
-        <Typography 
-          variant={variant === 'compact' ? 'subtitle1' : 'h6'} 
-          component="h3" 
-          gutterBottom
-          sx={{ 
-            fontWeight: 'bold',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap'
-          }}
-        >
-          {property.unit_type || property.property_type}
-        </Typography>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-          <LocationIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-          <Typography 
-            variant="body2" 
-            color="text.secondary"
-            sx={{ 
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}
-          >
-            {property.address || 'Location not specified'}
-          </Typography>
-        </Box>
-
-        {rating > 0 && (
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <Rating value={rating} precision={0.1} size="small" readOnly />
-            <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-              {rating.toFixed(1)} ({reviewCount} review{reviewCount !== 1 ? 's' : ''})
+            <LocationIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {property.address}
             </Typography>
           </Box>
-        )}
 
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-          {bedroomCount > 0 && (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <HotelIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">
-                {bedroomCount} bedroom{bedroomCount > 1 ? 's' : ''}
-              </Typography>
-            </Box>
-          )}
-          
-          {bathroomCount > 0 && (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <BathtubIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">
-                {bathroomCount} bathroom{bathroomCount > 1 ? 's' : ''}
-              </Typography>
-            </Box>
-          )}
-        </Box>
-
-        {amenities && amenities.length > 0 && variant !== 'compact' && (
-          <Box sx={{ mb: 1 }}>
-            <Typography variant="body2" color="text.secondary">
-              {amenities.length} amenitie{amenities.length > 1 ? 's' : ''} available
-            </Typography>
-          </Box>
-        )}
-
-        <Typography variant="h6" color="primary.main" sx={{ fontWeight: 'bold', mt: 'auto' }}>
-          LKR {parseFloat(price).toLocaleString()}/month
-        </Typography>
-
-        {showAvailabilityStatus && availabilityDetails.message && (
-          <Typography variant="caption" color={`${availabilityDetails.color}.main`} sx={{ fontWeight: 'medium' }}>
-            {availabilityDetails.message}
+          <Typography variant="h5" color="primary" sx={{ fontWeight: 'bold', mb: 2 }}>
+            LKR {property.price?.toLocaleString() || 'N/A'}/month
           </Typography>
-        )}
-      </CardContent>
 
-      {showActions && (
-        <CardActions sx={{ pt: 0, px: variant === 'compact' ? 1.5 : 2, pb: variant === 'compact' ? 1.5 : 2 }}>
-          <Button 
-            size="small" 
-            startIcon={<VisibilityIcon />}
-            onClick={handleView}
-            disabled={property.availability_status === 'unavailable'}
-          >
-            View
-          </Button>
-          
-          {showEditButton && currentUserRole === 'propertyowner' && (
-            <Button 
-              size="small" 
-              startIcon={<EditIcon />}
-              onClick={handleEdit}
-            >
-              Edit
+          {facilities && (
+            <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+              {Object.entries(facilities).map(([facility, count]) => {
+                if (count > 0) {
+                  return (
+                    <Box key={facility} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      {getFacilityIcon(facility)}
+                      <Typography variant="caption">
+                        {count} {formatFacilityName(facility)}
+                      </Typography>
+                    </Box>
+                  );
+                }
+                return null;
+              })}
+            </Box>
+          )}
+
+          {amenities && Object.keys(amenities).length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary">
+                Amenities:
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                {Object.entries(amenities).slice(0, 3).map(([amenity, quantity]) => {
+                  if (quantity > 0) {
+                    return (
+                      <Chip 
+                        key={amenity} 
+                        label={amenity} 
+                        size="small" 
+                        variant="outlined" 
+                      />
+                    );
+                  }
+                  return null;
+                })}
+                {Object.keys(amenities).length > 3 && (
+                  <Chip 
+                    label={`+${Object.keys(amenities).length - 3} more`} 
+                    size="small" 
+                    variant="outlined" 
+                  />
+                )}
+              </Box>
+            </Box>
+          )}
+
+          {rules && rules.length > 0 && (
+            <Box sx={{ mb: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <RuleIcon fontSize="small" />
+                {rules.length} House Rule{rules.length > 1 ? 's' : ''}
+              </Typography>
+            </Box>
+          )}
+
+          {roommates && roommates.length > 0 && (
+            <Box sx={{ mb: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <PersonIcon fontSize="small" />
+                {roommates.length} Roommate{roommates.length > 1 ? 's' : ''}
+              </Typography>
+            </Box>
+          )}
+
+          {contractPolicy && (
+            <Box sx={{ mb: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <PolicyIcon fontSize="small" />
+                Contract Policy Available
+              </Typography>
+            </Box>
+          )}
+
+          <Box sx={{ display: 'flex', alignItems: 'center', mt: 'auto', pt: 2 }}>
+            <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+            <Typography variant="caption" color="text.secondary">
+              Available from {property.available_from ? 
+                new Date(property.available_from).toLocaleDateString() : 
+                'Immediately'
+              }
+            </Typography>
+          </Box>
+
+          {showActions && (
+            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<VisibilityIcon />}
+                onClick={handleDetailsOpen}
+                fullWidth
+              >
+                View Details
+              </Button>
+              {(userRole === 'propertyowner' || userRole === 'admin') && onEdit && (
+                <IconButton
+                  onClick={() => onEdit(property)}
+                  color="primary"
+                  size="small"
+                >
+                  <EditIcon />
+                </IconButton>
+              )}
+              {(userRole === 'propertyowner' || userRole === 'admin') && onDelete && (
+                <IconButton
+                  onClick={() => onDelete(property)}
+                  color="error"
+                  size="small"
+                >
+                  <DeleteIcon />
+                </IconButton>
+              )}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Property Details Dialog */}
+      <Dialog
+        open={detailsOpen}
+        onClose={handleDetailsClose}
+        maxWidth="md"
+        fullWidth
+        scroll="paper"
+      >
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6">
+            {property.property_type} - {property.unit_type}
+          </Typography>
+          <IconButton onClick={handleDetailsClose}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        
+        <DialogContent dividers>
+          {/* Property Images */}
+          {images && images.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <CardMedia
+                component="img"
+                height="300"
+                image={primaryImage}
+                alt={property.property_type}
+                sx={{ objectFit: 'cover', borderRadius: 1 }}
+              />
+            </Box>
+          )}
+
+          {/* Basic Information */}
+          <Grid container spacing={2} sx={{ mb: 3 }}>
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary">Property Type</Typography>
+              <Typography variant="body1" fontWeight="medium">{property.property_type}</Typography>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Typography variant="body2" color="text.secondary">Unit Type</Typography>
+              <Typography variant="body1" fontWeight="medium">{property.unit_type}</Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="body2" color="text.secondary">Address</Typography>
+              <Typography variant="body1" fontWeight="medium">{property.address}</Typography>
+            </Grid>
+            <Grid item xs={12}>
+              <Typography variant="body2" color="text.secondary">Monthly Rent</Typography>
+              <Typography variant="h6" color="primary" fontWeight="bold">
+                LKR {property.price?.toLocaleString() || 'N/A'}
+              </Typography>
+            </Grid>
+            {property.description && (
+              <Grid item xs={12}>
+                <Typography variant="body2" color="text.secondary">Description</Typography>
+                <Typography variant="body1">{property.description}</Typography>
+              </Grid>
+            )}
+          </Grid>
+
+          <Divider sx={{ my: 2 }} />
+
+          {/* Facilities */}
+          {facilities && Object.keys(facilities).length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom>Property Details</Typography>
+              <Grid container spacing={2}>
+                {Object.entries(facilities).map(([facility, count]) => {
+                  if (count > 0) {
+                    return (
+                      <Grid item xs={6} sm={4} key={facility}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {getFacilityIcon(facility)}
+                          <Box>
+                            <Typography variant="h6" component="span">{count}</Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
+                              {formatFacilityName(facility)}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                    );
+                  }
+                  return null;
+                })}
+              </Grid>
+            </Box>
+          )}
+
+          {/* Amenities */}
+          {amenities && Object.keys(amenities).length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom>Amenities</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {Object.entries(amenities).map(([amenity, quantity]) => {
+                  if (quantity > 0) {
+                    return (
+                      <Chip
+                        key={amenity}
+                        label={quantity > 1 ? `${amenity} (${quantity})` : amenity}
+                        variant="outlined"
+                        color="primary"
+                      />
+                    );
+                  }
+                  return null;
+                })}
+              </Box>
+            </Box>
+          )}
+
+          {/* Roommate Details */}
+          {roommates && roommates.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PersonIcon />
+                Roommate Information
+              </Typography>
+              {roommates.map((roommate, index) => (
+                <Accordion key={index} sx={{ mb: 1 }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                    <Typography variant="subtitle1">Roommate {index + 1}</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <WorkIcon color="action" />
+                          <Box>
+                            <Typography variant="body2" color="text.secondary">Occupation</Typography>
+                            <Typography variant="body1" fontWeight="medium">
+                              {roommate.occupation || 'Not specified'}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={12} sm={6}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <WorkIcon color="action" />
+                          <Box>
+                            <Typography variant="body2" color="text.secondary">Field/Industry</Typography>
+                            <Typography variant="body1" fontWeight="medium">
+                              {roommate.field || 'Not specified'}
+                            </Typography>
+                          </Box>
+                        </Box>
+                      </Grid>
+                    </Grid>
+                  </AccordionDetails>
+                </Accordion>
+              ))}
+            </Box>
+          )}
+
+          {/* House Rules */}
+          {rules && rules.length > 0 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <RuleIcon />
+                House Rules
+              </Typography>
+              <List dense>
+                {rules.filter(rule => rule && rule.trim()).map((rule, index) => (
+                  <ListItem key={index} sx={{ py: 0.5 }}>
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      <InfoIcon sx={{ fontSize: 16, color: 'primary.main' }} />
+                    </ListItemIcon>
+                    <ListItemText 
+                      primary={
+                        <Typography variant="body2">{rule}</Typography>
+                      } 
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          )}
+
+          {/* Contract Policy */}
+          {contractPolicy && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <PolicyIcon />
+                Contract Policy
+              </Typography>
+              <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
+                {contractPolicy}
+              </Typography>
+            </Box>
+          )}
+
+          {/* Availability */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="h6" gutterBottom>Availability</Typography>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Available From</Typography>
+                <Typography variant="body1" fontWeight="medium">
+                  {property.available_from ? 
+                    new Date(property.available_from).toLocaleDateString() : 
+                    'Immediately'
+                  }
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Typography variant="body2" color="text.secondary">Available Until</Typography>
+                <Typography variant="body1" fontWeight="medium">
+                  {property.available_to ? 
+                    new Date(property.available_to).toLocaleDateString() : 
+                    'No end date'
+                  }
+                </Typography>
+              </Grid>
+            </Grid>
+          </Box>
+        </DialogContent>
+
+        <DialogActions>
+          <Button onClick={handleDetailsClose}>Close</Button>
+          {onView && (
+            <Button variant="contained" onClick={() => { onView(property); handleDetailsClose(); }}>
+              View Full Details
             </Button>
           )}
-          
-          {canBook && !showEditButton && currentUserRole === 'user' && (
-            <Button 
-              size="small" 
-              variant="contained"
-              color="primary"
-              onClick={handleBook}
-              sx={{ ml: 'auto' }}
-            >
-              {property.availability_status === 'high_demand' ? 'Book Quick!' : 'Book Now'}
-            </Button>
-          )}
-        </CardActions>
-      )}
-    </Card>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };
 
