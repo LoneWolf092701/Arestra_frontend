@@ -1,1058 +1,1199 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Container,
   Typography,
-  Box,
-  Button,
+  Grid,
   Card,
   CardContent,
-  Grid,
-  IconButton,
+  CardMedia,
+  Button,
+  Box,
+  Chip,
   Rating,
-  TextField,
+  IconButton,
+  Alert,
+  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  TextField,
   Divider,
-  CircularProgress,
-  Skeleton,
-  Paper,
   Avatar,
+  List,
+  ListItem,
+  ListItemText,
+  Tooltip,
+  Breadcrumbs,
+  Link,
+  Paper,
+  Badge,
+  LinearProgress,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
   Table,
   TableBody,
   TableCell,
   TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  LinearProgress,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
+  TableRow
 } from '@mui/material';
 import {
   Favorite as FavoriteIcon,
   FavoriteBorder as FavoriteBorderIcon,
-  WhatsApp as WhatsAppIcon,
-  Login as LoginIcon,
-  Send as SendIcon,
   LocationOn as LocationOnIcon,
   Bed as BedIcon,
   Bathtub as BathtubIcon,
-  Home as HomeIcon,
-  People as PeopleIcon,
-  Person as PersonIcon,
-  CalendarToday as CalendarIcon,
-  AttachMoney as MoneyIcon,
-  SquareFoot as SquareFootIcon,
+  CalendarToday as CalendarTodayIcon,
   Visibility as VisibilityIcon,
+  Share as ShareIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon,
+  Business as BusinessIcon,
+  Home as HomeIcon,
   Star as StarIcon,
-  StarBorder as StarBorderIcon,
-  Event as EventIcon,
-  Description as DescriptionIcon,
+  NavigateNext as NavigateNextIcon,
+  ArrowBack as ArrowBackIcon,
+  ArrowForward as ArrowForwardIcon,
+  Report as ReportIcon,
+  BookOnline as BookOnlineIcon,
   ExpandMore as ExpandMoreIcon,
-  VerifiedUser as VerifiedUserIcon,
-  AccessTime as AccessTimeIcon,
-  Assignment as AssignmentIcon
+  CheckCircle as CheckCircleIcon,
+  Info as InfoIcon,
+  Schedule as ScheduleIcon,
+  SquareFoot as AreaIcon,
+  LocalParking as ParkingIcon,
+  Wifi as WifiIcon,
+  Kitchen as KitchenIcon,
+  AcUnit as AcIcon,
+  Tv as TvIcon,
+  LocalLaundryService as LaundryIcon,
+  Security as SecurityIcon,
+  Pool as PoolIcon,
+  FitnessCenter as GymIcon,
+  Balcony as BalconyIcon,
+  Yard as GardenIcon
 } from '@mui/icons-material';
-import { useParams, useNavigate } from 'react-router-dom';
-import { getPropertyById, incrementPropertyViews } from '../../api/propertyApi';
+import { getPublicPropertyById } from '../../api/propertyApi';
 import { 
-  setFavouriteStatus, 
-  isFavouriteStatus, 
-  submitComplaint,
+  addToFavorites, 
+  removeFromFavorites, 
+  checkFavoriteStatus,
   submitPropertyRating,
-  getPropertyRating 
+  getUserPropertyRating,
+  getPropertyRating,
+  submitReport,
+  recordPropertyView,
+  getPropertyStatistics
 } from '../../api/userInteractionApi';
-import { isAuthenticated } from '../../utils/auth';
 import { useTheme } from '../../contexts/ThemeContext';
-import AppSnackbar, { useSnackbar } from '../../components/common/AppSnackbar';
+import { isAuthenticated } from '../../utils/auth';
+import AppSnackbar from '../../components/common/AppSnackbar';
 
-const LoginRequiredDialog = ({ open, onClose, onLogin, action }) => (
-  <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-    <DialogTitle sx={{ textAlign: 'center', pb: 1 }}>
-      Login Required
-    </DialogTitle>
-    <DialogContent>
-      <Box sx={{ textAlign: 'center', py: 2 }}>
-        <LoginIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-        <Typography variant="h6" gutterBottom>
-          Please login to {action}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Don't worry, you'll be brought back to this property after logging in.
-        </Typography>
-      </Box>
-    </DialogContent>
-    <DialogActions>
-      <Button onClick={onClose}>Cancel</Button>
-      <Button variant="contained" onClick={onLogin}>
-        Login
-      </Button>
-    </DialogActions>
-  </Dialog>
-);
+// Enhanced Image carousel component for property images
+const ImageCarousel = ({ images, propertyTitle }) => {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  
+  // Parse images safely - handle both JSON string and array formats
+  const imageArray = React.useMemo(() => {
+    if (!images) return ['/placeholder-property.jpg'];
+    try {
+      const parsed = typeof images === 'string' ? JSON.parse(images) : images;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : ['/placeholder-property.jpg'];
+    } catch (error) {
+      console.warn('Error parsing images:', error);
+      return ['/placeholder-property.jpg'];
+    }
+  }, [images]);
+
+  const nextImage = () => {
+    setCurrentImageIndex((prev) => (prev + 1) % imageArray.length);
+  };
+
+  const prevImage = () => {
+    setCurrentImageIndex((prev) => (prev - 1 + imageArray.length) % imageArray.length);
+  };
+
+  return (
+    <React.Fragment>
+      <Card sx={{ borderRadius: 3, overflow: 'hidden', position: 'relative' }}>
+        <CardMedia
+          component="img"
+          height="500"
+          image={imageArray[currentImageIndex]}
+          alt={`${propertyTitle} - Image ${currentImageIndex + 1}`}
+          sx={{ objectFit: 'cover', cursor: 'pointer' }}
+          onClick={() => setImageViewerOpen(true)}
+          onError={(e) => {
+            e.target.src = '/placeholder-property.jpg';
+          }}
+        />
+        
+        {/* Image counter badge */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 16,
+            right: 16,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            color: 'white',
+            px: 2,
+            py: 1,
+            borderRadius: 2,
+            fontSize: '0.875rem'
+          }}
+        >
+          {currentImageIndex + 1} / {imageArray.length}
+        </Box>
+        
+        {imageArray.length > 1 && (
+          <React.Fragment>
+            <IconButton
+              onClick={prevImage}
+              sx={{
+                position: 'absolute',
+                left: 16,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                color: 'white',
+                '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' }
+              }}
+            >
+              <ArrowBackIcon />
+            </IconButton>
+            
+            <IconButton
+              onClick={nextImage}
+              sx={{
+                position: 'absolute',
+                right: 16,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                color: 'white',
+                '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' }
+              }}
+            >
+              <ArrowForwardIcon />
+            </IconButton>
+            
+            {/* Thumbnail navigation */}
+            <Box
+              sx={{
+                position: 'absolute',
+                bottom: 16,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                display: 'flex',
+                gap: 1,
+                maxWidth: 'calc(100% - 32px)',
+                overflowX: 'auto',
+                '&::-webkit-scrollbar': { display: 'none' }
+              }}
+            >
+              {imageArray.map((image, index) => (
+                <Box
+                  key={index}
+                  onClick={() => setCurrentImageIndex(index)}
+                  sx={{
+                    width: 60,
+                    height: 40,
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    border: index === currentImageIndex ? '3px solid white' : '2px solid rgba(255,255,255,0.5)',
+                    transition: 'all 0.3s ease',
+                    flexShrink: 0
+                  }}
+                >
+                  <img
+                    src={image}
+                    alt={`Thumbnail ${index + 1}`}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover'
+                    }}
+                    onError={(e) => {
+                      e.target.src = '/placeholder-property.jpg';
+                    }}
+                  />
+                </Box>
+              ))}
+            </Box>
+          </React.Fragment>
+        )}
+      </Card>
+
+      {/* Full screen image viewer */}
+      <Dialog
+        open={imageViewerOpen}
+        onClose={() => setImageViewerOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { backgroundColor: 'rgba(0,0,0,0.9)' }
+        }}
+      >
+        <DialogContent sx={{ p: 0, position: 'relative' }}>
+          <img
+            src={imageArray[currentImageIndex]}
+            alt={`${propertyTitle} - Full view`}
+            style={{
+              width: '100%',
+              height: 'auto',
+              maxHeight: '90vh',
+              objectFit: 'contain'
+            }}
+          />
+          <IconButton
+            onClick={() => setImageViewerOpen(false)}
+            sx={{
+              position: 'absolute',
+              top: 16,
+              right: 16,
+              color: 'white',
+              backgroundColor: 'rgba(0,0,0,0.5)'
+            }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+        </DialogContent>
+      </Dialog>
+    </React.Fragment>
+  );
+};
+
+// Amenities icon mapping
+const getAmenityIcon = (amenity) => {
+  const iconMap = {
+    'WiFi': <WifiIcon />,
+    'TV': <TvIcon />,
+    'Air Conditioning': <AcIcon />,
+    'Kitchen': <KitchenIcon />,
+    'Washing Machine': <LaundryIcon />,
+    'Parking': <ParkingIcon />,
+    'Swimming Pool': <PoolIcon />,
+    'Gym': <GymIcon />,
+    'Security': <SecurityIcon />,
+    'Garden': <GardenIcon />,
+    'Balcony': <BalconyIcon />
+  };
+  return iconMap[amenity] || <CheckCircleIcon />;
+};
 
 const UserViewProperty = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { theme, isDark } = useTheme();
-  const { showSnackbar, snackbarProps } = useSnackbar();
-
-  // Property and user state
+  const { theme } = useTheme();
+  
+  // Property state
   const [property, setProperty] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState('');
+  const [propertyStats, setPropertyStats] = useState(null);
   
-  // User interaction states
-  const [isFavourite, setIsFavourite] = useState(false);
+  // User interaction state
+  const [isFavorite, setIsFavorite] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
-  const [userRating, setUserRating] = useState(0);
-  const [ratingSubmitting, setRatingSubmitting] = useState(false);
+  const [userRatingData, setUserRatingData] = useState({ has_rated: false, rating: null });
+  const [propertyRating, setPropertyRating] = useState(null);
   
-  // Booking states
-  const [checkInDate, setCheckInDate] = useState('');
-  const [checkOutDate, setCheckOutDate] = useState('');
-  
-  // UI states
+  // Dialog states
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
-  const [complaintText, setComplaintText] = useState('');
-  const [complaintSubmitting, setComplaintSubmitting] = useState(false);
-  const [loginRequiredDialogOpen, setLoginRequiredDialogOpen] = useState(false);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  
+  // Form states
+  const [userRating, setUserRating] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [submittingRating, setSubmittingRating] = useState(false);
+  const [reportCategory, setReportCategory] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
   const [loginAction, setLoginAction] = useState('');
+  
+  // Snackbar state
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
 
-  // Authentication checks
-  const authenticated = isAuthenticated();
-  const userRole = localStorage.getItem('userRole');
-  const isUser = userRole === 'user';
+  const isLoggedIn = isAuthenticated();
 
-  // Helper function to get image URL
-  const getImageUrl = (imagePath) => {
-    if (!imagePath) return '/placeholder-image.jpg';
-    if (imagePath.startsWith('http')) return imagePath;
-    return `${process.env.REACT_APP_API_URL || 'http://localhost:5000'}${imagePath}`;
+  // Safe JSON parsing function
+  const parseJsonSafely = (jsonString) => {
+    if (!jsonString) return [];
+    try {
+      return typeof jsonString === 'string' ? JSON.parse(jsonString) : jsonString;
+    } catch (error) {
+      console.warn('Error parsing JSON:', error);
+      return [];
+    }
   };
 
-  // Parse JSON safely
-  const safeParse = (jsonString, defaultValue = {}) => {
-  // Add debugging to see what we're actually receiving
-  console.log('SafeParse input:', jsonString);
-  console.log('SafeParse input type:', typeof jsonString);
-  
-  try {
-    // If it's already an object, return it as-is
-    if (typeof jsonString === 'object' && jsonString !== null) {
-      console.log('Input is already an object:', jsonString);
-      return jsonString;
-    }
-    
-    // If it's a string, try to parse it
-    if (typeof jsonString === 'string' && jsonString.trim() !== '') {
-      const parsed = JSON.parse(jsonString);
-      console.log('Successfully parsed JSON:', parsed);
-      return parsed;
-    }
-    
-    // If it's empty string, null, or undefined
-    console.log('Input is empty, null, or undefined, returning default:', defaultValue);
-    return defaultValue;
-    
-  } catch (error) {
-    console.error('JSON parse error:', error);
-    console.log('Returning default value:', defaultValue);
-    return defaultValue;
-  }
-};
+  // Format price function
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('en-LK', {
+      style: 'currency',
+      currency: 'LKR',
+      minimumFractionDigits: 0
+    }).format(price);
+  };
 
-  // Format date for display
+  // Format date function
   const formatDate = (dateString) => {
     if (!dateString) return 'Not specified';
-    try {
-      return new Date(dateString).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      });
-    } catch {
-      return 'Invalid date';
-    }
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
   };
 
-  // Format relative time (for created_at)
-  const formatRelativeTime = (dateString) => {
-    if (!dateString) return 'Unknown';
-    try {
-      const date = new Date(dateString);
-      const now = new Date();
-      const diffInDays = Math.floor((now - date) / (1000 * 60 * 60 * 24));
-      
-      if (diffInDays === 0) return 'Today';
-      if (diffInDays === 1) return 'Yesterday';
-      if (diffInDays < 30) return `${diffInDays} days ago`;
-      if (diffInDays < 365) return `${Math.floor(diffInDays / 30)} months ago`;
-      return `${Math.floor(diffInDays / 365)} years ago`;
-    } catch {
-      return 'Unknown';
-    }
-  };
-
-  // Memoized property details
-  const facilities = useMemo(() => safeParse(property?.facilities), [property]);
-  const amenities = useMemo(() => safeParse(property?.amenities, []), [property]);
-  const images = useMemo(() => safeParse(property?.images, []), [property]);
-  const ratingDistribution = useMemo(() => safeParse(property?.rating_distribution), [property]);
-  const roommates = useMemo(() => safeParse(property?.roommates), [property]);
-  const rules = useMemo(() => safeParse(property?.rules, []), [property]);
-  const billsInclusive = useMemo(() => safeParse(property?.bills_inclusive, []), [property]);
-
-  // Fetch property data and user interactions
+  // Load property data
   useEffect(() => {
-    const fetchPropertyData = async () => {
-      if (!id || isNaN(id)) {
-        setError('Invalid property ID');
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-
+    const loadProperty = async () => {
       try {
-        const propertyData = await getPropertyById(id);
+        setLoading(true);
+        setError('');
+        
+        // Fetch property details
+        const propertyData = await getPublicPropertyById(id);
         setProperty(propertyData);
         
-        // Increment view count
-        await incrementPropertyViews(id);
+        // Record property view (works for both authenticated and non-authenticated users)
+        try {
+          await recordPropertyView(id);
+        } catch (viewError) {
+          console.warn('Failed to record property view:', viewError);
+        }
         
-        // Check favorite status if user is authenticated
-        if (authenticated && isUser) {
+        // If user is logged in, fetch user-specific data
+        if (isLoggedIn) {
           try {
-            const favStatus = await isFavouriteStatus({ property_id: parseInt(id) });
-            setIsFavourite(favStatus.isFavourite || false);
-          } catch (error) {
-            console.error('Error checking favorite status:', error);
-            setIsFavourite(false);
+            // Check favorite status
+            const favoriteStatus = await checkFavoriteStatus(id);
+            setIsFavorite(favoriteStatus);
+            
+            // Get user's rating for this property
+            const userRating = await getUserPropertyRating(id);
+            setUserRatingData(userRating);
+            
+            // Set rating form data if user has already rated
+            if (userRating.has_rated && userRating.rating) {
+              setUserRating(userRating.rating.rating_score || 0);
+              setRatingComment(userRating.rating.rating_comment || '');
+            }
+          } catch (userDataError) {
+            console.warn('Failed to load user-specific data:', userDataError);
           }
         }
         
-        // Load user's rating if authenticated
-        if (authenticated && isUser) {
-          try {
-            const ratingData = await getPropertyRating({ property_id: parseInt(id) });
-            if (ratingData && ratingData.rating !== null) {
-              setUserRating(ratingData.rating);
-            }
-          } catch (error) {
-            console.error('Error loading user rating:', error);
-            setUserRating(0);
-          }
+        // Get overall property rating (public data)
+        try {
+          const ratingData = await getPropertyRating(id);
+          setPropertyRating(ratingData);
+        } catch (ratingError) {
+          console.warn('Failed to load property rating:', ratingError);
+        }
+
+        // Get property statistics
+        try {
+          const statsData = await getPropertyStatistics(id);
+          setPropertyStats(statsData);
+        } catch (statsError) {
+          console.warn('Failed to load property statistics:', statsError);
         }
         
       } catch (error) {
-        console.error('Error fetching property:', error);
-        setError('Failed to load property details. Please try again.');
+        console.error('Error loading property:', error);
+        setError(error.message || 'Failed to load property details');
       } finally {
         setLoading(false);
       }
     };
 
-    fetchPropertyData();
-  }, [id, authenticated, isUser]);
-
-  // Calculate rating statistics for detailed display
- const ratingStats = useMemo(() => {
-  // First, check if we have valid rating data
-  if (!ratingDistribution || !property?.total_ratings) {
-    return { breakdown: [], hasRatings: false };
-  }
-
-  const totalRatings = parseInt(property.total_ratings) || 0;
-  
-  // If no total ratings, return empty state
-  if (totalRatings === 0) {
-    return { breakdown: [], hasRatings: false };
-  }
-  console.log('Rating Distribution:', ratingDistribution);
-
-  // Create the breakdown array with proper data conversion
-  // Note: We're handling the database field names exactly as they come
-  const breakdown = [
-    { 
-      stars: 5, 
-      count: parseInt(ratingDistribution.five_star) || 0,
-      label: 'five_star'
-    },
-    { 
-      stars: 4, 
-      count: parseInt(ratingDistribution.four_star) || 0,
-      label: 'four_star'
-    },
-    { 
-      stars: 3, 
-      count: parseInt(ratingDistribution.three_star) || 0,
-      label: 'three_star'
-    },
-    { 
-      stars: 2, 
-      count: parseInt(ratingDistribution.two_star) || 0,
-      label: 'two_star'
-    },
-    { 
-      stars: 1, 
-      count: parseInt(ratingDistribution.one_star) || 0,
-      label: 'one_star'
+    if (id) {
+      loadProperty();
     }
-  ].map(item => ({
-    ...item,
-    // Calculate percentage with proper rounding
-    percentage: totalRatings > 0 ? Math.round((item.count / totalRatings) * 100) : 0
-  }));
+  }, [id, isLoggedIn]);
 
-  console.log('Rating Breakdown:', breakdown);
-
-  // Debug logging to help troubleshoot (remove in production)
-  console.log('Rating Distribution Debug:', {
-    totalRatings,
-    ratingDistribution,
-    breakdown
-  });
-
-  return { breakdown, hasRatings: totalRatings > 0 };
-}, [ratingDistribution, property?.total_ratings, property]);
-
-  const handleFavouriteToggle = useCallback(async () => {
-    if (!authenticated) {
-      setLoginAction('add properties to favorites');
-      setLoginRequiredDialogOpen(true);
+  // Handle favorite toggle
+  const handleFavoriteToggle = async () => {
+    if (!isLoggedIn) {
+      setLoginAction('favorite this property');
+      setLoginDialogOpen(true);
       return;
     }
-
-    if (!isUser) {
-      showSnackbar('Only users can add properties to favorites', 'warning');
-      return;
-    }
-
-    if (favoriteLoading) return;
-
-    setFavoriteLoading(true);
-    const originalStatus = isFavourite;
-    const newStatus = !isFavourite;
-    
-    // Optimistically update UI
-    setIsFavourite(newStatus);
 
     try {
-      await setFavouriteStatus({ property_id: parseInt(id), isFavourite: newStatus });
-      showSnackbar(
-        newStatus ? 'Added to favorites!' : 'Removed from favorites',
-        'success'
-      );
+      setFavoriteLoading(true);
       
+      if (isFavorite) {
+        await removeFromFavorites(id);
+        setIsFavorite(false);
+        setSnackbar({
+          open: true,
+          message: 'Property removed from favorites',
+          severity: 'info'
+        });
+      } else {
+        await addToFavorites(id);
+        setIsFavorite(true);
+        setSnackbar({
+          open: true,
+          message: 'Property added to favorites',
+          severity: 'success'
+        });
+      }
     } catch (error) {
-      console.error('Error updating favourite status:', error);
-      
-      // Revert on error
-      setIsFavourite(originalStatus);
-      showSnackbar('Failed to update favorites. Please try again.', 'error');
+      console.error('Error toggling favorite:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to update favorite status',
+        severity: 'error'
+      });
     } finally {
       setFavoriteLoading(false);
     }
-  }, [authenticated, isUser, isFavourite, favoriteLoading, id, showSnackbar]);
+  };
 
-  const handleRatingSubmit = useCallback(async () => {
-    if (!authenticated) {
-      setLoginAction('rate properties');
-      setLoginRequiredDialogOpen(true);
-      return;
-    }
-
-    if (!isUser) {
-      showSnackbar('Only users can rate properties', 'warning');
+  // Handle rating submission
+  const handleRatingSubmit = async () => {
+    if (!isLoggedIn) {
+      setLoginAction('rate this property');
+      setLoginDialogOpen(true);
       return;
     }
 
     if (userRating === 0) {
-      showSnackbar('Please select a rating', 'warning');
+      setSnackbar({
+        open: true,
+        message: 'Please select a rating',
+        severity: 'warning'
+      });
       return;
     }
 
-    setRatingSubmitting(true);
-
     try {
-      const response = await submitPropertyRating(parseInt(id), {
-        rating: userRating
+      setSubmittingRating(true);
+      await submitPropertyRating(id, {
+        rating_score: userRating,
+        rating_comment: ratingComment
       });
       
-      showSnackbar(
-        response.is_update ? 'Rating updated successfully!' : 'Rating submitted successfully!', 
-        'success'
-      );
+      setRatingDialogOpen(false);
+      setSnackbar({
+        open: true,
+        message: 'Rating submitted successfully',
+        severity: 'success'
+      });
       
-      // Update property rating display if response includes updated property rating
-      if (property && response.property_rating) {
-        const updatedProperty = {
-          ...property,
-          rating: parseFloat(response.property_rating.average),
-          total_ratings: response.property_rating.total_count
-        };
-        setProperty(updatedProperty);
-      }
+      // Refresh user rating data and property rating
+      const updatedUserRating = await getUserPropertyRating(id);
+      setUserRatingData(updatedUserRating);
+      
+      const updatedPropertyRating = await getPropertyRating(id);
+      setPropertyRating(updatedPropertyRating);
       
     } catch (error) {
       console.error('Error submitting rating:', error);
-      showSnackbar(error.message || 'Failed to submit rating. Please try again.', 'error');
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to submit rating',
+        severity: 'error'
+      });
     } finally {
-      setRatingSubmitting(false);
+      setSubmittingRating(false);
     }
-  }, [authenticated, isUser, userRating, id, property, showSnackbar]);
+  };
 
-  const handleComplaintSubmit = useCallback(async () => {
-    if (!authenticated) {
-      setLoginAction('report issues');
-      setLoginRequiredDialogOpen(true);
+  // Handle report submission
+  const handleReportSubmit = async () => {
+    if (!isLoggedIn) {
+      setLoginAction('report this property');
+      setLoginDialogOpen(true);
       return;
     }
 
-    if (!complaintText.trim()) {
-      showSnackbar('Please enter a complaint message', 'warning');
+    if (!reportCategory || !reportDescription.trim()) {
+      setSnackbar({
+        open: true,
+        message: 'Please fill in all report fields',
+        severity: 'warning'
+      });
       return;
     }
-
-    if (complaintText.trim().length < 10) {
-      showSnackbar('Complaint must be at least 10 characters long', 'warning');
-      return;
-    }
-
-    setComplaintSubmitting(true);
 
     try {
-      await submitComplaint(parseInt(id), complaintText.trim());
-      showSnackbar('Complaint submitted successfully!', 'success');
-      setComplaintText('');
-      setReportDialogOpen(false);
+      setSubmittingReport(true);
+      await submitReport(id, {
+        category: reportCategory,
+        description: reportDescription
+      });
       
+      setReportDialogOpen(false);
+      setReportCategory('');
+      setReportDescription('');
+      setSnackbar({
+        open: true,
+        message: 'Report submitted successfully',
+        severity: 'success'
+      });
     } catch (error) {
-      console.error('Error submitting complaint:', error);
-      showSnackbar(error.message || 'Failed to submit complaint. Please try again.', 'error');
+      console.error('Error submitting report:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to submit report',
+        severity: 'error'
+      });
     } finally {
-      setComplaintSubmitting(false);
+      setSubmittingReport(false);
     }
-  }, [authenticated, complaintText, id, showSnackbar]);
+  };
 
-  const handleBookingRequest = () => {
-    if (!authenticated) {
-      setLoginAction('book properties');
-      setLoginRequiredDialogOpen(true);
+  // Handle booking navigation
+  const handleBooking = () => {
+    if (!isLoggedIn) {
+      setLoginAction('book this property');
+      setLoginDialogOpen(true);
       return;
     }
+    navigate(`/user-booking/${id}`);
+  };
 
-    if (!isUser) {
-      showSnackbar('Only users can book properties', 'warning');
-      return;
-    }
-
-    // Navigate to booking page with property ID and dates
-    const bookingUrl = `/user-bookproperty/${id}`;
-    if (checkInDate && checkOutDate) {
-      navigate(`${bookingUrl}?checkIn=${checkInDate}&checkOut=${checkOutDate}`);
+  // Handle share functionality
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: `${property.property_type} - ${property.unit_type}`,
+        text: property.description,
+        url: window.location.href
+      });
     } else {
-      navigate(bookingUrl);
+      navigator.clipboard.writeText(window.location.href);
+      setSnackbar({
+        open: true,
+        message: 'Link copied to clipboard',
+        severity: 'success'
+      });
     }
   };
-
-  const handleWhatsAppContact = () => {
-    if (property?.phone) {
-      const phoneNumber = property.phone.replace(/[^0-9]/g, '');
-      const message = `Hi! I'm interested in your property: ${property.property_type} - ${property.unit_type} at ${property.address}. Can we discuss more details?`;
-      const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
-      window.open(whatsappUrl, '_blank');
-    } else {
-      showSnackbar('Contact number not available', 'warning');
-    }
-  };
-
-  const handleLoginRequired = () => {
-    localStorage.setItem('redirectAfterLogin', window.location.pathname);
-    navigate('/login');
-  };
-
-  // Get today's date for minimum date validation
-  const today = new Date().toISOString().split('T')[0];
 
   // Loading state
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Grid container spacing={4}>
-          <Grid item xs={12} md={8}>
-            <Skeleton variant="rectangular" height={400} sx={{ mb: 2 }} />
-            <Skeleton variant="text" height={40} />
-            <Skeleton variant="text" height={30} />
-            <Skeleton variant="text" height={100} />
-          </Grid>
-          <Grid item xs={12} md={4}>
-            <Skeleton variant="rectangular" height={300} />
-          </Grid>
-        </Grid>
+      <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
       </Container>
     );
   }
 
   // Error state
-  if (error) {
+  if (error || !property) {
     return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
-        <Typography variant="h5" color="error" gutterBottom>
-          {error}
-        </Typography>
-        <Button variant="contained" onClick={() => navigate(-1)}>
-          Go Back
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error || 'Property not found'}
+        </Alert>
+        <Button 
+          variant="contained" 
+          onClick={() => navigate('/user-allproperties')}
+          sx={{ backgroundColor: theme.primary }}
+        >
+          Back to Properties
         </Button>
       </Container>
     );
   }
 
-  // Property not found
-  if (!property) {
-    return (
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4, textAlign: 'center' }}>
-        <Typography variant="h5" gutterBottom>
-          Property not found
-        </Typography>
-        <Button variant="contained" onClick={() => navigate(-1)}>
-          Go Back
-        </Button>
-      </Container>
-    );
-  }
+  const amenities = parseJsonSafely(property.amenities);
+  const facilities = parseJsonSafely(property.facilities);
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Grid container spacing={4}>
-        {/* Main Content */}
-        <Grid item xs={12} md={8}>
-          {/* Property Images */}
-          <Box sx={{ mb: 3 }}>
-            {images.length > 0 ? (
-              <Box
-                component="img"
-                src={getImageUrl(images[0])}
-                alt={`${property.property_type} in ${property.address}`}
-                sx={{
-                  width: '100%',
-                  height: 400,
-                  objectFit: 'cover',
-                  borderRadius: 2
-                }}
-              />
-            ) : (
-              <Box
-                sx={{
-                  width: '100%',
-                  height: 400,
-                  bgcolor: 'grey.200',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: 2,
-                  border: '2px dashed',
-                  borderColor: 'grey.400'
-                }}
-              >
-                <Typography variant="h6" color="text.secondary">
-                  No images available
-                </Typography>
-              </Box>
-            )}
-          </Box>
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      {/* Breadcrumb navigation */}
+      <Breadcrumbs 
+        separator={<NavigateNextIcon fontSize="small" />} 
+        sx={{ mb: 3 }}
+      >
+        <Link 
+          color="inherit" 
+          href="/user-allproperties"
+          onClick={(e) => {
+            e.preventDefault();
+            navigate('/user-allproperties');
+          }}
+        >
+          Properties
+        </Link>
+        <Typography color="text.primary">
+          {property.property_type} - {property.unit_type}
+        </Typography>
+      </Breadcrumbs>
 
-          {/* Property Title and Details */}
-          <Box sx={{ mb: 3 }}>
+      <Grid container spacing={4}>
+        {/* Property Images */}
+        <Grid item xs={12} md={8}>
+          <ImageCarousel 
+            images={property.images} 
+            propertyTitle={`${property.property_type} - ${property.unit_type}`}
+          />
+        </Grid>
+
+        {/* Property Summary Card */}
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 3, borderRadius: 3, position: 'sticky', top: 20 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-              <Box sx={{ flex: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-                  <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
-                    {property.property_type} - {property.unit_type}
-                  </Typography>
-                  {property.featured === 1 && (
-                    <Chip
-                      icon={<VerifiedUserIcon />}
-                      label="Featured"
-                      color="primary"
-                      variant="outlined"
-                      size="small"
-                    />
-                  )}
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <LocationOnIcon sx={{ color: 'text.secondary', mr: 1 }} />
-                  <Typography variant="body1" color="text.secondary">
-                    {property.address}
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Rating value={parseFloat(property.rating) || 0} readOnly precision={0.5} />
-                    <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                      ({property.total_ratings || 0} reviews)
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <VisibilityIcon sx={{ color: 'text.secondary', mr: 0.5, fontSize: 18 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      {property.views_count || 0} views
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <AccessTimeIcon sx={{ color: 'text.secondary', mr: 0.5, fontSize: 18 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Listed {formatRelativeTime(property.created_at)}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Box>
+              <Typography variant="h5" sx={{ fontWeight: 700, color: theme.textPrimary }}>
+                {formatPrice(property.price)}
+                <Typography component="span" variant="body2" sx={{ color: theme.textSecondary, ml: 1 }}>
+                  / month
+                </Typography>
+              </Typography>
               
-              {authenticated && isUser && (
-                <IconButton
-                  onClick={handleFavouriteToggle}
-                  disabled={favoriteLoading}
-                  sx={{ 
-                    color: isFavourite ? 'red' : 'grey.400',
-                    '&:hover': { color: 'red' }
-                  }}
-                >
-                  {favoriteLoading ? (
-                    <CircularProgress size={24} />
-                  ) : isFavourite ? (
-                    <FavoriteIcon />
-                  ) : (
-                    <FavoriteBorderIcon />
-                  )}
-                </IconButton>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Tooltip title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}>
+                  <IconButton 
+                    onClick={handleFavoriteToggle}
+                    disabled={favoriteLoading}
+                    sx={{ color: isFavorite ? 'error.main' : 'text.secondary' }}
+                  >
+                    {favoriteLoading ? (
+                      <CircularProgress size={24} />
+                    ) : isFavorite ? (
+                      <FavoriteIcon />
+                    ) : (
+                      <FavoriteBorderIcon />
+                    )}
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title="Share property">
+                  <IconButton onClick={handleShare}>
+                    <ShareIcon />
+                  </IconButton>
+                </Tooltip>
+                
+                <Tooltip title="Report property">
+                  <IconButton onClick={() => setReportDialogOpen(true)}>
+                    <ReportIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            </Box>
+
+            {/* Property Type and Location */}
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+              {property.property_type} - {property.unit_type}
+            </Typography>
+            
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+              <LocationOnIcon sx={{ color: theme.textSecondary, fontSize: 20, mr: 1 }} />
+              <Typography variant="body2" color="text.secondary">
+                {property.address}
+              </Typography>
+            </Box>
+
+            {/* Property Features */}
+            <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+              {property.bedrooms > 0 && (
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <BedIcon sx={{ fontSize: 18, mr: 0.5, color: theme.textSecondary }} />
+                  <Typography variant="body2">{property.bedrooms} Bed</Typography>
+                </Box>
+              )}
+              {property.bathrooms > 0 && (
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <BathtubIcon sx={{ fontSize: 18, mr: 0.5, color: theme.textSecondary }} />
+                  <Typography variant="body2">{property.bathrooms} Bath</Typography>
+                </Box>
               )}
             </Box>
 
-            <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 3 }}>
-              LKR {parseFloat(property.price || 0).toLocaleString()}.00
-            </Typography>
-
-            {/* Additional Property Description */}
-            {property.other_facility && (
-              <Box sx={{ mb: 3 }}>
-                <Card sx={{ p: 2, bgcolor: 'primary', color: 'white' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <DescriptionIcon sx={{ mr: 1 }} />
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      Property Highlights
-                    </Typography>
-                  </Box>
-                  <Typography variant="body1">
-                    {property.other_facility}
-                  </Typography>
-                </Card>
-              </Box>
-            )}
-
-            {/* Property Features Grid */}
-            <Grid container spacing={3} sx={{ mb: 3 }}>
-              <Grid item xs={3}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <BedIcon sx={{ fontSize: 32, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    {facilities.Bedroom || 'N/A'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Bedrooms
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={3}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <BathtubIcon sx={{ fontSize: 32, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    {facilities.Bathroom || 'N/A'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Bathrooms
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={3}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <SquareFootIcon sx={{ fontSize: 32, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    N/A
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Sq Ft
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={3}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <PeopleIcon sx={{ fontSize: 32, color: 'primary.main', mb: 1 }} />
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    {facilities.MaxPeople || 'N/A'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Max Guests
-                  </Typography>
-                </Box>
-              </Grid>
-            </Grid>
-
-            {/* Availability and Contract Information */}
-            <Grid container spacing={3} sx={{ mb: 3 }}>
-              <Grid item xs={12} md={6}>
-                <Card sx={{ p: 2, height: '100%' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <EventIcon sx={{ color: 'primary.main', mr: 1 }} />
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      Availability
-                    </Typography>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Available from: {formatDate(property.available_from)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Available until: {formatDate(property.available_to)}
-                  </Typography>
-                </Card>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Card sx={{ p: 2, height: '100%' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <AssignmentIcon sx={{ color: 'primary.main', mr: 1 }} />
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      Contract Terms
-                    </Typography>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary">
-                    {property.contract_policy || 'Contact owner for lease terms'}
-                  </Typography>
-                </Card>
-              </Grid>
-            </Grid>
-
-            {/* Detailed Rating Breakdown */}
-            {ratingStats.hasRatings && (
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Rating Breakdown
-                </Typography>
-                <Card sx={{ p: 3 }}>
-                  {/* Detailed breakdown */}
-                  {ratingStats.breakdown.map((item) => (
-                    <Box key={item.stars} sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      {/* Star rating label */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 80 }}>
-                        <Typography variant="body2" sx={{ mr: 1 }}>
-                          {item.stars}
-                        </Typography>
-                        <StarIcon sx={{ fontSize: 16, color: '#ffc107' }} />
-                      </Box>
-
-                      {/* Progress bar container */}
-                      <Box sx={{ flex: 1, mx: 2 }}>
-                        <LinearProgress
-                          variant="determinate"
-                          value={item.percentage}
-                          sx={{ 
-                            height: 12, 
-                            borderRadius: 2,
-                            backgroundColor: 'rgba(0,0,0,0.1)',
-                            '& .MuiLinearProgress-bar': {
-                              borderRadius: 2,
-                              backgroundColor: item.percentage > 0 ? '#ffc107' : 'transparent'
-                            }
-                          }}
-                        />
-                      </Box>
-
-                      {/* Count and percentage display */}
-                      <Box sx={{ minWidth: 60, textAlign: 'right' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                          {item.count}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          ({item.percentage}%)
-                        </Typography>
-                      </Box>
-                    </Box>
-                  ))}
-                </Card>
-              </Box>
-            )}
-
-            {/* Additional Information Sections */}
-            {(roommates || rules.length > 0 || billsInclusive.length > 0) && (
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Additional Information
-                </Typography>
-                
-                {roommates && (
-                  <Accordion>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                        Roommate Information
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Typography variant="body2">
-                        {JSON.stringify(roommates, null, 2)}
-                      </Typography>
-                    </AccordionDetails>
-                  </Accordion>
-                )}
-
-                {rules.length > 0 && (
-                  <Accordion>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                        House Rules
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Box>
-                        {rules.map((rule, index) => (
-                          <Typography key={index} variant="body2" sx={{ mb: 1 }}>
-                            • {rule}
-                          </Typography>
-                        ))}
-                      </Box>
-                    </AccordionDetails>
-                  </Accordion>
-                )}
-
-                {billsInclusive.length > 0 && (
-                  <Accordion>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
-                        Bills Included
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Box>
-                        {billsInclusive.map((bill, index) => (
-                          <Chip key={index} label={bill} sx={{ mr: 1, mb: 1 }} />
-                        ))}
-                      </Box>
-                    </AccordionDetails>
-                  </Accordion>
-                )}
-              </Box>
-            )}
-
-            {/* Pricing Details */}
+            {/* Availability */}
             <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                Pricing Details
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                Availability
               </Typography>
-              <TableContainer component={Paper} sx={{ boxShadow: 1 }}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Item</TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>Details</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Monthly Rent</TableCell>
-                      <TableCell align="right">LKR {parseFloat(property.price || 0).toLocaleString()}.00</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <ScheduleIcon sx={{ fontSize: 16, mr: 1, color: theme.textSecondary }} />
+                <Typography variant="body2">
+                  From: {formatDate(property.available_from)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                <ScheduleIcon sx={{ fontSize: 16, mr: 1, color: theme.textSecondary }} />
+                <Typography variant="body2">
+                  To: {formatDate(property.available_to)}
+                </Typography>
+              </Box>
             </Box>
 
-            {/* User Rating Section */}
-            {authenticated && isUser && (
-              <Box sx={{ mt: 4 }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Rate This Property
+            {/* Rating Section */}
+            <Box sx={{ mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <Rating 
+                  value={property.average_rating || 0} 
+                  readOnly 
+                  precision={0.1} 
+                />
+                <Typography variant="body2" sx={{ ml: 1, color: theme.textSecondary }}>
+                  {property.average_rating ? property.average_rating.toFixed(1) : 'No ratings'} 
+                  ({property.total_ratings || 0} {property.total_ratings === 1 ? 'review' : 'reviews'})
                 </Typography>
-                <Card sx={{ p: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="body1" sx={{ mr: 2 }}>
-                      Your Rating:
-                    </Typography>
-                    <Rating
-                      value={userRating}
-                      onChange={(event, newValue) => setUserRating(newValue || 0)}
-                      size="large"
-                    />
-                  </Box>
-                  <Button
-                    variant="contained"
-                    onClick={handleRatingSubmit}
-                    disabled={ratingSubmitting || userRating === 0}
-                    startIcon={ratingSubmitting ? <CircularProgress size={20} /> : null}
-                  >
-                    {ratingSubmitting ? 'Submitting...' : 'Submit Rating'}
-                  </Button>
-                </Card>
               </Box>
-            )}
-          </Box>
+              
+              <Button
+                variant="outlined"
+                fullWidth
+                onClick={() => setRatingDialogOpen(true)}
+                sx={{ mb: 1 }}
+              >
+                {userRatingData.has_rated ? 'Update Rating' : 'Rate Property'}
+              </Button>
+            </Box>
+
+            {/* Action Buttons */}
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<BookOnlineIcon />}
+              onClick={handleBooking}
+              sx={{ 
+                backgroundColor: theme.primary,
+                py: 1.5,
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                mb: 2
+              }}
+            >
+              Book Property
+            </Button>
+
+            {/* Property Stats */}
+            <Box sx={{ pt: 2, borderTop: `1px solid ${theme.border}` }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2 }}>
+                Property Statistics
+              </Typography>
+              
+              {propertyStats && (
+                <Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary">Total Views</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {propertyStats.total_views || 0}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary">Favorites</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {propertyStats.total_favorites || 0}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary">Total Ratings</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {propertyStats.total_ratings || 0}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body2" color="text.secondary">Listed</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {new Date(property.created_at).toLocaleDateString()}
+                </Typography>
+              </Box>
+            </Box>
+          </Paper>
         </Grid>
 
-        {/* Sidebar */}
-        <Grid item xs={12} md={4}>
-          <Box sx={{ position: 'sticky', top: 20 }}>
-            {/* Contact Information */}
-            <Card sx={{ mb: 3 }}>
-              <CardContent>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Contact Information
+        {/* Property Details */}
+        <Grid item xs={12}>
+          <Paper sx={{ p: 4, borderRadius: 3 }}>
+            {/* Property Overview */}
+            <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>
+              Property Overview
+            </Typography>
+            
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12} md={6}>
+                <TableContainer>
+                  <Table size="small">
+                    <TableBody>
+                      <TableRow>
+                        <TableCell><strong>Property Type</strong></TableCell>
+                        <TableCell>{property.property_type}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell><strong>Unit Type</strong></TableCell>
+                        <TableCell>{property.unit_type}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell><strong>Bedrooms</strong></TableCell>
+                        <TableCell>{property.bedrooms || 'Not specified'}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell><strong>Bathrooms</strong></TableCell>
+                        <TableCell>{property.bathrooms || 'Not specified'}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <TableContainer>
+                  <Table size="small">
+                    <TableBody>
+                      <TableRow>
+                        <TableCell><strong>Monthly Rent</strong></TableCell>
+                        <TableCell>{formatPrice(property.price)}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell><strong>Available From</strong></TableCell>
+                        <TableCell>{formatDate(property.available_from)}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell><strong>Available To</strong></TableCell>
+                        <TableCell>{formatDate(property.available_to)}</TableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell><strong>Property ID</strong></TableCell>
+                        <TableCell>#{property.id}</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Grid>
+            </Grid>
+
+            <Divider sx={{ my: 4 }} />
+
+            {/* Description */}
+            <Accordion defaultExpanded>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  Description
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Avatar sx={{ bgcolor: 'primary.main', mr: 2 }}>
-                    <PersonIcon />
-                  </Avatar>
-                  <Box>
-                    <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                      {property.owner_username || 'Property Owner'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Property Owner
-                    </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body1" sx={{ lineHeight: 1.7 }}>
+                  {property.description}
+                </Typography>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Amenities */}
+            {amenities && amenities.length > 0 && (
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Amenities ({amenities.length})
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Grid container spacing={2}>
+                    {amenities.map((amenity, index) => (
+                      <Grid item xs={12} sm={6} md={4} key={index}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', p: 1 }}>
+                          {getAmenityIcon(amenity)}
+                          <Typography variant="body2" sx={{ ml: 2 }}>
+                            {amenity}
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Facilities */}
+            {facilities && Object.keys(facilities).length > 0 && (
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Facilities & Features
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Grid container spacing={2}>
+                    {Object.entries(facilities).map(([facility, count], index) => (
+                      <Grid item xs={12} sm={6} md={4} key={index}>
+                        <Box sx={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'space-between',
+                          p: 2,
+                          border: `1px solid ${theme.border}`,
+                          borderRadius: 2,
+                          backgroundColor: theme.surfaceBackground
+                        }}>
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            {facility}
+                          </Typography>
+                          <Chip 
+                            label={count} 
+                            size="small" 
+                            color="primary"
+                          />
+                        </Box>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Property Owner Info */}
+            {property.owner_info && (
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Property Owner Information
+                  </Typography>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                    <Avatar sx={{ mr: 2, backgroundColor: theme.primary, width: 60, height: 60 }}>
+                      {property.owner_info.username?.charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        {property.owner_info.username}
+                      </Typography>
+                      {property.owner_info.business_name && (
+                        <Typography variant="body2" color="text.secondary">
+                          {property.owner_info.business_name}
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
-                </Box>
-                
-                <Button
-                  variant="contained"
-                  color="success"
-                  fullWidth
-                  startIcon={<WhatsAppIcon />}
-                  onClick={handleWhatsAppContact}
-                  sx={{ mb: 2 }}
-                >
-                  Contact
-                </Button>
-              </CardContent>
-            </Card>
+                  
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    {property.owner_info.phone && (
+                      <Button
+                        variant="outlined"
+                        startIcon={<PhoneIcon />}
+                        href={`tel:${property.owner_info.phone}`}
+                      >
+                        Call Owner
+                      </Button>
+                    )}
+                    {property.owner_info.email && (
+                      <Button
+                        variant="outlined"
+                        startIcon={<EmailIcon />}
+                        href={`mailto:${property.owner_info.email}`}
+                      >
+                        Email Owner
+                      </Button>
+                    )}
+                  </Box>
+                </AccordionDetails>
+              </Accordion>
+            )}
 
-            {/* Book This Property */}
-            <Card sx={{ mb: 3 }}>
-              <CardContent>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Book This Property
-                </Typography>
-                
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    Check-in Date
+            {/* Recent Reviews */}
+            {propertyRating && propertyRating.recent_ratings && propertyRating.recent_ratings.length > 0 && (
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Recent Reviews ({propertyRating.recent_ratings.length})
                   </Typography>
-                  <TextField
-                    type="date"
-                    fullWidth
-                    value={checkInDate}
-                    onChange={(e) => setCheckInDate(e.target.value)}
-                    inputProps={{ min: today }}
-                    placeholder="dd/mm/yyyy"
-                  />
-                </Box>
-                
-                <Box sx={{ mb: 3 }}>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    Check-out Date
+                </AccordionSummary>
+                <AccordionDetails>
+                  <List>
+                    {propertyRating.recent_ratings.map((review, index) => (
+                      <React.Fragment key={index}>
+                        <ListItem sx={{ px: 0, alignItems: 'flex-start' }}>
+                          <Avatar sx={{ mr: 2, backgroundColor: theme.primary }}>
+                            {review.reviewer_username?.charAt(0).toUpperCase()}
+                          </Avatar>
+                          <ListItemText
+                            primary={
+                              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600, mr: 2 }}>
+                                  {review.reviewer_username}
+                                </Typography>
+                                <Rating value={review.rating_score} readOnly size="small" />
+                                <Typography variant="caption" sx={{ ml: 'auto', color: theme.textSecondary }}>
+                                  {new Date(review.created_at).toLocaleDateString()}
+                                </Typography>
+                              </Box>
+                            }
+                            secondary={review.rating_comment || 'No comment provided'}
+                          />
+                        </ListItem>
+                        {index < propertyRating.recent_ratings.length - 1 && <Divider />}
+                      </React.Fragment>
+                    ))}
+                  </List>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            {/* Rating Distribution */}
+            {propertyRating && propertyRating.rating_distribution && Object.keys(propertyRating.rating_distribution).length > 0 && (
+              <Accordion>
+                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    Rating Distribution
                   </Typography>
-                  <TextField
-                    type="date"
-                    fullWidth
-                    value={checkOutDate}
-                    onChange={(e) => setCheckOutDate(e.target.value)}
-                    inputProps={{ min: checkInDate || today }}
-                    placeholder="dd/mm/yyyy"
-                  />
-                </Box>
-
-                <Button
-                  variant="contained"
-                  fullWidth
-                  onClick={handleBookingRequest}
-                  startIcon={<CalendarIcon />}
-                  sx={{ mb: 2 }}
-                >
-                  Request Booking
-                </Button>
-                
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                  You won't be charged yet. The property owner will review your request.
-                </Typography>
-              </CardContent>
-            </Card>
-
-            {/* Report an Issue */}
-            <Card>
-              <CardContent>
-                <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Report an Issue
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Found something wrong with this listing? Let us know.
-                </Typography>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  onClick={() => setReportDialogOpen(true)}
-                >
-                  Report Issue
-                </Button>
-              </CardContent>
-            </Card>
-          </Box>
+                </AccordionSummary>
+                <AccordionDetails>
+                  <Box>
+                    {[5, 4, 3, 2, 1].map(star => {
+                      const count = propertyRating.rating_distribution[star] || 0;
+                      const percentage = propertyRating.total_ratings > 0 ? (count / propertyRating.total_ratings) * 100 : 0;
+                      
+                      return (
+                        <Box key={star} sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                          <Typography variant="body2" sx={{ minWidth: 20 }}>
+                            {star}
+                          </Typography>
+                          <StarIcon sx={{ color: 'gold', fontSize: 16, mx: 1 }} />
+                          <LinearProgress
+                            variant="determinate"
+                            value={percentage}
+                            sx={{ flex: 1, mx: 2, height: 8, borderRadius: 4 }}
+                          />
+                          <Typography variant="body2" sx={{ minWidth: 40, textAlign: 'right' }}>
+                            {count}
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+                  </Box>
+                </AccordionDetails>
+              </Accordion>
+            )}
+          </Paper>
         </Grid>
       </Grid>
 
-      {/* Login Required Dialog */}
-      <LoginRequiredDialog
-        open={loginRequiredDialogOpen}
-        onClose={() => setLoginRequiredDialogOpen(false)}
-        onLogin={handleLoginRequired}
-        action={loginAction}
-      />
-
-      {/* Report Issue Dialog */}
-      <Dialog
-        open={reportDialogOpen}
-        onClose={() => setReportDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Report an Issue</DialogTitle>
+      {/* Rating Dialog */}
+      <Dialog open={ratingDialogOpen} onClose={() => setRatingDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {userRatingData.has_rated ? 'Update Your Rating' : 'Rate This Property'}
+        </DialogTitle>
         <DialogContent>
-          <TextField
-            fullWidth
-            multiline
-            rows={4}
-            placeholder="Describe the issue you found with this property..."
-            value={complaintText}
-            onChange={(e) => setComplaintText(e.target.value)}
-            sx={{ mt: 1 }}
-          />
-          <Typography variant="caption" color="text.secondary">
-            Minimum 10 characters required
-          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <Box>
+              <Typography variant="body2" sx={{ mb: 1 }}>Rating</Typography>
+              <Rating
+                value={userRating}
+                onChange={(event, newValue) => setUserRating(newValue || 0)}
+                size="large"
+              />
+            </Box>
+            <TextField
+              label="Comment (Optional)"
+              multiline
+              rows={3}
+              value={ratingComment}
+              onChange={(e) => setRatingComment(e.target.value)}
+              placeholder="Share your experience with this property..."
+              fullWidth
+            />
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setReportDialogOpen(false)}>Cancel</Button>
+          <Button onClick={() => setRatingDialogOpen(false)}>
+            Cancel
+          </Button>
           <Button 
+            onClick={handleRatingSubmit} 
             variant="contained"
-            onClick={handleComplaintSubmit}
-            disabled={complaintSubmitting || complaintText.trim().length < 10}
-            startIcon={complaintSubmitting ? <CircularProgress size={20} /> : <SendIcon />}
+            disabled={submittingRating || userRating === 0}
           >
-            {complaintSubmitting ? 'Submitting...' : 'Submit Report'}
+            {submittingRating ? <CircularProgress size={20} /> : 'Submit Rating'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Snackbar for notifications */}
-      <AppSnackbar {...snackbarProps} />
+      {/* Report Dialog */}
+      <Dialog open={reportDialogOpen} onClose={() => setReportDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Report Property</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+            <TextField
+              select
+              label="Category"
+              value={reportCategory}
+              onChange={(e) => setReportCategory(e.target.value)}
+              fullWidth
+              SelectProps={{ native: true }}
+            >
+              <option value="">Select a category</option>
+              <option value="misleading_info">Misleading Information</option>
+              <option value="property_condition">Property Condition</option>
+              <option value="safety_concerns">Safety Concerns</option>
+              <option value="harassment">Harassment</option>
+              <option value="fraud">Fraud</option>
+              <option value="other">Other</option>
+            </TextField>
+            <TextField
+              label="Description"
+              multiline
+              rows={4}
+              value={reportDescription}
+              onChange={(e) => setReportDescription(e.target.value)}
+              placeholder="Please provide details about your concern..."
+              fullWidth
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReportDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleReportSubmit} 
+            variant="contained"
+            color="error"
+            disabled={submittingReport || !reportCategory || !reportDescription.trim()}
+          >
+            {submittingReport ? <CircularProgress size={20} /> : 'Submit Report'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Login Dialog */}
+      <Dialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Login Required</DialogTitle>
+        <DialogContent>
+          <Typography>
+            You need to be logged in to {loginAction}. Please log in to continue.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLoginDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={() => navigate('/login')} 
+            variant="contained"
+          >
+            Login
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar */}
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+      />
     </Container>
   );
 };

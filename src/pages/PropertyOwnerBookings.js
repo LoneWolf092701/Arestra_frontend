@@ -2,574 +2,856 @@ import React, { useState, useEffect } from 'react';
 import {
   Container,
   Typography,
-  Box,
+  Grid,
   Card,
   CardContent,
-  Grid,
+  Box,
   Button,
+  Alert,
+  CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
   Chip,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Tabs,
+  Tab,
+  IconButton,
+  Tooltip,
+  Divider,
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Divider,
-  Avatar,
-  Tab,
-  Tabs,
-  Badge
+  Badge,
+  LinearProgress
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
-  Person as PersonIcon,
-  Home as HomeIcon,
-  Payment as PaymentIcon,
+  Visibility as VisibilityIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-  Visibility as VisibilityIcon,
-  Download as DownloadIcon
+  Payment as PaymentIcon,
+  AttachFile as AttachFileIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon,
+  Person as PersonIcon,
+  Business as BusinessIcon,
+  CalendarToday as CalendarTodayIcon,
+  Download as DownloadIcon,
+  FilterList as FilterListIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
+import { 
+  getOwnerBookings, 
+  respondToBookingRequest, 
+  getBookingDetails,
+  getBookingStatistics,
+  updateBookingStatus,
+  exportBookingData
+} from '../api/bookingApi';
+import { getMyProperties } from '../api/propertyApi';
 import { useTheme } from '../contexts/ThemeContext';
 import AppSnackbar from '../components/common/AppSnackbar';
 
-const PropertyOwnerBookings = () => {
-  const { theme, isDark } = useTheme();
-  const [bookingRequests, setBookingRequests] = useState([]);
-  const [selectedTab, setSelectedTab] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [selectedRequest, setSelectedRequest] = useState(null);
-  const [responseDialog, setResponseDialog] = useState({ open: false, type: '', request: null });
-  const [responseForm, setResponseForm] = useState({
-    message: '',
-    paymentAccountInfo: ''
-  });
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+const getStatusColor = (status) => {
+  const statusColors = {
+    'pending': 'warning',
+    'approved': 'info',
+    'payment_submitted': 'primary',
+    'confirmed': 'success',
+    'rejected': 'error',
+    'auto_rejected': 'error',
+    'payment_rejected': 'error',
+    'cancelled': 'default'
+  };
+  return statusColors[status] || 'default';
+};
 
-  // Tab configuration
-  const tabs = [
-    { label: 'Pending Requests', status: 'pending' },
-    { label: 'Approved', status: 'approved' },
-    { label: 'Payment Submitted', status: 'payment_submitted' },
-    { label: 'Confirmed', status: 'confirmed' },
-    { label: 'All Requests', status: 'all' }
+const getStatusLabel = (status) => {
+  const statusLabels = {
+    'pending': 'Pending Your Response',
+    'approved': 'Approved - Awaiting Payment',
+    'payment_submitted': 'Payment Submitted - Review Required',
+    'confirmed': 'Booking Confirmed',
+    'rejected': 'Rejected',
+    'auto_rejected': 'Auto Rejected',
+    'payment_rejected': 'Payment Rejected',
+    'cancelled': 'Cancelled'
+  };
+  return statusLabels[status] || status;
+};
+
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('en-LK', {
+    style: 'currency',
+    currency: 'LKR',
+    minimumFractionDigits: 2
+  }).format(amount || 0);
+};
+
+const formatDate = (dateString) => {
+  if (!dateString) return 'Not specified';
+  return new Date(dateString).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+};
+
+const formatDateTime = (dateTimeString) => {
+  if (!dateTimeString) return 'Not specified';
+  return new Date(dateTimeString).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const PropertyOwnerBookings = () => {
+  const [bookings, setBookings] = useState([]);
+  const [properties, setProperties] = useState([]);
+  const [statistics, setStatistics] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedBooking, setSelectedBooking] = useState(null);
+  const [detailsDialog, setDetailsDialog] = useState(false);
+  const [responseDialog, setResponseDialog] = useState(false);
+  const [paymentDialog, setPaymentDialog] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
+  
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [filters, setFilters] = useState({
+    status: 'all',
+    property_id: 'all',
+    date_from: '',
+    date_to: ''
+  });
+  
+  const [responseData, setResponseData] = useState({
+    action: 'approve',
+    message: '',
+    payment_instructions: ''
+  });
+
+  const [paymentVerification, setPaymentVerification] = useState({
+    status: 'approved',
+    notes: ''
+  });
+
+  const { isDark } = useTheme();
+
+  const statusTabs = [
+    { label: 'All Bookings', value: 'all' },
+    { label: 'Pending', value: 'pending', badge: true },
+    { label: 'Payment Review', value: 'payment_submitted', badge: true },
+    { label: 'Confirmed', value: 'confirmed' },
+    { label: 'Completed', value: 'completed' },
+    { label: 'Rejected/Cancelled', value: 'rejected,cancelled' }
   ];
 
-  // Load booking requests
   useEffect(() => {
-    fetchBookingRequests();
-  }, []);
+    loadBookings();
+    loadProperties();
+    loadStatistics();
+  }, [filters, selectedTab]);
 
-  const fetchBookingRequests = async () => {
+  const loadBookings = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/bookings/owner-requests', {
-        headers: {
-          'Authorization': `Bearer ${token}`
+      
+      const filterParams = { ...filters };
+      
+      if (selectedTab > 0) {
+        const tabStatus = statusTabs[selectedTab].value;
+        if (tabStatus !== 'all') {
+          filterParams.status = tabStatus;
         }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setBookingRequests(data);
-      } else {
-        showSnackbar('Failed to load booking requests', 'error');
       }
+      
+      const response = await getOwnerBookings({
+        ...filterParams,
+        page: 1,
+        limit: 100,
+        include_user_info: true,
+        include_property_info: true,
+        sort_by: 'created_at',
+        sort_order: 'desc'
+      });
+      
+      setBookings(response.bookings || []);
     } catch (error) {
-      console.error('Error fetching booking requests:', error);
-      showSnackbar('Network error loading requests', 'error');
+      console.error('Error loading bookings:', error);
+      setSnackbar({
+        open: true,
+        message: 'Error loading bookings',
+        severity: 'error'
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const showSnackbar = (message, severity = 'success') => {
-    setSnackbar({ open: true, message, severity });
-  };
-
-  const handleSnackbarClose = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  // Filter requests based on selected tab
-  const getFilteredRequests = () => {
-    const currentTab = tabs[selectedTab];
-    if (currentTab.status === 'all') {
-      return bookingRequests;
-    }
-    return bookingRequests.filter(request => request.status === currentTab.status);
-  };
-
-  // Get count for each tab
-  const getTabCount = (status) => {
-    if (status === 'all') return bookingRequests.length;
-    return bookingRequests.filter(request => request.status === status).length;
-  };
-
-  // Handle owner response (approve/reject)
-  const handleOwnerResponse = async (action) => {
-    if (!responseDialog.request) return;
-
-    if (action === 'approve' && !responseForm.paymentAccountInfo.trim()) {
-      showSnackbar('Payment account information is required for approval', 'error');
-      return;
-    }
-
+  const loadProperties = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/bookings/owner-response/${responseDialog.request.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          action,
-          message: responseForm.message,
-          payment_account_info: action === 'approve' ? responseForm.paymentAccountInfo : null
-        })
-      });
-
-      if (response.ok) {
-        showSnackbar(`Request ${action}d successfully`, 'success');
-        setResponseDialog({ open: false, type: '', request: null });
-        setResponseForm({ message: '', paymentAccountInfo: '' });
-        fetchBookingRequests(); // Refresh the list
-      } else {
-        const errorData = await response.json();
-        showSnackbar(errorData.error || `Failed to ${action} request`, 'error');
-      }
+      const response = await getMyProperties({ include_inactive: true });
+      setProperties(response.properties || response || []);
     } catch (error) {
-      console.error(`Error ${action}ing request:`, error);
-      showSnackbar('Network error. Please try again.', 'error');
+      console.error('Error loading properties:', error);
     }
   };
 
-  // Handle payment confirmation
-  const handlePaymentConfirmation = async (requestId, action) => {
+  const loadStatistics = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/bookings/confirm/${requestId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ 
-          action, 
-          message: action === 'reject_payment' ? 'Payment verification failed' : 'Payment confirmed' 
-        })
-      });
-
-      if (response.ok) {
-        showSnackbar(`Booking ${action === 'confirm' ? 'confirmed' : 'rejected'} successfully`, 'success');
-        fetchBookingRequests();
-      } else {
-        const errorData = await response.json();
-        showSnackbar(errorData.error || 'Failed to process request', 'error');
-      }
+      const stats = await getBookingStatistics({ period: 'monthly' });
+      setStatistics(stats);
     } catch (error) {
-      console.error('Error processing payment confirmation:', error);
-      showSnackbar('Network error. Please try again.', 'error');
+      console.error('Error loading statistics:', error);
     }
   };
 
-  // Get status color and icon
-  const getStatusDisplay = (status) => {
-    const configs = {
-      pending: { color: '#ff9800', icon: '⏳', label: 'Pending Review' },
-      approved: { color: '#4caf50', icon: '✅', label: 'Approved' },
-      rejected: { color: '#f44336', icon: '❌', label: 'Rejected' },
-      payment_submitted: { color: '#2196f3', icon: '💳', label: 'Payment Submitted' },
-      confirmed: { color: '#4caf50', icon: '🎉', label: 'Confirmed' },
-      cancelled: { color: '#9e9e9e', icon: '🚫', label: 'Cancelled' }
-    };
-    return configs[status] || { color: '#9e9e9e', icon: '❓', label: status };
+  const handleBookingResponse = async () => {
+    try {
+      await respondToBookingRequest(selectedBooking.id, responseData);
+      
+      setResponseDialog(false);
+      setResponseData({ action: 'approve', message: '', payment_instructions: '' });
+      
+      await loadBookings();
+      
+      setSnackbar({
+        open: true,
+        message: `Booking ${responseData.action}d successfully`,
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error responding to booking:', error);
+      setSnackbar({
+        open: true,
+        message: 'Error responding to booking',
+        severity: 'error'
+      });
+    }
   };
 
-  // Format date for display
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const handlePaymentVerification = async () => {
+    try {
+      await updateBookingStatus(selectedBooking.id, {
+        status: paymentVerification.status === 'approved' ? 'confirmed' : 'payment_rejected',
+        verification_notes: paymentVerification.notes
+      });
+      
+      setPaymentDialog(false);
+      setPaymentVerification({ status: 'approved', notes: '' });
+      
+      await loadBookings();
+      
+      setSnackbar({
+        open: true,
+        message: `Payment ${paymentVerification.status}`,
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error verifying payment:', error);
+      setSnackbar({
+        open: true,
+        message: 'Error verifying payment',
+        severity: 'error'
+      });
+    }
   };
 
-  // Render booking request card
-  const renderBookingCard = (request) => {
-    const statusConfig = getStatusDisplay(request.status);
-    
-    return (
-      <Card 
-        key={request.id}
-        sx={{ 
-          mb: 2,
-          backgroundColor: theme.cardBackground,
-          border: `1px solid ${theme.border}`,
-          '&:hover': {
-            boxShadow: theme.shadows.medium,
-            borderColor: theme.primary
-          }
-        }}
-      >
-        <CardContent sx={{ p: 3 }}>
-          {/* Header */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-            <Box>
-              <Typography variant="h6" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-                {request.property_type} - {request.unit_type}
-              </Typography>
-              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                Request #{request.id} • {formatDate(request.created_at)}
-              </Typography>
-            </Box>
-            <Chip 
-              label={statusConfig.label}
-              sx={{ 
-                backgroundColor: `${statusConfig.color}20`,
-                color: statusConfig.color,
-                fontWeight: 600
-              }}
-            />
-          </Box>
+  const handleViewDetails = async (bookingId) => {
+    try {
+      const details = await getBookingDetails(bookingId);
+      setSelectedBooking(details);
+      setDetailsDialog(true);
+    } catch (error) {
+      console.error('Error loading booking details:', error);
+      setSnackbar({
+        open: true,
+        message: 'Error loading booking details',
+        severity: 'error'
+      });
+    }
+  };
 
-          {/* Tenant Information */}
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <Avatar sx={{ bgcolor: theme.primary, mr: 2 }}>
-              <PersonIcon />
-            </Avatar>
-            <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                {request.first_name} {request.last_name}
-              </Typography>
-              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                {request.email} • {request.country_code} {request.mobile_number}
-              </Typography>
-            </Box>
-          </Box>
+  const handleExportBookings = async () => {
+    try {
+      const blob = await exportBookingData({
+        format: 'csv',
+        ...filters,
+        include_personal_data: true
+      });
+      
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'property_owner_bookings.csv';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      setSnackbar({
+        open: true,
+        message: 'Bookings exported successfully',
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Error exporting bookings:', error);
+      setSnackbar({
+        open: true,
+        message: 'Error exporting bookings',
+        severity: 'error'
+      });
+    }
+  };
 
-          {/* Booking Details */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                <strong>Check-in:</strong> {new Date(request.check_in_date).toLocaleDateString()}
+  const getPendingCount = (status) => {
+    return bookings.filter(b => b.status === status).length;
+  };
+
+  const renderStatisticsCard = () => (
+    <Card sx={{ mb: 3 }}>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          Booking Statistics
+        </Typography>
+        {statistics ? (
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography variant="body2" color="text.secondary">
+                Total Bookings
+              </Typography>
+              <Typography variant="h5" color="primary">
+                {statistics.total_bookings}
               </Typography>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                <strong>Check-out:</strong> {new Date(request.check_out_date).toLocaleDateString()}
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography variant="body2" color="text.secondary">
+                Confirmed Bookings
+              </Typography>
+              <Typography variant="h5" color="success.main">
+                {statistics.confirmed_bookings}
               </Typography>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                <strong>Occupation:</strong> {request.occupation}
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography variant="body2" color="text.secondary">
+                Total Revenue
+              </Typography>
+              <Typography variant="h5" color="success.main">
+                {formatCurrency(statistics.total_revenue)}
               </Typography>
             </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                <strong>Field:</strong> {request.field}
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography variant="body2" color="text.secondary">
+                Occupancy Rate
+              </Typography>
+              <Typography variant="h5">
+                {statistics.occupancy_rate}%
               </Typography>
             </Grid>
           </Grid>
+        ) : (
+          <CircularProgress />
+        )}
+      </CardContent>
+    </Card>
+  );
 
-          {/* Total Amount */}
-          <Box sx={{ 
-            p: 2, 
-            backgroundColor: theme.surfaceBackground, 
-            borderRadius: 1, 
-            mb: 3 
-          }}>
-            <Typography variant="h6" sx={{ color: theme.primary, fontWeight: 600 }}>
-              Total Amount: LKR {(request.total_price + request.service_fee).toLocaleString()}
+  const renderFilters = () => (
+    <Card sx={{ mb: 3 }}>
+      <CardContent>
+        <Typography variant="h6" gutterBottom>
+          <FilterListIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          Filters
+        </Typography>
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Property</InputLabel>
+              <Select
+                value={filters.property_id}
+                label="Property"
+                onChange={(e) => setFilters(prev => ({ ...prev, property_id: e.target.value }))}
+              >
+                <MenuItem value="all">All Properties</MenuItem>
+                {properties.map((property) => (
+                  <MenuItem key={property.id} value={property.id}>
+                    {property.property_type} - {property.address}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              type="date"
+              label="From Date"
+              InputLabelProps={{ shrink: true }}
+              value={filters.date_from}
+              onChange={(e) => setFilters(prev => ({ ...prev, date_from: e.target.value }))}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <TextField
+              fullWidth
+              size="small"
+              type="date"
+              label="To Date"
+              InputLabelProps={{ shrink: true }}
+              value={filters.date_to}
+              onChange={(e) => setFilters(prev => ({ ...prev, date_to: e.target.value }))}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                startIcon={<RefreshIcon />}
+                onClick={loadBookings}
+                size="small"
+              >
+                Refresh
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<DownloadIcon />}
+                onClick={handleExportBookings}
+                size="small"
+              >
+                Export
+              </Button>
+            </Box>
+          </Grid>
+        </Grid>
+      </CardContent>
+    </Card>
+  );
+
+  const renderBookingCard = (booking) => (
+    <Card key={booking.id} sx={{ mb: 2 }}>
+      <CardContent>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Booking #{booking.id}
             </Typography>
-            <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-              Rent: LKR {request.total_price.toLocaleString()} + Service Fee: LKR {request.service_fee.toLocaleString()}
+            <Typography variant="body2" color="text.secondary">
+              {booking.property_type} - {booking.property_address || booking.address}
             </Typography>
           </Box>
+          <Chip
+            label={getStatusLabel(booking.status)}
+            color={getStatusColor(booking.status)}
+            size="small"
+          />
+        </Box>
 
-          {/* Action Buttons */}
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {request.status === 'pending' && (
-              <>
-                <Button
-                  variant="contained"
-                  color="success"
-                  startIcon={<CheckCircleIcon />}
-                  onClick={() => setResponseDialog({ open: true, type: 'approve', request })}
-                >
-                  Approve
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<CancelIcon />}
-                  onClick={() => setResponseDialog({ open: true, type: 'reject', request })}
-                >
-                  Reject
-                </Button>
-              </>
-            )}
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <Typography variant="body2">
+              <PersonIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+              <strong>Guest:</strong> {booking.first_name} {booking.last_name}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Typography variant="body2">
+              <CalendarTodayIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+              <strong>Dates:</strong> {formatDate(booking.check_in_date)} - {formatDate(booking.check_out_date)}
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Typography variant="body2">
+              <strong>Duration:</strong> {booking.booking_days} days ({booking.booking_months} months)
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            <Typography variant="body2">
+              <strong>Amount:</strong> {formatCurrency(booking.total_price)}
+            </Typography>
+          </Grid>
+        </Grid>
 
-            {request.status === 'payment_submitted' && (
-              <>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  startIcon={<CheckCircleIcon />}
-                  onClick={() => handlePaymentConfirmation(request.id, 'confirm')}
-                >
-                  Confirm Payment
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="error"
-                  startIcon={<CancelIcon />}
-                  onClick={() => handlePaymentConfirmation(request.id, 'reject_payment')}
-                >
-                  Reject Payment
-                </Button>
-                {request.payment_proof_url && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<VisibilityIcon />}
-                    onClick={() => window.open(request.payment_proof_url, '_blank')}
-                  >
-                    View Payment Proof
-                  </Button>
+        <Accordion>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="body2">Guest Information & Details</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" gutterBottom>Contact Information</Typography>
+                <Typography variant="body2">
+                  <EmailIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+                  {booking.email}
+                </Typography>
+                <Typography variant="body2">
+                  <PhoneIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+                  {booking.country_code} {booking.mobile_number}
+                </Typography>
+                {booking.birthdate && (
+                  <Typography variant="body2">
+                    <strong>Birth Date:</strong> {formatDate(booking.birthdate)}
+                  </Typography>
                 )}
-                {request.verification_document_url && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<DownloadIcon />}
-                    onClick={() => window.open(request.verification_document_url, '_blank')}
-                  >
-                    View ID Document
-                  </Button>
+                {booking.gender && (
+                  <Typography variant="body2">
+                    <strong>Gender:</strong> {booking.gender}
+                  </Typography>
                 )}
-              </>
-            )}
+                {booking.nationality && (
+                  <Typography variant="body2">
+                    <strong>Nationality:</strong> {booking.nationality}
+                  </Typography>
+                )}
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" gutterBottom>Professional Information</Typography>
+                {booking.occupation && (
+                  <Typography variant="body2">
+                    <BusinessIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+                    <strong>Occupation:</strong> {booking.occupation}
+                  </Typography>
+                )}
+                {booking.field && (
+                  <Typography variant="body2">
+                    <strong>Field:</strong> {booking.field}
+                  </Typography>
+                )}
+                {booking.destination && (
+                  <Typography variant="body2">
+                    <strong>Destination:</strong> {booking.destination}
+                  </Typography>
+                )}
+              </Grid>
 
+              {booking.relocation_details && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" gutterBottom>Relocation Details</Typography>
+                  <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                    "{booking.relocation_details}"
+                  </Typography>
+                </Grid>
+              )}
+
+              {booking.owner_response_message && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" gutterBottom>Your Response</Typography>
+                  <Typography variant="body2">
+                    {booking.owner_response_message}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Responded on: {formatDateTime(booking.owner_responded_at)}
+                  </Typography>
+                </Grid>
+              )}
+
+              {(booking.payment_proof_url || booking.payment_account_info) && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" gutterBottom>Payment Information</Typography>
+                  {booking.payment_account_info && (
+                    <Typography variant="body2">
+                      <strong>Account Info:</strong> {booking.payment_account_info}
+                    </Typography>
+                  )}
+                  {booking.payment_proof_url && (
+                    <Typography variant="body2">
+                      <AttachFileIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+                      <Button 
+                        size="small" 
+                        href={booking.payment_proof_url} 
+                        target="_blank"
+                        sx={{ textTransform: 'none' }}
+                      >
+                        View Payment Proof
+                      </Button>
+                    </Typography>
+                  )}
+                  {booking.payment_submitted_at && (
+                    <Typography variant="caption" color="text.secondary">
+                      Payment submitted: {formatDateTime(booking.payment_submitted_at)}
+                    </Typography>
+                  )}
+                </Grid>
+              )}
+
+              {booking.verification_document_url && (
+                <Grid item xs={12}>
+                  <Typography variant="subtitle2" gutterBottom>Verification Document</Typography>
+                  <Typography variant="body2">
+                    <strong>Document Type:</strong> {booking.verification_document_type}
+                  </Typography>
+                  <Button 
+                    size="small" 
+                    href={booking.verification_document_url} 
+                    target="_blank"
+                    startIcon={<AttachFileIcon />}
+                    sx={{ textTransform: 'none' }}
+                  >
+                    View Document
+                  </Button>
+                </Grid>
+              )}
+            </Grid>
+          </AccordionDetails>
+        </Accordion>
+
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+          <Typography variant="caption" color="text.secondary">
+            Submitted: {formatDateTime(booking.created_at)}
+          </Typography>
+          
+          <Box sx={{ display: 'flex', gap: 1 }}>
             <Button
-              variant="text"
+              size="small"
               startIcon={<VisibilityIcon />}
-              onClick={() => setSelectedRequest(request)}
+              onClick={() => handleViewDetails(booking.id)}
             >
               View Details
             </Button>
+            
+            {booking.status === 'pending' && (
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                onClick={() => {
+                  setSelectedBooking(booking);
+                  setResponseDialog(true);
+                }}
+              >
+                Respond
+              </Button>
+            )}
+            
+            {booking.status === 'payment_submitted' && (
+              <Button
+                size="small"
+                variant="contained"
+                color="warning"
+                startIcon={<PaymentIcon />}
+                onClick={() => {
+                  setSelectedBooking(booking);
+                  setPaymentDialog(true);
+                }}
+              >
+                Verify Payment
+              </Button>
+            )}
           </Box>
+        </Box>
+      </CardContent>
+    </Card>
+  );
 
-          {/* Additional Information */}
-          {request.relocation_details && (
-            <Accordion sx={{ mt: 2 }}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="subtitle2">About the Tenant</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                  {request.relocation_details}
-                </Typography>
-              </AccordionDetails>
-            </Accordion>
-          )}
-        </CardContent>
-      </Card>
+  if (loading && bookings.length === 0) {
+    return (
+      <Container maxWidth="xl" sx={{ mt: 4, display: 'flex', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Container>
     );
-  };
-
-  const filteredRequests = getFilteredRequests();
+  }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      {/* Header */}
-      <Typography variant="h4" gutterBottom sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-        Booking Requests
-      </Typography>
-      <Typography variant="body1" sx={{ color: theme.textSecondary, mb: 4 }}>
-        Manage booking requests for your properties
+    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+      <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 'bold' }}>
+        Property Owner Bookings
       </Typography>
 
-      {/* Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs 
-          value={selectedTab} 
+      {renderStatisticsCard()}
+      {renderFilters()}
+
+      <Paper sx={{ mb: 3 }}>
+        <Tabs
+          value={selectedTab}
           onChange={(e, newValue) => setSelectedTab(newValue)}
           variant="scrollable"
           scrollButtons="auto"
         >
-          {tabs.map((tab, index) => (
-            <Tab 
-              key={tab.status}
+          {statusTabs.map((tab, index) => (
+            <Tab
+              key={index}
               label={
-                <Badge 
-                  badgeContent={getTabCount(tab.status)} 
-                  color="primary"
-                  sx={{ '& .MuiBadge-badge': { right: -8, top: -8 } }}
-                >
-                  <Typography variant="body2" sx={{ textTransform: 'none' }}>
+                tab.badge ? (
+                  <Badge
+                    badgeContent={getPendingCount(tab.value)}
+                    color="error"
+                    invisible={getPendingCount(tab.value) === 0}
+                  >
                     {tab.label}
-                  </Typography>
-                </Badge>
+                  </Badge>
+                ) : tab.label
               }
             />
           ))}
         </Tabs>
-      </Box>
+      </Paper>
 
-      {/* Content */}
-      {loading ? (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography variant="h6" sx={{ color: theme.textSecondary }}>
-            Loading booking requests...
+      {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+      {bookings.length === 0 ? (
+        <Paper sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h6" color="text.secondary">
+            No bookings found
           </Typography>
-        </Box>
-      ) : filteredRequests.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <HomeIcon sx={{ fontSize: 80, color: theme.textSecondary, mb: 2 }} />
-          <Typography variant="h6" sx={{ color: theme.textSecondary, mb: 1 }}>
-            No {tabs[selectedTab].label.toLowerCase()} found
+          <Typography variant="body2" color="text.secondary">
+            When guests book your properties, they will appear here.
           </Typography>
-          <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-            {selectedTab === 0 
-              ? "New booking requests will appear here"
-              : "Check other tabs for requests in different statuses"
-            }
-          </Typography>
-        </Box>
+        </Paper>
       ) : (
         <Box>
-          {filteredRequests.map(request => renderBookingCard(request))}
+          {bookings.map(renderBookingCard)}
         </Box>
       )}
 
-      {/* Response Dialog */}
-      <Dialog 
-        open={responseDialog.open} 
-        onClose={() => setResponseDialog({ open: false, type: '', request: null })}
-        maxWidth="sm" 
+      <Dialog
+        open={responseDialog}
+        onClose={() => setResponseDialog(false)}
+        maxWidth="sm"
         fullWidth
       >
-        <DialogTitle>
-          {responseDialog.type === 'approve' ? 'Approve Booking Request' : 'Reject Booking Request'}
-        </DialogTitle>
+        <DialogTitle>Respond to Booking Request</DialogTitle>
         <DialogContent>
-          {responseDialog.type === 'approve' && (
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Approving this request will allow the tenant to submit payment and documents.
-            </Alert>
-          )}
-          
-          <TextField
-            label="Message to Tenant"
-            multiline
-            rows={3}
-            fullWidth
-            value={responseForm.message}
-            onChange={(e) => setResponseForm(prev => ({ ...prev, message: e.target.value }))}
-            placeholder={responseDialog.type === 'approve' 
-              ? "Welcome! Your request has been approved..." 
-              : "Thank you for your interest, however..."
-            }
-            sx={{ mb: 3 }}
-          />
-
-          {responseDialog.type === 'approve' && (
-            <TextField
-              label="Payment Account Information *"
-              multiline
-              rows={4}
-              fullWidth
-              value={responseForm.paymentAccountInfo}
-              onChange={(e) => setResponseForm(prev => ({ ...prev, paymentAccountInfo: e.target.value }))}
-              placeholder={`Bank: Commercial Bank of Ceylon
-Account Name: John Doe
-Account Number: 123456789
-Branch: Colombo 03
-
-Please transfer the full amount and upload the receipt.`}
-              required
-            />
+          {selectedBooking && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body1" gutterBottom>
+                <strong>Guest:</strong> {selectedBooking.first_name} {selectedBooking.last_name}
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                <strong>Dates:</strong> {formatDate(selectedBooking.check_in_date)} - {formatDate(selectedBooking.check_out_date)}
+              </Typography>
+              <Typography variant="body1" gutterBottom sx={{ mb: 3 }}>
+                <strong>Amount:</strong> {formatCurrency(selectedBooking.total_price)}
+              </Typography>
+              
+              <FormControl fullWidth sx={{ mb: 3 }}>
+                <InputLabel>Response</InputLabel>
+                <Select
+                  value={responseData.action}
+                  label="Response"
+                  onChange={(e) => setResponseData(prev => ({ ...prev, action: e.target.value }))}
+                >
+                  <MenuItem value="approve">Approve Booking</MenuItem>
+                  <MenuItem value="reject">Reject Booking</MenuItem>
+                </Select>
+              </FormControl>
+              
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                label="Message to Guest"
+                value={responseData.message}
+                onChange={(e) => setResponseData(prev => ({ ...prev, message: e.target.value }))}
+                sx={{ mb: 3 }}
+              />
+              
+              {responseData.action === 'approve' && (
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={3}
+                  label="Payment Instructions"
+                  value={responseData.payment_instructions}
+                  onChange={(e) => setResponseData(prev => ({ ...prev, payment_instructions: e.target.value }))}
+                  placeholder="Provide payment details, bank account information, or payment methods..."
+                />
+              )}
+            </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setResponseDialog({ open: false, type: '', request: null })}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={() => handleOwnerResponse(responseDialog.type)} 
-            variant="contained"
-            color={responseDialog.type === 'approve' ? 'success' : 'error'}
-          >
-            {responseDialog.type === 'approve' ? 'Approve Request' : 'Reject Request'}
+          <Button onClick={() => setResponseDialog(false)}>Cancel</Button>
+          <Button onClick={handleBookingResponse} variant="contained">
+            Send Response
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Detailed View Dialog */}
       <Dialog
-        open={!!selectedRequest}
-        onClose={() => setSelectedRequest(null)}
-        maxWidth="md"
+        open={paymentDialog}
+        onClose={() => setPaymentDialog(false)}
+        maxWidth="sm"
         fullWidth
       >
-        {selectedRequest && (
-          <>
-            <DialogTitle>
-              Booking Request Details - #{selectedRequest.id}
-            </DialogTitle>
-            <DialogContent>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" gutterBottom>Tenant Information</Typography>
-                  <Typography variant="body2">Name: {selectedRequest.first_name} {selectedRequest.last_name}</Typography>
-                  <Typography variant="body2">Email: {selectedRequest.email}</Typography>
-                  <Typography variant="body2">Phone: {selectedRequest.country_code} {selectedRequest.mobile_number}</Typography>
-                  <Typography variant="body2">Nationality: {selectedRequest.nationality}</Typography>
-                  <Typography variant="body2">Gender: {selectedRequest.gender}</Typography>
-                  <Typography variant="body2">Date of Birth: {selectedRequest.birthdate}</Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" gutterBottom>Professional Information</Typography>
-                  <Typography variant="body2">Occupation: {selectedRequest.occupation}</Typography>
-                  <Typography variant="body2">Field: {selectedRequest.field}</Typography>
-                  {selectedRequest.destination && (
-                    <Typography variant="body2">Destination: {selectedRequest.destination}</Typography>
-                  )}
-                </Grid>
-                <Grid item xs={12}>
-                  <Typography variant="subtitle2" gutterBottom>Booking Details</Typography>
-                  <Typography variant="body2">Property: {selectedRequest.property_type} - {selectedRequest.unit_type}</Typography>
-                  <Typography variant="body2">Check-in: {selectedRequest.check_in_date}</Typography>
-                  <Typography variant="body2">Check-out: {selectedRequest.check_out_date}</Typography>
-                  <Typography variant="body2">Total Amount: LKR {(selectedRequest.total_price + selectedRequest.service_fee).toLocaleString()}</Typography>
-                </Grid>
-                {selectedRequest.relocation_details && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" gutterBottom>About the Tenant</Typography>
-                    <Typography variant="body2">{selectedRequest.relocation_details}</Typography>
-                  </Grid>
-                )}
-              </Grid>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setSelectedRequest(null)}>Close</Button>
-            </DialogActions>
-          </>
-        )}
+        <DialogTitle>Verify Payment</DialogTitle>
+        <DialogContent>
+          {selectedBooking && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body1" gutterBottom>
+                <strong>Booking:</strong> #{selectedBooking.id}
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                <strong>Amount:</strong> {formatCurrency(selectedBooking.total_price)}
+              </Typography>
+              
+              {selectedBooking.payment_proof_url && (
+                <Box sx={{ mb: 3 }}>
+                  <Button
+                    variant="outlined"
+                    href={selectedBooking.payment_proof_url}
+                    target="_blank"
+                    startIcon={<AttachFileIcon />}
+                    fullWidth
+                  >
+                    View Payment Proof
+                  </Button>
+                </Box>
+              )}
+              
+              <FormControl fullWidth sx={{ mb: 3 }}>
+                <InputLabel>Payment Status</InputLabel>
+                <Select
+                  value={paymentVerification.status}
+                  label="Payment Status"
+                  onChange={(e) => setPaymentVerification(prev => ({ ...prev, status: e.target.value }))}
+                >
+                  <MenuItem value="approved">Approve Payment - Confirm Booking</MenuItem>
+                  <MenuItem value="rejected">Reject Payment - Request Resubmission</MenuItem>
+                </Select>
+              </FormControl>
+              
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Verification Notes"
+                value={paymentVerification.notes}
+                onChange={(e) => setPaymentVerification(prev => ({ ...prev, notes: e.target.value }))}
+                placeholder="Add notes about the payment verification..."
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPaymentDialog(false)}>Cancel</Button>
+          <Button onClick={handlePaymentVerification} variant="contained">
+            Update Payment Status
+          </Button>
+        </DialogActions>
       </Dialog>
 
-      {/* Snackbar */}
       <AppSnackbar
         open={snackbar.open}
         message={snackbar.message}
         severity={snackbar.severity}
-        onClose={handleSnackbarClose}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
       />
     </Container>
   );

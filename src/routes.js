@@ -1,21 +1,22 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import Header from './components/common/Header';
+import { isAuthenticated, getUserRole, getHomePathForRole } from './utils/auth';
+import ProtectedRoute from './components/common/ProtectedRoute';
+import RoleProtectedRoute from './components/common/RoleProtectedRoute';
+
+import Login from './pages/Login';
+import Signup from './pages/Signup';
+import ForgotPassword from './pages/ForgotPassword';
+
 import Home from './pages/Home';
 import MyProperties from './pages/MyProperties';
 import Notifications from './pages/Notifications';
 import AddProperty from './pages/AddProperty';
 import AddPropertyDetails from './pages/AddPropertyDetails';
 import UpdateProperty from './pages/UpdateProperty';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
-import ForgotPassword from './pages/ForgotPassword';
-import Header from './components/common/Header';
-import { isAuthenticated } from './utils/auth';
-import ProtectedRoute from './components/common/ProtectedRoute';
-import RoleProtectedRoute from './components/common/RoleProtectedRoute';
 import PropertyOwnerBookings from './pages/PropertyOwnerBookings';
 
-// User Pages - Now public
 import UserHome from './pages/UserPages/UserHome';
 import UserAllProperties from './pages/UserPages/UserAllProperties';
 import UserPropertyViewPage from './pages/UserPages/UserViewProperty';
@@ -23,16 +24,31 @@ import UserBookingPage from "./pages/UserPages/UserBookingPage";
 import UserFavouriteProperties from './pages/UserPages/UserFavouriteProperties';
 import UserNotifications from './pages/UserPages/UserNotifications';
 
-import ProfilePage from './pages/ProfilePage';
-
-// Admin Pages
 import AdminHome from './pages/AdminPages/AdminHome';
 import AdminNewListings from './pages/AdminPages/AdminNewListing';
 import AdminAllProperties from './pages/AdminPages/AdminAllProperties';
+import AdminPropertyView from './pages/AdminPages/AdminPropertyView';
 
-// This component wraps routes that require authentication
+import ProfilePage from './pages/ProfilePage';
+
 const PrivateRoute = ({ element }) => {
-  return isAuthenticated() ? element : <Navigate to="/login" />;
+  return isAuthenticated() ? element : <Navigate to="/login" replace />;
+};
+
+const PublicRoute = ({ element }) => {
+  if (isAuthenticated()) {
+    const userRole = getUserRole();
+    return <Navigate to={getHomePathForRole(userRole)} replace />;
+  }
+  return element;
+};
+
+const SmartRedirect = () => {
+  if (isAuthenticated()) {
+    const userRole = getUserRole();
+    return <Navigate to={getHomePathForRole(userRole)} replace />;
+  }
+  return <Navigate to="/user-home" replace />;
 };
 
 const AppRoutes = () => {
@@ -40,315 +56,216 @@ const AppRoutes = () => {
     <BrowserRouter>
       <Header />
       <Routes>
-        {/* Public Routes - Redirect root to user home */}
-        <Route path="/" element={<Navigate to="/user-home" />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup/>} />
-        <Route path="/forgot-password" element={<ForgotPassword/>} />
-
-        {/* Public User Pages - No authentication required */}
+        <Route path="/" element={<SmartRedirect />} />
+        
+        <Route 
+          path="/login" 
+          element={<PublicRoute element={<Login />} />} 
+        />
+        <Route 
+          path="/signup" 
+          element={<PublicRoute element={<Signup />} />} 
+        />
+        <Route 
+          path="/forgot-password" 
+          element={<PublicRoute element={<ForgotPassword />} />} 
+        />
+        
         <Route path="/user-home" element={<UserHome />} />
         <Route path="/user-allproperties" element={<UserAllProperties />} />
-        <Route path="/user-viewproperty/:id" element={<UserPropertyViewPage />} />
-
-        {/* Property View Routes for Authenticated Users */}
-        <Route
-          path="/propertyowner-viewproperty/:id"
+        <Route path="/user-all-properties" element={<UserAllProperties />} />
+        <Route path="/user-properties" element={<UserAllProperties />} />
+        <Route path="/user-property-view/:id" element={<UserPropertyViewPage />} />
+        <Route path="/property/:id" element={<UserPropertyViewPage />} />
+        
+        <Route 
+          path="/user-booking/:id" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
-                    <UserPropertyViewPage />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['user']} 
+              element={<UserBookingPage />} 
             />
-          }
+          } 
         />
-
-        <Route
-          path="/admin-viewproperty/:id"
+        <Route 
+          path="/user-favorites" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['admin']}>
-                    <UserPropertyViewPage />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['user']} 
+              element={<UserFavouriteProperties />} 
             />
-          }
+          } 
         />
-
-        {/* Booking requires authentication */}
-        <Route
-          path="/user-bookproperty/:id"
+        <Route 
+          path="/user-favourites" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={["user"]}>
-                    <UserBookingPage/>
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['user']} 
+              element={<UserFavouriteProperties />} 
             />
-          }
+          } 
         />
-
-        {/* User features that require authentication */}
-        <Route
-          path="/user-favourites"
+        <Route 
+          path="/user-notifications" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={["user"]}>
-                    <UserFavouriteProperties/>
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['user']} 
+              element={<UserNotifications />} 
             />
-          }
+          } 
         />
-
-        {/* User notifications route */}
-        <Route
-          path="/user-notifications"
+        
+        <Route 
+          path="/home" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={["user"]}>
-                    <UserNotifications/>
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<Home />} 
             />
-          }
+          } 
         />
-
-        {/* User bookings route */}
-        <Route
-          path="/user-bookings"
+        <Route 
+          path="/my-properties" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={["user"]}>
-                    <div>User Bookings Page - Coming Soon</div>
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<MyProperties />} 
             />
-          }
+          } 
         />
-
-        {/* Messages route */}
-        <Route
-          path="/messages"
+        <Route 
+          path="/myproperties" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['user', 'propertyowner', 'admin']}>
-                    <div>Messages Page - Coming Soon</div>
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<MyProperties />} 
             />
-          }
+          } 
         />
-
-        {/* Transactions route */}
-        <Route
-          path="/transactions"
+        <Route 
+          path="/notifications" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['user', 'propertyowner', 'admin']}>
-                    <div>Transactions Page - Coming Soon</div>
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner', 'admin']} 
+              element={<Notifications />} 
             />
-          }
+          } 
         />
-
-        {/* Property Owner Routes - Protected by role-based access control */}
-        <Route
-          path="/home"
+        <Route 
+          path="/add-property" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
-                    <Home />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<AddProperty />} 
             />
-          }
+          } 
         />
-
-        <Route
-          path="/myproperties"
+        <Route 
+          path="/addproperty" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
-                    <MyProperties />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<AddProperty />} 
             />
-          }
+          } 
         />
-
-        <Route
-          path="/notifications"
+        <Route 
+          path="/add-property-details" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
-                    <Notifications />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<AddPropertyDetails />} 
             />
-          }
+          } 
         />
-
-        <Route
-          path="/addproperty"
+        <Route 
+          path="/add-property-details/:id" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
-                    <AddProperty />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<AddPropertyDetails />} 
             />
-          }
+          } 
         />
-
-        <Route
-          path="/addproperty/details"
+        <Route 
+          path="/update-property/:id" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
-                    <AddPropertyDetails />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<UpdateProperty />} 
             />
-          }
+          } 
         />
-
-        <Route
-          path="/updateproperty/:id"
+        <Route 
+          path="/updateproperty/:id" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
-                    <UpdateProperty />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<UpdateProperty />} 
             />
-          }
+          } 
         />
-
-        {/* Property Owner Bookings Route */}
-        <Route
-          path="/bookings"
+        <Route 
+          path="/property-owner-bookings" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['propertyowner']}>
-                    <PropertyOwnerBookings />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<PropertyOwnerBookings />} 
             />
-          }
+          } 
         />
-
-        {/* Admin Routes */}
-        <Route
-          path="/admin/home"
+        <Route 
+          path="/bookings" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['admin']}>
-                    <AdminHome />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<PropertyOwnerBookings />} 
             />
-          }
+          } 
         />
-
-        <Route
-          path="/admin/new-listings"
+        <Route 
+          path="/profile" 
+          element={<PrivateRoute element={<ProfilePage />} />} 
+        />
+        
+        <Route 
+          path="/admin/home" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['admin']}>
-                    <AdminNewListings />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminHome />} 
             />
-          }
+          } 
         />
-
-        <Route
-          path="/admin/all-properties"
+        <Route 
+          path="/admin/new-listings" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['admin']}>
-                    <AdminAllProperties />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminNewListings />} 
             />
-          }
+          } 
         />
-
-        {/* Profile Route - Available to all authenticated users */}
-        <Route
-          path="/profile"
+        <Route 
+          path="/admin/all-properties" 
           element={
-            <PrivateRoute
-              element={
-                <ProtectedRoute>
-                  <RoleProtectedRoute allowedRoles={['user', 'propertyowner', 'admin']}>
-                    <ProfilePage />
-                  </RoleProtectedRoute>
-                </ProtectedRoute>
-              }
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminAllProperties />} 
             />
-          }
+          } 
         />
-
-        {/* Error Handling Route */}
-        <Route path="/unauthorized" element={<div>Unauthorized Access</div>} />
+        <Route 
+          path="/admin/property/:id" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminPropertyView />} 
+            />
+          } 
+        />
+        
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

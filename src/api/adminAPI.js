@@ -1,498 +1,744 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-// Create axios instance with base configuration
 const apiClient = axios.create({
-  baseURL: API_URL,
+  baseURL: API_BASE_URL,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request interceptor to add auth token
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-});
+);
 
-// Response interceptor to handle auth errors
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('userRole');
+      localStorage.removeItem('userId');
       localStorage.removeItem('tokenExpiry');
-      window.location.href = '/login';
+      
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
 );
 
-/**
- * Get all pending properties awaiting approval
- * @returns {Promise<Array>} List of pending properties
- */
-export const getPendingProperties = async () => {
+const handleAdminError = (error, operation) => {
+  console.error(`Error ${operation}:`, error);
+  
+  if (error.response?.status === 403) {
+    throw new Error('Admin access required. You do not have permission to perform this action.');
+  } else if (error.response?.status === 401) {
+    throw new Error('Please log in to access admin features.');
+  } else if (error.response?.status === 400) {
+    throw new Error(error.response.data?.message || `Invalid data for ${operation}`);
+  } else if (error.response?.status === 404) {
+    throw new Error('Resource not found');
+  } else if (error.response?.status >= 500) {
+    throw new Error('Server error. Please try again later.');
+  }
+  
+  throw new Error(error.response?.data?.message || `Failed to ${operation}`);
+};
+
+export const getDashboardStats = async () => {
   try {
-    const response = await apiClient.get('/admin/pending-properties');
+    const response = await apiClient.get('/admin/dashboard-stats');
+    
+    if (!response.data) {
+      return {
+        users: { total: 0, active: 0, new_this_month: 0 },
+        properties: { total: 0, pending: 0, approved: 0 },
+        bookings: { total: 0, pending: 0, confirmed: 0 },
+        revenue: { total: 0, this_month: 0 },
+        system_health: { status: 'unknown', uptime: 0 }
+      };
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error fetching pending properties:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to fetch pending properties');
-    }
+    handleAdminError(error, 'fetch admin statistics');
   }
 };
 
-/**
- * Get all approved properties
- * @returns {Promise<Array>} List of approved properties
- */
-export const getApprovedProperties = async () => {
-  try {
-    const response = await apiClient.get('/admin/approved-properties');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching approved properties:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to fetch approved properties');
-    }
-  }
-};
-
-/**
- * Get detailed information about a specific property
- * @param {string|number} propertyId - Property ID
- * @returns {Promise<Object>} Property details
- */
-export const getPropertyDetails = async (propertyId) => {
-  try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
-    }
-
-    const response = await apiClient.get(`/admin/property/${propertyId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching property details:', error);
-    
-    if (error.response?.status === 404) {
-      throw new Error('Property not found');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to fetch property details');
-    }
-  }
-};
-
-/**
- * Approve a pending property listing
- * @param {string|number} propertyId - Property ID to approve
- * @param {number} price - Monthly price set by admin
- * @returns {Promise<Object>} Approval response
- */
-export const approveProperty = async (propertyId, price) => {
-  try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
-    }
-
-    if (!price || isNaN(price) || price <= 0) {
-      throw new Error('Valid price is required for property approval');
-    }
-
-    const response = await apiClient.post(`/admin/approve-property/${propertyId}`, {
-      price: parseFloat(price)
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Error approving property:', error);
-    
-    if (error.response?.status === 404) {
-      throw new Error('Property not found or not in pending status');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status === 400) {
-      throw new Error(error.response.data.message || 'Invalid approval data');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to approve property');
-    }
-  }
-};
-
-/**
- * Reject a pending property listing
- * @param {string|number} propertyId - Property ID to reject
- * @param {string} reason - Reason for rejection
- * @returns {Promise<Object>} Rejection response
- */
-export const rejectProperty = async (propertyId, reason) => {
-  try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
-    }
-
-    if (!reason || reason.trim().length < 10) {
-      throw new Error('Rejection reason is required and must be at least 10 characters long');
-    }
-
-    const response = await apiClient.post(`/admin/reject-property/${propertyId}`, {
-      reason: reason.trim()
-    });
-
-    return response.data;
-  } catch (error) {
-    console.error('Error rejecting property:', error);
-    
-    if (error.response?.status === 404) {
-      throw new Error('Property not found or not in pending status');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status === 400) {
-      throw new Error(error.response.data.message || 'Invalid rejection data');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to reject property');
-    }
-  }
-};
-
-/**
- * Get admin dashboard statistics
- * @returns {Promise<Object>} Dashboard statistics
- */
-export const getAdminStats = async () => {
-  try {
-    const response = await apiClient.get('/admin/stats');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching admin stats:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to fetch admin statistics');
-    }
-  }
-};
-
-/**
- * Get list of all users with pagination
- * @param {Object} options - Query options
- * @param {string} options.role - Filter by user role
- * @param {number} options.page - Page number
- * @param {number} options.limit - Items per page
- * @returns {Promise<Object>} Users list with pagination info
- */
 export const getUsers = async (options = {}) => {
   try {
-    const { role, page = 1, limit = 20 } = options;
+    const { role, page = 1, limit = 20, search, status, sort_by = 'created_at', sort_order = 'desc' } = options;
     
     const params = new URLSearchParams();
-    if (role) params.append('role', role);
+    if (role && role !== 'all') params.append('role', role);
+    if (search) params.append('search', search);
+    if (status && status !== 'all') params.append('status', status);
     params.append('page', page.toString());
     params.append('limit', limit.toString());
+    params.append('sort_by', sort_by);
+    params.append('sort_order', sort_order);
 
     const response = await apiClient.get(`/admin/users?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        users: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+      };
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error fetching users:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to fetch users');
-    }
+    handleAdminError(error, 'fetch users');
   }
 };
 
-/**
- * Update user account status
- * @param {string|number} userId - User ID
- * @param {string} status - New status ('active' or 'inactive')
- * @returns {Promise<Object>} Update response
- */
-export const updateUserStatus = async (userId, status) => {
+export const updateUserStatus = async (userId, status, reason = '') => {
   try {
     if (!userId) {
       throw new Error('User ID is required');
     }
 
-    if (!['active', 'inactive'].includes(status)) {
-      throw new Error('Status must be either "active" or "inactive"');
+    if (!['active', 'inactive', 'activate', 'deactivate'].includes(status)) {
+      throw new Error('Invalid status. Must be "active", "inactive", "activate", or "deactivate"');
     }
 
-    const response = await apiClient.put(`/admin/user/${userId}/status`, {
-      status
-    });
+    const action = status === 'active' ? 'activate' : 
+                  status === 'inactive' ? 'deactivate' : status;
 
+    const payload = {
+      action,
+      reason: reason || ''
+    };
+
+    const response = await apiClient.put(`/admin/users/${userId}/status`, payload);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error updating user status:', error);
-    
-    if (error.response?.status === 404) {
-      throw new Error('User not found');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status === 400) {
-      throw new Error(error.response.data.message || 'Invalid status update');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to update user status');
-    }
+    handleAdminError(error, 'updating user status');
   }
 };
 
-/**
- * Get system activity logs (if implemented)
- * @param {Object} options - Query options
- * @param {number} options.page - Page number
- * @param {number} options.limit - Items per page
- * @param {string} options.startDate - Start date filter
- * @param {string} options.endDate - End date filter
- * @returns {Promise<Object>} Activity logs with pagination
- */
-export const getActivityLogs = async (options = {}) => {
+export const getUserDetails = async (userId) => {
   try {
-    const { page = 1, limit = 50, startDate, endDate } = options;
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+
+    const response = await apiClient.get(`/admin/users/${userId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAdminError(error, 'fetching user details');
+  }
+};
+
+export const getPendingProperties = async (options = {}) => {
+  try {
+    const { page = 1, limit = 20, sort_by = 'created_at', sort_order = 'desc' } = options;
     
     const params = new URLSearchParams();
     params.append('page', page.toString());
     params.append('limit', limit.toString());
-    if (startDate) params.append('startDate', startDate);
-    if (endDate) params.append('endDate', endDate);
+    params.append('sort_by', sort_by);
+    params.append('sort_order', sort_order);
 
-    const response = await apiClient.get(`/admin/activity-logs?${params.toString()}`);
+    const response = await apiClient.get(`/admin/properties/pending?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        properties: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+      };
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error fetching activity logs:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to fetch activity logs');
-    }
+    handleAdminError(error, 'fetching pending properties');
   }
 };
 
-/**
- * Get property approval statistics
- * @param {Object} options - Query options
- * @param {string} options.startDate - Start date for statistics
- * @param {string} options.endDate - End date for statistics
- * @returns {Promise<Object>} Property approval statistics
- */
-export const getPropertyApprovalStats = async (options = {}) => {
+export const getAllPropertiesAdmin = async (options = {}) => {
   try {
-    const { startDate, endDate } = options;
+    const { 
+      page = 1, 
+      limit = 20, 
+      status = 'all', 
+      approval_status = 'all',
+      sort_by = 'created_at', 
+      sort_order = 'desc',
+      search,
+      owner_id
+    } = options;
     
     const params = new URLSearchParams();
-    if (startDate) params.append('startDate', startDate);
-    if (endDate) params.append('endDate', endDate);
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    params.append('sort_by', sort_by);
+    params.append('sort_order', sort_order);
+    
+    if (status && status !== 'all') params.append('status', status);
+    if (approval_status && approval_status !== 'all') params.append('approval_status', approval_status);
+    if (search) params.append('search', search);
+    if (owner_id) params.append('owner_id', owner_id.toString());
 
-    const response = await apiClient.get(`/admin/property-approval-stats?${params.toString()}`);
+    const response = await apiClient.get(`/admin/properties?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        properties: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+      };
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error fetching property approval stats:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to fetch property approval statistics');
-    }
+    handleAdminError(error, 'fetching admin properties');
   }
 };
 
-/**
- * Bulk approve multiple properties
- * @param {Array} propertyApprovals - Array of {propertyId, price} objects
- * @returns {Promise<Object>} Bulk approval response
- */
-export const bulkApproveProperties = async (propertyApprovals) => {
-  try {
-    if (!Array.isArray(propertyApprovals) || propertyApprovals.length === 0) {
-      throw new Error('Property approvals array is required');
-    }
-
-    // Validate each approval
-    for (const approval of propertyApprovals) {
-      if (!approval.propertyId || !approval.price || approval.price <= 0) {
-        throw new Error('Each approval must have a valid propertyId and price');
-      }
-    }
-
-    const promises = propertyApprovals.map(approval => 
-      approveProperty(approval.propertyId, approval.price)
-    );
-
-    const results = await Promise.allSettled(promises);
-    
-    const successful = results.filter(result => result.status === 'fulfilled');
-    const failed = results.filter(result => result.status === 'rejected');
-
-    return {
-      successful: successful.length,
-      failed: failed.length,
-      total: propertyApprovals.length,
-      results: results
-    };
-  } catch (error) {
-    console.error('Error bulk approving properties:', error);
-    throw error;
-  }
+export const getApprovedProperties = async (options = {}) => {
+  return getAllPropertiesAdmin({ ...options, approval_status: 'approved' });
 };
 
-/**
- * Search properties with admin filters
- * @param {Object} filters - Search filters
- * @param {string} filters.status - approval_status filter
- * @param {string} filters.propertyType - property_type filter
- * @param {string} filters.ownerUsername - owner username filter
- * @param {string} filters.startDate - creation date start
- * @param {string} filters.endDate - creation date end
- * @returns {Promise<Array>} Filtered properties
- */
-export const searchProperties = async (filters = {}) => {
-  try {
-    const params = new URLSearchParams();
-    
-    Object.keys(filters).forEach(key => {
-      if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '') {
-        params.append(key, filters[key]);
-      }
-    });
-
-    const response = await apiClient.get(`/admin/search-properties?${params.toString()}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error searching properties:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to search properties');
-    }
-  }
-};
-
-/**
- * Export data to CSV format
- * @param {string} dataType - Type of data to export ('properties', 'users', 'bookings')
- * @param {Object} filters - Export filters
- * @returns {Promise<Blob>} CSV file blob
- */
-export const exportData = async (dataType, filters = {}) => {
-  try {
-    if (!dataType) {
-      throw new Error('Data type is required');
-    }
-
-    const params = new URLSearchParams();
-    Object.keys(filters).forEach(key => {
-      if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '') {
-        params.append(key, filters[key]);
-      }
-    });
-
-    const response = await apiClient.get(`/admin/export/${dataType}?${params.toString()}`, {
-      responseType: 'blob'
-    });
-
-    return new Blob([response.data], { type: 'text/csv' });
-  } catch (error) {
-    console.error('Error exporting data:', error);
-    
-    if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error('Failed to export data');
-    }
-  }
-};
-
-/**
- * Remove/deactivate a property (soft delete)
- * This is typically used by admins to remove problematic properties
- * @param {string|number} propertyId - Property ID to remove
- * @param {string} reason - Reason for removal
- * @returns {Promise<Object>} Removal response
- */
-export const removeProperty = async (propertyId, reason = 'Removed by admin') => {
+export const approveRejectProperty = async (propertyId, action, reason = '') => {
   try {
     if (!propertyId) {
       throw new Error('Property ID is required');
     }
 
-    const response = await apiClient.put(`/admin/remove-property/${propertyId}`, {
-      reason: reason.trim()
-    });
+    if (!['approve', 'reject'].includes(action)) {
+      throw new Error('Action must be either "approve" or "reject"');
+    }
 
+    const payload = {
+      action,
+      reason: reason || ''
+    };
+
+    const response = await apiClient.put(`/admin/properties/${propertyId}/approval`, payload);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error removing property:', error);
-    
-    if (error.response?.status === 404) {
-      throw new Error('Property not found');
-    } else if (error.response?.status === 403) {
-      throw new Error('Access denied. Admin role required.');
-    } else if (error.response?.status === 400) {
-      throw new Error(error.response.data.message || 'Invalid removal request');
-    } else if (error.response?.status >= 500) {
-      throw new Error('Server error. Please try again later.');
-    } else {
-      throw new Error(error.response?.data?.message || 'Failed to remove property');
-    }
+    handleAdminError(error, `${action}ing property`);
   }
 };
 
-export default {
-  getPendingProperties,
-  getApprovedProperties,
-  getPropertyDetails,
-  approveProperty,
-  rejectProperty,
-  removeProperty,
-  getAdminStats,
-  getUsers,
-  updateUserStatus,
-  getActivityLogs,
-  getPropertyApprovalStats,
-  bulkApproveProperties,
-  searchProperties,
-  exportData
+export const approveProperty = async (propertyId, reason = '') => {
+  return approveRejectProperty(propertyId, 'approve', reason);
+};
+
+export const rejectProperty = async (propertyId, reason = '') => {
+  return approveRejectProperty(propertyId, 'reject', reason);
+};
+
+export const getPropertyDetailsAdmin = async (propertyId) => {
+  try {
+    if (!propertyId) {
+      throw new Error('Property ID is required');
+    }
+
+    const response = await apiClient.get(`/admin/properties/${propertyId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAdminError(error, 'fetching property details');
+  }
+};
+
+export const deletePropertyAdmin = async (propertyId, reason = '') => {
+  try {
+    if (!propertyId) {
+      throw new Error('Property ID is required');
+    }
+
+    const payload = reason ? { deletion_reason: reason } : {};
+
+    const response = await apiClient.delete(`/admin/properties/${propertyId}`, { data: payload });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAdminError(error, 'deleting property');
+  }
+};
+
+export const removeProperty = deletePropertyAdmin;
+
+export const getBookingRequestsAdmin = async (options = {}) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      status = 'all',
+      property_id,
+      user_id,
+      date_from,
+      date_to,
+      sort_by = 'created_at',
+      sort_order = 'desc'
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    params.append('sort_by', sort_by);
+    params.append('sort_order', sort_order);
+    
+    if (status && status !== 'all') params.append('status', status);
+    if (property_id) params.append('property_id', property_id.toString());
+    if (user_id) params.append('user_id', user_id.toString());
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+
+    const response = await apiClient.get(`/admin/bookings?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        bookings: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAdminError(error, 'fetching booking requests');
+  }
+};
+
+export const getActivityLogs = async (options = {}) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 50, 
+      user_id,
+      action_type,
+      date_from,
+      date_to,
+      sort_by = 'created_at',
+      sort_order = 'desc'
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    params.append('sort_by', sort_by);
+    params.append('sort_order', sort_order);
+    
+    if (user_id) params.append('user_id', user_id.toString());
+    if (action_type) params.append('action_type', action_type);
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+
+    const response = await apiClient.get(`/admin/activity-logs?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        logs: [],
+        pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching activity logs:', error);
+    
+    return {
+      logs: [],
+      pagination: { page: 1, limit: 50, total: 0, totalPages: 0 }
+    };
+  }
+};
+
+export const getPropertyApprovalStats = async (options = {}) => {
+  try {
+    const { period = 'monthly', year, month } = options;
+    
+    const params = new URLSearchParams();
+    params.append('period', period);
+    
+    if (year) params.append('year', year.toString());
+    if (month) params.append('month', month.toString());
+
+    const response = await apiClient.get(`/admin/property-approval-stats?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        total_submitted: 0,
+        total_approved: 0,
+        total_rejected: 0,
+        pending_approval: 0,
+        approval_rate: 0,
+        average_approval_time: 0,
+        monthly_breakdown: [],
+        category_breakdown: {}
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching property approval stats:', error);
+    
+    return {
+      total_submitted: 0,
+      total_approved: 0,
+      total_rejected: 0,
+      pending_approval: 0,
+      approval_rate: 0,
+      average_approval_time: 0,
+      monthly_breakdown: [],
+      category_breakdown: {}
+    };
+  }
+};
+
+export const getUserStatistics = async (options = {}) => {
+  try {
+    const { period = 'monthly', year, month, role } = options;
+    
+    const params = new URLSearchParams();
+    params.append('period', period);
+    
+    if (year) params.append('year', year.toString());
+    if (month) params.append('month', month.toString());
+    if (role && role !== 'all') params.append('role', role);
+
+    const response = await apiClient.get(`/admin/user-statistics?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        total_users: 0,
+        active_users: 0,
+        new_registrations: 0,
+        user_retention_rate: 0,
+        role_distribution: {},
+        monthly_registrations: [],
+        activity_metrics: {}
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching user statistics:', error);
+    
+    return {
+      total_users: 0,
+      active_users: 0,
+      new_registrations: 0,
+      user_retention_rate: 0,
+      role_distribution: {},
+      monthly_registrations: [],
+      activity_metrics: {}
+    };
+  }
+};
+
+export const updateSystemConfig = async (configData) => {
+  try {
+    if (!configData || typeof configData !== 'object') {
+      throw new Error('Configuration data is required');
+    }
+
+    const response = await apiClient.put('/admin/system-config', configData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error updating system config:', error);
+    throw new Error('Failed to update system configuration');
+  }
+};
+
+export const getSystemConfig = async () => {
+  try {
+    const response = await apiClient.get('/admin/system-config');
+    
+    if (!response.data) {
+      return {
+        maintenance_mode: false,
+        registration_enabled: true,
+        max_properties_per_owner: 10,
+        booking_advance_days: 365,
+        service_fee_percentage: 5,
+        system_notifications: true
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching system config:', error);
+    
+    return {
+      maintenance_mode: false,
+      registration_enabled: true,
+      max_properties_per_owner: 10,
+      booking_advance_days: 365,
+      service_fee_percentage: 5,
+      system_notifications: true
+    };
+  }
+};
+
+export const createAnnouncement = async (announcementData) => {
+  try {
+    if (!announcementData || typeof announcementData !== 'object') {
+      throw new Error('Announcement data is required');
+    }
+
+    const requiredFields = ['title', 'content'];
+    
+    for (const field of requiredFields) {
+      if (!announcementData[field]) {
+        throw new Error(`${field} is required`);
+      }
+    }
+
+    const response = await apiClient.post('/admin/announcements', announcementData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error creating announcement:', error);
+    throw new Error('Failed to create announcement');
+  }
+};
+
+export const getAnnouncements = async (options = {}) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      status = 'all',
+      sort_by = 'created_at',
+      sort_order = 'desc'
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    params.append('sort_by', sort_by);
+    params.append('sort_order', sort_order);
+    
+    if (status && status !== 'all') params.append('status', status);
+
+    const response = await apiClient.get(`/admin/announcements?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        announcements: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching announcements:', error);
+    
+    return {
+      announcements: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+    };
+  }
+};
+
+export const getReportedContent = async (options = {}) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      status = 'pending',
+      content_type,
+      sort_by = 'created_at',
+      sort_order = 'desc'
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('limit', limit.toString());
+    params.append('sort_by', sort_by);
+    params.append('sort_order', sort_order);
+    
+    if (status && status !== 'all') params.append('status', status);
+    if (content_type) params.append('content_type', content_type);
+
+    const response = await apiClient.get(`/admin/reported-content?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        reports: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching reported content:', error);
+    
+    return {
+      reports: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+    };
+  }
+};
+
+export const resolveReport = async (reportId, resolutionData) => {
+  try {
+    if (!reportId) {
+      throw new Error('Report ID is required');
+    }
+
+    if (!resolutionData || typeof resolutionData !== 'object') {
+      throw new Error('Resolution data is required');
+    }
+
+    const response = await apiClient.put(`/admin/reported-content/${reportId}/resolve`, resolutionData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error resolving report:', error);
+    throw new Error('Failed to resolve report');
+  }
+};
+
+export const exportAdminData = async (options = {}) => {
+  try {
+    const { 
+      data_type = 'users', 
+      format = 'csv',
+      date_from,
+      date_to,
+      include_sensitive_data = false
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('data_type', data_type);
+    params.append('format', format);
+    
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+    if (include_sensitive_data) params.append('include_sensitive_data', 'true');
+
+    const response = await apiClient.get(`/admin/export?${params.toString()}`, {
+      responseType: 'blob'
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error exporting admin data:', error);
+    throw new Error('Failed to export data');
+  }
+};
+
+export const getSystemHealth = async () => {
+  try {
+    const response = await apiClient.get('/admin/system-health');
+    
+    if (!response.data) {
+      return {
+        status: 'unknown',
+        database: { status: 'unknown' },
+        server: { status: 'unknown', uptime: 0 },
+        storage: { status: 'unknown', usage: 0 },
+        memory: { status: 'unknown', usage: 0 }
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching system health:', error);
+    
+    return {
+      status: 'error',
+      database: { status: 'error' },
+      server: { status: 'error', uptime: 0 },
+      storage: { status: 'unknown', usage: 0 },
+      memory: { status: 'unknown', usage: 0 }
+    };
+  }
+};
+
+export const getFinancialReports = async (options = {}) => {
+  try {
+    const { 
+      period = 'monthly', 
+      year,
+      month,
+      report_type = 'summary'
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('period', period);
+    params.append('report_type', report_type);
+    
+    if (year) params.append('year', year.toString());
+    if (month) params.append('month', month.toString());
+
+    const response = await apiClient.get(`/admin/financial-reports?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        total_revenue: 0,
+        service_fees_collected: 0,
+        property_owner_earnings: 0,
+        monthly_breakdown: [],
+        top_earning_properties: [],
+        payment_methods: {}
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching financial reports:', error);
+    
+    return {
+      total_revenue: 0,
+      service_fees_collected: 0,
+      property_owner_earnings: 0,
+      monthly_breakdown: [],
+      top_earning_properties: [],
+      payment_methods: {}
+    };
+  }
 };

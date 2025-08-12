@@ -23,7 +23,11 @@ import {
   FormControlLabel,
   Divider,
   Paper,
-  Alert
+  Alert,
+  InputAdornment,
+  CircularProgress,
+  Badge,
+  Tooltip
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -31,447 +35,717 @@ import CloseIcon from '@mui/icons-material/Close';
 import TuneIcon from '@mui/icons-material/Tune';
 import SortIcon from '@mui/icons-material/Sort';
 import ClearIcon from '@mui/icons-material/Clear';
-import { getAllProperties } from '../../api/propertyApi';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import PendingIcon from '@mui/icons-material/Pending';
+import { getAllPublicProperties } from '../../api/propertyApi';
+import { getPropertyRating, checkFavoriteStatus, recordPropertyView } from '../../api/userInteractionApi';
 import PropertyGrid from '../../components/common/PropertyGrid';
 import { useTheme } from '../../contexts/ThemeContext';
-import { useNavigate } from 'react-router-dom';
-import { getPropertyStats, getUniqueFilterValues } from '../../utils/PropertyFilterUtils';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const UserAllProperties = () => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [properties, setProperties] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  const [selectedTab, setSelectedTab] = useState(0);
+  const [error, setError] = useState('');
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
-  
-  const [sortBy, setSortBy] = useState('');
-  const [sortOrder, setSortOrder] = useState('desc');
-  
-  const { theme, isDark } = useTheme();
-  const navigate = useNavigate();
-  
+  const [totalResults, setTotalResults] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   const [filters, setFilters] = useState({
-    priceRange: [0, 100000],
-    starRating: 0,
-    availabilityDate: '',
+    property_type: '',
+    unit_type: '',
+    min_price: '',
+    max_price: '',
+    bedrooms: '',
+    bathrooms: '',
+    amenities: [],
+    facilities: [],
     location: '',
-    bedrooms: 0,
-    bathrooms: 0,
-    requiredAmenities: [],
-    isAvailable: true
+    available_from: '',
+    available_to: '',
+    sort: 'created_at_desc'
   });
 
-  const [appliedFilters, setAppliedFilters] = useState({
-    priceRange: [0, 100000],
-    starRating: 0,
-    availabilityDate: '',
-    location: '',
-    bedrooms: 0,
-    bathrooms: 0,
-    requiredAmenities: [],
-    isAvailable: true
-  });
+  const [activeFiltersCount, setActiveFiltersCount] = useState(0);
 
-  const propertyTypes = ['All', 'Apartment', 'Villa', 'Flat', 'Room', 'House'];
-  
-  const sortOptions = [
-    { value: '', label: 'Default' },
-    { value: 'price', label: 'Price' },
-    { value: 'rating', label: 'Rating' },
-    { value: 'date', label: 'Availability Date' },
-    { value: 'newest', label: 'Recently Added' },
-    { value: 'bedrooms', label: 'Bedrooms' },
-    { value: 'popularity', label: 'Popularity' }
+  const navigate = useNavigate();
+  const { theme, isDark } = useTheme();
+
+  const propertyTypes = [
+    'Apartment', 'Villa', 'House', 'Boarding'
   ];
 
-  const propertyStats = useMemo(() => {
-    return getPropertyStats(properties);
-  }, [properties]);
+  const unitTypes = [
+    'Studio', '1 Bedroom', '2 Bedroom', '3 Bedroom', '4 Bedroom', '5+ Bedroom',
+    'Single Room', 'Shared Room', 'Entire Place'
+  ];
 
-  const filterOptions = useMemo(() => {
-    if (!properties.length) return { locations: [], amenities: [] };
+  const commonAmenities = [
+    'WiFi', 'Air Conditioning', 'Parking', 'Swimming Pool', 'Gym', 'Security',
+    'Furnished', 'Kitchen', 'Balcony', 'Garden', 'Laundry', 'Pet Friendly'
+  ];
+
+  const commonFacilities = [
+    'Electricity', 'Water', 'Gas', 'Internet', 'Cable TV', 'Cleaning Service',
+    'Maintenance', '24/7 Security', 'CCTV', 'Backup Power', 'Elevator'
+  ];
+
+  const sortOptions = [
+    { value: 'created_at_desc', label: 'Newest First' },
+    { value: 'created_at_asc', label: 'Oldest First' },
+    { value: 'price_asc', label: 'Price: Low to High' },
+    { value: 'price_desc', label: 'Price: High to Low' },
+    { value: 'views_desc', label: 'Most Viewed' },
+    { value: 'relevance', label: 'Most Relevant' }
+  ];
+
+  // Extract and process response data
+  const extractProperties = (response) => {
+    console.log('Raw API response:', response);
     
-    return {
-      locations: getUniqueFilterValues(properties, 'address')
-        .map(addr => {
-          const parts = addr.split(',');
-          return parts[parts.length - 1]?.trim() || addr;
-        })
-        .filter((city, index, arr) => arr.indexOf(city) === index)
-        .slice(0, 20),
+    // Handle different response structures
+    let propertyData = [];
+    let totalCount = 0;
+    
+    if (response) {
+      // Try different property array keys
+      propertyData = response.results || 
+                   response.properties || 
+                   response.data || 
+                   (Array.isArray(response) ? response : []);
       
-      amenities: properties.reduce((acc, property) => {
-        try {
-          const amenities = JSON.parse(property.amenities || '[]');
-          amenities.forEach(amenity => {
-            if (amenity && !acc.includes(amenity)) {
-              acc.push(amenity);
-            }
-          });
-        } catch (error) {
-          // Handle invalid JSON gracefully
-        }
-        return acc;
-      }, []).slice(0, 15)
-    };
-  }, [properties]);
+      // Try different total count keys
+      totalCount = response.search_metadata?.total_results || 
+                  response.pagination?.total || 
+                  response.total_count || 
+                  response.total ||
+                  (Array.isArray(propertyData) ? propertyData.length : 0);
+    }
+    
+    // Ensure we have an array
+    const properties = Array.isArray(propertyData) ? propertyData : [];
+    
+    console.log('Extracted properties:', {
+      count: properties.length,
+      total: totalCount,
+      firstProperty: properties[0] || null
+    });
+    
+    return { properties, totalCount };
+  };
 
-  // Single API call to fetch all properties - no loops
-  useEffect(() => {
-    const fetchProperties = async () => {
-      setLoading(true);
-      setError(null);
-      
-      try {
-        const data = await getAllProperties();
-        setProperties(data);
-        
-        const prices = data.map(p => p.price).filter(p => p > 0);
-        if (prices.length > 0) {
-          const maxPrice = Math.max(...prices);
-          const defaultMax = Math.min(100000, maxPrice);
-          
-          setFilters(prev => ({
-            ...prev,
-            priceRange: [0, defaultMax]
-          }));
-          setAppliedFilters(prev => ({
-            ...prev,
-            priceRange: [0, defaultMax]
-          }));
-        }
-        
-      } catch (error) {
-        console.error('Error fetching properties:', error);
-        setError('Failed to load properties. Please try again.');
-      } finally {
-        setLoading(false);
+  // Build search parameters
+  const buildSearchParams = (resetPage = false) => {
+    const params = {
+      page: resetPage ? 1 : currentPage,
+      limit: 12,
+      ...filters
+    };
+
+    if (searchQuery.trim()) {
+      params.search = searchQuery.trim();
+    }
+
+    if (filters.amenities.length > 0) {
+      params.amenities = filters.amenities.join(',');
+    }
+
+    if (filters.facilities.length > 0) {
+      params.facilities = filters.facilities.join(',');
+    }
+
+    // Clean up empty parameters
+    Object.keys(params).forEach(key => {
+      if (params[key] === '' || params[key] === null || params[key] === undefined) {
+        delete params[key];
       }
-    };
+    });
 
-    fetchProperties();
-  }, []);
+    return params;
+  };
 
-  const handleTabChange = useCallback((event, newValue) => {
-    setSelectedTab(newValue);
-    
-    if (newValue === 0) {
-      setAppliedFilters(prev => ({ ...prev, propertyType: '' }));
-    } else {
-      const selectedType = propertyTypes[newValue];
-      setAppliedFilters(prev => ({ ...prev, propertyType: selectedType }));
+  // Fetch properties function
+  const fetchProperties = async (resetResults = false) => {
+    try {
+      if (resetResults) {
+        setLoading(true);
+        setCurrentPage(1);
+        setProperties([]);
+        setError('');
+      } else {
+        setLoadingMore(true);
+      }
+
+      const params = buildSearchParams(resetResults);
+      console.log('Fetching properties with params:', params);
+      
+      const response = await getAllPublicProperties(params);
+      const { properties: propertyData, totalCount } = extractProperties(response);
+
+      if (resetResults) {
+        setProperties(propertyData);
+        console.log('Set properties (reset):', propertyData.length);
+      } else {
+        setProperties(prev => {
+          const newProperties = [...prev, ...propertyData];
+          console.log('Added properties (append):', propertyData.length, 'Total:', newProperties.length);
+          return newProperties;
+        });
+      }
+
+      setTotalResults(totalCount);
+      setHasMore(propertyData.length === 12);
+
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+      setError(error.message || 'Failed to load properties. Please try again.');
+      if (resetResults) {
+        setProperties([]);
+      }
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
-  }, [propertyTypes]);
+  };
 
-  const handleSearch = useCallback((event) => {
-    if (event.key === 'Enter') {
-      // The PropertyGrid will handle the search filtering
-      event.preventDefault();
+  // Load data on component mount and when filters change
+  useEffect(() => {
+    const searchTerm = searchParams.get('search');
+    if (searchTerm !== searchQuery) {
+      setSearchQuery(searchTerm || '');
     }
-  }, []);
+    console.log('Initial load triggered');
+    fetchProperties(true);
+  }, [searchParams]);
 
-  const handleFilterChange = useCallback((filterType, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterType]: value
-    }));
-  }, []);
-
-  const applyFilters = useCallback(() => {
-    setAppliedFilters({ ...filters });
-    setFilterDrawerOpen(false);
+  useEffect(() => {
+    countActiveFilters();
   }, [filters]);
 
-  const clearFilters = useCallback(() => {
-    const clearedFilters = {
-      priceRange: [0, 100000],
-      starRating: 0,
-      availabilityDate: '',
-      location: '',
-      bedrooms: 0,
-      bathrooms: 0,
-      requiredAmenities: [],
-      isAvailable: true
-    };
-    setFilters(clearedFilters);
-    setAppliedFilters(clearedFilters);
-  }, []);
+  // Debug logging for properties state
+  useEffect(() => {
+    console.log('Properties state updated:', {
+      count: properties.length,
+      loading,
+      error,
+      totalResults,
+      hasMore
+    });
+  }, [properties, loading, error, totalResults, hasMore]);
 
-  const handleSortChange = useCallback((event) => {
-    setSortBy(event.target.value);
-  }, []);
+  // Count active filters
+  const countActiveFilters = () => {
+    let count = 0;
+    if (filters.property_type) count++;
+    if (filters.unit_type) count++;
+    if (filters.min_price) count++;
+    if (filters.max_price) count++;
+    if (filters.bedrooms) count++;
+    if (filters.bathrooms) count++;
+    if (filters.amenities.length > 0) count++;
+    if (filters.facilities.length > 0) count++;
+    if (filters.location) count++;
+    if (filters.available_from) count++;
+    if (filters.available_to) count++;
+    setActiveFiltersCount(count);
+  };
 
-  const handleSortOrderChange = useCallback((event) => {
-    setSortOrder(event.target.value);
-  }, []);
+  // Handle search
+  const handleSearch = (event) => {
+    event.preventDefault();
+    console.log('Search triggered:', searchQuery);
+    
+    const newSearchParams = new URLSearchParams(searchParams);
+    
+    if (searchQuery.trim()) {
+      newSearchParams.set('search', searchQuery.trim());
+    } else {
+      newSearchParams.delete('search');
+    }
+    
+    setSearchParams(newSearchParams);
+  };
 
-  const handleAmenityToggle = useCallback((amenity) => {
+  // Filter handlers
+  const handleFilterChange = (filterName, value) => {
+    console.log('Filter changed:', filterName, value);
     setFilters(prev => ({
       ...prev,
-      requiredAmenities: prev.requiredAmenities.includes(amenity)
-        ? prev.requiredAmenities.filter(a => a !== amenity)
-        : [...prev.requiredAmenities, amenity]
+      [filterName]: value
     }));
-  }, []);
+  };
 
-  const FilterDrawer = () => (
+  const handleArrayFilterToggle = (filterName, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterName]: prev[filterName].includes(value)
+        ? prev[filterName].filter(item => item !== value)
+        : [...prev[filterName], value]
+    }));
+  };
+
+  const applyFilters = () => {
+    console.log('Applying filters:', filters);
+    setFilterDrawerOpen(false);
+    fetchProperties(true);
+  };
+
+  const clearAllFilters = () => {
+    console.log('Clearing all filters');
+    setFilters({
+      property_type: '',
+      unit_type: '',
+      min_price: '',
+      max_price: '',
+      bedrooms: '',
+      bathrooms: '',
+      amenities: [],
+      facilities: [],
+      location: '',
+      available_from: '',
+      available_to: '',
+      sort: 'created_at_desc'
+    });
+    setSearchQuery('');
+    setSearchParams(new URLSearchParams());
+    fetchProperties(true);
+  };
+
+  // Load more properties
+  const loadMoreProperties = () => {
+    if (!loadingMore && hasMore && properties.length > 0) {
+      const nextPage = currentPage + 1;
+      setCurrentPage(nextPage);
+      
+      const params = buildSearchParams(false);
+      params.page = nextPage;
+      
+      console.log('Loading more properties, page:', nextPage);
+      fetchProperties(false);
+    }
+  };
+
+  // Handle property view
+  const handlePropertyView = async (propertyId) => {
+    try {
+      await recordPropertyView(propertyId);
+    } catch (error) {
+      console.error('Error recording property view:', error);
+    }
+    navigate(`/user-property-view/${propertyId}`);
+  };
+
+  // Render filter drawer
+  const renderFilterDrawer = () => (
     <Drawer
       anchor="right"
       open={filterDrawerOpen}
       onClose={() => setFilterDrawerOpen(false)}
       PaperProps={{
-        sx: { width: { xs: '100%', sm: 400 }, p: 2 }
+        sx: { width: { xs: '100%', sm: 400 }, p: 0 }
       }}
     >
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6">Filter Properties</Typography>
-        <IconButton onClick={() => setFilterDrawerOpen(false)}>
-          <CloseIcon />
-        </IconButton>
-      </Box>
-
-      <Divider sx={{ mb: 2 }} />
-
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>Price Range</Typography>
-        <Slider
-          value={filters.priceRange}
-          onChange={(e, value) => handleFilterChange('priceRange', value)}
-          valueLabelDisplay="auto"
-          min={0}
-          max={200000}
-          step={1000}
-          valueLabelFormat={(value) => `LKR ${value.toLocaleString()}`}
-        />
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
-          <Typography variant="body2">LKR {filters.priceRange[0].toLocaleString()}</Typography>
-          <Typography variant="body2">LKR {filters.priceRange[1].toLocaleString()}</Typography>
+      <Box sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Filter Properties
+          </Typography>
+          <IconButton onClick={() => setFilterDrawerOpen(false)}>
+            <CloseIcon />
+          </IconButton>
         </Box>
-      </Box>
 
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>Minimum Rating</Typography>
-        <Rating
-          value={filters.starRating}
-          onChange={(e, value) => handleFilterChange('starRating', value || 0)}
-          size="large"
-        />
-      </Box>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Property Type</Typography>
+          <FormControl fullWidth size="small">
+            <Select
+              value={filters.property_type}
+              onChange={(e) => handleFilterChange('property_type', e.target.value)}
+              displayEmpty
+            >
+              <MenuItem value="">All Types</MenuItem>
+              {propertyTypes.map(type => (
+                <MenuItem key={type} value={type}>{type}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
 
-      <Box sx={{ mb: 3 }}>
-        <FormControl fullWidth>
-          <InputLabel>Location</InputLabel>
-          <Select
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Unit Type</Typography>
+          <FormControl fullWidth size="small">
+            <Select
+              value={filters.unit_type}
+              onChange={(e) => handleFilterChange('unit_type', e.target.value)}
+              displayEmpty
+            >
+              <MenuItem value="">All Unit Types</MenuItem>
+              {unitTypes.map(type => (
+                <MenuItem key={type} value={type}>{type}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Price Range (LKR)</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={6}>
+              <TextField
+                size="small"
+                label="Min"
+                type="number"
+                value={filters.min_price}
+                onChange={(e) => handleFilterChange('min_price', e.target.value)}
+                fullWidth
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                size="small"
+                label="Max"
+                type="number"
+                value={filters.max_price}
+                onChange={(e) => handleFilterChange('max_price', e.target.value)}
+                fullWidth
+              />
+            </Grid>
+          </Grid>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Bedrooms</Typography>
+          <FormControl fullWidth size="small">
+            <Select
+              value={filters.bedrooms}
+              onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
+              displayEmpty
+            >
+              <MenuItem value="">Any</MenuItem>
+              <MenuItem value="1">1+</MenuItem>
+              <MenuItem value="2">2+</MenuItem>
+              <MenuItem value="3">3+</MenuItem>
+              <MenuItem value="4">4+</MenuItem>
+              <MenuItem value="5">5+</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Bathrooms</Typography>
+          <FormControl fullWidth size="small">
+            <Select
+              value={filters.bathrooms}
+              onChange={(e) => handleFilterChange('bathrooms', e.target.value)}
+              displayEmpty
+            >
+              <MenuItem value="">Any</MenuItem>
+              <MenuItem value="1">1+</MenuItem>
+              <MenuItem value="2">2+</MenuItem>
+              <MenuItem value="3">3+</MenuItem>
+              <MenuItem value="4">4+</MenuItem>
+            </Select>
+          </FormControl>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Location</Typography>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Enter location"
             value={filters.location}
             onChange={(e) => handleFilterChange('location', e.target.value)}
-            label="Location"
-          >
-            <MenuItem value="">All Locations</MenuItem>
-            {filterOptions.locations.map(location => (
-              <MenuItem key={location} value={location}>
-                {location}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
-
-      <Box sx={{ mb: 3 }}>
-        <FormControl fullWidth sx={{ mb: 2 }}>
-          <InputLabel>Bedrooms</InputLabel>
-          <Select
-            value={filters.bedrooms}
-            onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
-            label="Bedrooms"
-          >
-            <MenuItem value={0}>Any</MenuItem>
-            <MenuItem value={1}>1+</MenuItem>
-            <MenuItem value={2}>2+</MenuItem>
-            <MenuItem value={3}>3+</MenuItem>
-            <MenuItem value={4}>4+</MenuItem>
-          </Select>
-        </FormControl>
-
-        <FormControl fullWidth>
-          <InputLabel>Bathrooms</InputLabel>
-          <Select
-            value={filters.bathrooms}
-            onChange={(e) => handleFilterChange('bathrooms', e.target.value)}
-            label="Bathrooms"
-          >
-            <MenuItem value={0}>Any</MenuItem>
-            <MenuItem value={1}>1+</MenuItem>
-            <MenuItem value={2}>2+</MenuItem>
-            <MenuItem value={3}>3+</MenuItem>
-            <MenuItem value={4}>4+</MenuItem>
-          </Select>
-        </FormControl>
-      </Box>
-
-      <Box sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          type="date"
-          label="Available From"
-          value={filters.availabilityDate}
-          onChange={(e) => handleFilterChange('availabilityDate', e.target.value)}
-          InputLabelProps={{ shrink: true }}
-        />
-      </Box>
-
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle1" sx={{ mb: 1 }}>Amenities</Typography>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          {filterOptions.amenities.map(amenity => (
-            <Chip
-              key={amenity}
-              label={amenity}
-              clickable
-              color={filters.requiredAmenities.includes(amenity) ? 'primary' : 'default'}
-              onClick={() => handleAmenityToggle(amenity)}
-              variant={filters.requiredAmenities.includes(amenity) ? 'filled' : 'outlined'}
-            />
-          ))}
+          />
         </Box>
-      </Box>
 
-      <Box sx={{ mb: 3 }}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={filters.isAvailable}
-              onChange={(e) => handleFilterChange('isAvailable', e.target.checked)}
-            />
-          }
-          label="Available Only"
-        />
-      </Box>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Amenities</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {commonAmenities.map(amenity => (
+              <Chip
+                key={amenity}
+                label={amenity}
+                clickable
+                color={filters.amenities.includes(amenity) ? 'primary' : 'default'}
+                onClick={() => handleArrayFilterToggle('amenities', amenity)}
+                size="small"
+              />
+            ))}
+          </Box>
+        </Box>
 
-      <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
-        <Button
-          variant="outlined"
-          onClick={clearFilters}
-          startIcon={<ClearIcon />}
-          fullWidth
-        >
-          Clear
-        </Button>
-        <Button
-          variant="contained"
-          onClick={applyFilters}
-          startIcon={<TuneIcon />}
-          fullWidth
-        >
-          Apply Filters
-        </Button>
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Facilities</Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {commonFacilities.map(facility => (
+              <Chip
+                key={facility}
+                label={facility}
+                clickable
+                color={filters.facilities.includes(facility) ? 'primary' : 'default'}
+                onClick={() => handleArrayFilterToggle('facilities', facility)}
+                size="small"
+              />
+            ))}
+          </Box>
+        </Box>
+
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" gutterBottom>Availability</Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={6}>
+              <TextField
+                size="small"
+                label="Available From"
+                type="date"
+                value={filters.available_from}
+                onChange={(e) => handleFilterChange('available_from', e.target.value)}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField
+                size="small"
+                label="Available To"
+                type="date"
+                value={filters.available_to}
+                onChange={(e) => handleFilterChange('available_to', e.target.value)}
+                fullWidth
+                InputLabelProps={{ shrink: true }}
+              />
+            </Grid>
+          </Grid>
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={clearAllFilters}
+            fullWidth
+          >
+            Clear All
+          </Button>
+          <Button
+            variant="contained"
+            onClick={applyFilters}
+            fullWidth
+            sx={{ backgroundColor: theme.primary }}
+          >
+            Apply Filters
+          </Button>
+        </Box>
       </Box>
     </Drawer>
   );
 
+  if (loading) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ mt: 2 }}>
+          Loading properties...
+        </Typography>
+      </Container>
+    );
+  }
+
   return (
-    <Container maxWidth="xl" sx={{ py: 3 }}>
-      <Typography variant="h4" component="h1" sx={{ mb: 3, fontWeight: 'bold' }}>
-        All Properties
-      </Typography>
-
-      {propertyStats.total > 0 && (
-        <Paper sx={{ p: 2, mb: 3 }}>
-          <Typography variant="h6" sx={{ mb: 1 }}>Property Statistics</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary">Total Properties</Typography>
-              <Typography variant="h6">{propertyStats.total}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary">Average Price</Typography>
-              <Typography variant="h6">LKR {propertyStats.averagePrice.toLocaleString()}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary">Average Rating</Typography>
-              <Typography variant="h6">{propertyStats.averageRating.toFixed(1)}</Typography>
-            </Grid>
-            <Grid item xs={6} sm={3}>
-              <Typography variant="body2" color="text.secondary">Available Now</Typography>
-              <Typography variant="h6">{propertyStats.availableCount}</Typography>
-            </Grid>
-          </Grid>
-        </Paper>
-      )}
-
-      <Paper sx={{ mb: 3 }}>
-        <Tabs
-          value={selectedTab}
-          onChange={handleTabChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
-        >
-          {propertyTypes.map((type, index) => (
-            <Tab key={type} label={type} />
-          ))}
-        </Tabs>
-      </Paper>
-
-      <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
-        <TextField
-          fullWidth
-          placeholder="Search properties by location, type, or amenities..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyPress={handleSearch}
-          InputProps={{
-            startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+    <Box sx={{ backgroundColor: isDark ? theme.background : '#fafafa', minHeight: '100vh' }}>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Typography
+          variant="h4"
+          sx={{
+            fontWeight: 700,
+            color: theme.textPrimary,
+            mb: 1,
+            textAlign: 'center',
           }}
-        />
-        
-        <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel>Sort By</InputLabel>
-          <Select value={sortBy} onChange={handleSortChange} label="Sort By">
-            {sortOptions.map(option => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl sx={{ minWidth: 100 }}>
-          <InputLabel>Order</InputLabel>
-          <Select value={sortOrder} onChange={handleSortOrderChange} label="Order">
-            <MenuItem value="asc">Ascending</MenuItem>
-            <MenuItem value="desc">Descending</MenuItem>
-          </Select>
-        </FormControl>
-
-        <Button
-          variant="outlined"
-          onClick={() => setFilterDrawerOpen(true)}
-          startIcon={<FilterListIcon />}
-          sx={{ minWidth: 120 }}
         >
-          Filters
-        </Button>
-      </Box>
+          Find Your Perfect Stay
+        </Typography>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
+        <Typography
+          variant="body1"
+          sx={{
+            color: theme.textSecondary,
+            mb: 4,
+            textAlign: 'center',
+            maxWidth: 600,
+            mx: 'auto',
+          }}
+        >
+          Discover thousands of verified properties across Sri Lanka
+        </Typography>
 
-      <PropertyGrid
-        searchQuery={searchQuery}
-        filters={filters}
-        appliedFilters={appliedFilters}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        isUserPage={true}
-      />
+        {/* Search and Filter Section */}
+        <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
+          <form onSubmit={handleSearch}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <TextField
+                fullWidth
+                placeholder="Search by location, property type, or keywords..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon sx={{ color: theme.textSecondary }} />
+                    </InputAdornment>
+                  ),
+                }}
+              />
 
-      <FilterDrawer />
-    </Container>
+              <Button
+                type="submit"
+                variant="contained"
+                sx={{
+                  minWidth: 120,
+                  backgroundColor: theme.primary,
+                  '&:hover': { backgroundColor: theme.secondary },
+                }}
+              >
+                Search
+              </Button>
+
+              <Badge badgeContent={activeFiltersCount} color="error">
+                <Button
+                  variant="outlined"
+                  startIcon={<FilterListIcon />}
+                  onClick={() => setFilterDrawerOpen(true)}
+                  sx={{
+                    minWidth: 100,
+                    borderColor: theme.primary,
+                    color: theme.primary,
+                  }}
+                >
+                  Filters
+                </Button>
+              </Badge>
+            </Box>
+          </form>
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <InputLabel>Sort By</InputLabel>
+              <Select
+                value={filters.sort}
+                onChange={(e) => {
+                  handleFilterChange('sort', e.target.value);
+                  fetchProperties(true);
+                }}
+                label="Sort By"
+              >
+                {sortOptions.map(option => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {activeFiltersCount > 0 && (
+              <Button
+                startIcon={<ClearIcon />}
+                onClick={clearAllFilters}
+                size="small"
+                sx={{ color: theme.textSecondary }}
+              >
+                Clear Filters ({activeFiltersCount})
+              </Button>
+            )}
+          </Box>
+        </Paper>
+
+        {/* Error Alert */}
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+            <Button onClick={() => fetchProperties(true)} sx={{ ml: 2 }}>
+              Retry
+            </Button>
+          </Alert>
+        )}
+
+        {/* Results Summary */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" sx={{ color: theme.textPrimary }}>
+            {totalResults > 0 
+              ? `${totalResults} ${totalResults === 1 ? 'Property' : 'Properties'} Found` 
+              : 'No Properties Found'
+            }
+          </Typography>
+        </Box>
+
+        {/* Property Grid or Empty State */}
+        {properties && properties.length > 0 ? (
+          <>
+            <PropertyGrid 
+              properties={properties}
+              onViewProperty={handlePropertyView}
+              loading={false}
+              showActions={true}
+              showMyProperties={false}
+              variant="public"
+              emptyStateMessage="No properties found"
+              emptyStateSubtitle="Try adjusting your search criteria"
+            />
+
+            {hasMore && (
+              <Box sx={{ textAlign: 'center', mt: 4 }}>
+                <Button
+                  variant="outlined"
+                  onClick={loadMoreProperties}
+                  disabled={loadingMore}
+                  size="large"
+                  sx={{
+                    minWidth: 200,
+                    borderColor: theme.primary,
+                    color: theme.primary,
+                  }}
+                >
+                  {loadingMore ? (
+                    <>
+                      <CircularProgress size={20} sx={{ mr: 1 }} />
+                      Loading...
+                    </>
+                  ) : 'Load More Properties'}
+                </Button>
+              </Box>
+            )}
+          </>
+        ) : (
+          !loading && (
+            <Box sx={{ textAlign: 'center', py: 8 }}>
+              <Typography variant="h6" sx={{ color: theme.textSecondary, mb: 2 }}>
+                No properties found matching your criteria
+              </Typography>
+              <Typography variant="body2" sx={{ color: theme.textSecondary, mb: 3 }}>
+                Try adjusting your search terms or filters to see more results
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={clearAllFilters}
+                sx={{ backgroundColor: theme.primary }}
+              >
+                Clear Filters & Show All
+              </Button>
+            </Box>
+          )
+        )}
+
+        {/* Filter Drawer */}
+        {renderFilterDrawer()}
+      </Container>
+    </Box>
   );
 };
 

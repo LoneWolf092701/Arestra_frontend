@@ -13,12 +13,11 @@ import {
   CircularProgress
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { registerApi } from '../api/loginApi';
+import { registerUser } from '../api';
 import { ThemeContext } from '../contexts/ThemeContext';
 import PersonIcon from '@mui/icons-material/Person';
 import HomeIcon from '@mui/icons-material/Home';
 
-// Custom TabPanel component to handle tab content
 const TabPanel = ({ children, value, index, ...other }) => {
   return (
     <div
@@ -37,7 +36,6 @@ const TabPanel = ({ children, value, index, ...other }) => {
   );
 };
 
-// Properties for tab accessibility
 const a11yProps = (index) => {
   return {
     id: `signup-tab-${index}`,
@@ -46,14 +44,13 @@ const a11yProps = (index) => {
 };
 
 const Signup = () => {
-  const [activeTab, setActiveTab] = useState(0); // 0 for tenant, 1 for property owner
+  const [activeTab, setActiveTab] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const navigate = useNavigate();
   const { theme } = useContext(ThemeContext);
 
-  // Form states for tenant signup
   const [tenantForm, setTenantForm] = useState({
     username: '',
     email: '',
@@ -64,7 +61,6 @@ const Signup = () => {
     phone: ''
   });
 
-  // Form states for property owner signup
   const [ownerForm, setOwnerForm] = useState({
     username: '',
     email: '',
@@ -76,70 +72,61 @@ const Signup = () => {
     address: ''
   });
 
-  // Handle tab change
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
-    setError(''); // Clear errors when switching tabs
+    setError('');
     setSuccess('');
   };
 
-  // Update tenant form fields
   const handleTenantChange = (field) => (event) => {
     setTenantForm(prev => ({
       ...prev,
       [field]: event.target.value
     }));
-    setError(''); // Clear error when user starts typing
+    setError('');
   };
 
-  // Update property owner form fields
   const handleOwnerChange = (field) => (event) => {
     setOwnerForm(prev => ({
       ...prev,
       [field]: event.target.value
     }));
-    setError(''); // Clear error when user starts typing
+    setError('');
   };
 
-  // Validate form based on current tab
   const validateForm = () => {
     const currentForm = activeTab === 0 ? tenantForm : ownerForm;
     
-    // Check required fields
     const requiredFields = activeTab === 0 
       ? ['username', 'email', 'password', 'confirmPassword', 'firstName', 'lastName']
       : ['username', 'email', 'password', 'confirmPassword', 'businessName', 'contactPerson'];
     
-    for (let field of requiredFields) {
-      if (!currentForm[field].trim()) {
+    for (const field of requiredFields) {
+      if (!currentForm[field] || currentForm[field].trim() === '') {
         setError(`Please fill in all required fields`);
         return false;
       }
     }
 
-    // Email validation
+    if (currentForm.password !== currentForm.confirmPassword) {
+      setError('Passwords do not match');
+      return false;
+    }
+
+    if (currentForm.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return false;
+    }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(currentForm.email)) {
       setError('Please enter a valid email address');
       return false;
     }
 
-    // Password validation
-    if (currentForm.password.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return false;
-    }
-
-    // Confirm password
-    if (currentForm.password !== currentForm.confirmPassword) {
-      setError('Passwords do not match');
-      return false;
-    }
-
     return true;
   };
 
-  // Handle form submission
   const handleSubmit = async (event) => {
     event.preventDefault();
     
@@ -149,135 +136,104 @@ const Signup = () => {
 
     setIsLoading(true);
     setError('');
-    
+
     try {
       const currentForm = activeTab === 0 ? tenantForm : ownerForm;
-      const role = activeTab === 0 ? 'user' : 'propertyowner';
+      const userRole = activeTab === 0 ? 'user' : 'propertyowner';
       
-      // Prepare data for API
-      const signupData = {
+      const userData = {
         username: currentForm.username,
         email: currentForm.email,
         password: currentForm.password,
-        role: role,
-        // Additional data can be sent here if your API supports it
-        ...(activeTab === 0 ? {
-          firstName: currentForm.firstName,
-          lastName: currentForm.lastName,
+        role: userRole,
+        profile: activeTab === 0 ? {
+          first_name: currentForm.firstName,
+          last_name: currentForm.lastName,
           phone: currentForm.phone
         } : {
-          businessName: currentForm.businessName,
-          contactPerson: currentForm.contactPerson,
+          business_name: currentForm.businessName,
+          contact_person: currentForm.contactPerson,
           phone: currentForm.phone,
-          address: currentForm.address
-        })
+          business_address: currentForm.address
+        }
       };
 
-      const response = await registerApi(signupData);
-      console.log('Signup successful:', response);
+      const response = await registerUser(userData);
       
-      setSuccess('Account created successfully! Redirecting to login...');
-      
-      // Redirect to login after 2 seconds
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
-      
-    } catch (err) {
-      console.error('Signup error:', err);
-      setError(err.message || 'Signup failed. Please try again.');
+      if (response.success) {
+        setSuccess('Account created successfully! Please check your email for verification.');
+        setTimeout(() => {
+          navigate('/login');
+        }, 2000);
+      } else {
+        setError(response.message || 'Registration failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('Registration error:', error);
+      setError(error.message || 'An error occurred during registration. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <Container maxWidth="sm" sx={{ mt: 6, mb: 4 }}>
-      <Card elevation={3} sx={{ backgroundColor: theme.cardBackground }}>
-        <CardContent>
-          <Typography variant="h4" align="center" gutterBottom sx={{ color: theme.primary, fontWeight: 'bold' }}>
-            Create Your Account
-          </Typography>
-          
-          <Typography variant="body1" align="center" sx={{ mb: 3, color: theme.text }}>
-            Join StayWise.lk and start your journey today
-          </Typography>
-
-          {/* Tab Navigation */}
-          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tabs 
-              value={activeTab} 
-              onChange={handleTabChange} 
-              aria-label="signup tabs"
-              centered
-              sx={{
-                '& .MuiTab-root': {
-                  color: theme.text,
-                  fontWeight: 'bold'
-                },
-                '& .Mui-selected': {
-                  color: theme.primary + ' !important'
-                }
-              }}
-            >
-              <Tab 
-                icon={<PersonIcon />} 
-                label="I'm looking for a place" 
-                {...a11yProps(0)} 
-                sx={{ textTransform: 'none', fontSize: '1rem' }}
-              />
-              <Tab 
-                icon={<HomeIcon />} 
-                label="I have properties to rent" 
-                {...a11yProps(1)} 
-                sx={{ textTransform: 'none', fontSize: '1rem' }}
-              />
-            </Tabs>
+    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
+      <Card sx={{ 
+        boxShadow: 4, 
+        borderRadius: 3,
+        background: theme.cardBackground || '#ffffff'
+      }}>
+        <CardContent sx={{ p: 0 }}>
+          <Box sx={{ textAlign: 'center', py: 3, px: 3 }}>
+            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: theme.primary }}>
+              Create Your Account
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Join StayWise and start your journey
+            </Typography>
           </Box>
 
-          {/* Success Message */}
-          {success && (
-            <Alert severity="success" sx={{ mt: 2 }}>
-              {success}
-            </Alert>
-          )}
-
-          {/* Error Message */}
           {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
+            <Alert severity="error" sx={{ mx: 3, mb: 2 }}>
               {error}
             </Alert>
           )}
 
-          {/* Tenant Signup Form */}
+          {success && (
+            <Alert severity="success" sx={{ mx: 3, mb: 2 }}>
+              {success}
+            </Alert>
+          )}
+
+          <Tabs 
+            value={activeTab} 
+            onChange={handleTabChange} 
+            sx={{ 
+              borderBottom: 1, 
+              borderColor: 'divider',
+              '& .MuiTab-root': {
+                textTransform: 'none',
+                fontSize: '1rem',
+                fontWeight: 600,
+              }
+            }}
+          >
+            <Tab 
+              icon={<PersonIcon />} 
+              label="I'm looking for a place" 
+              {...a11yProps(0)}
+              sx={{ flex: 1 }}
+            />
+            <Tab 
+              icon={<HomeIcon />} 
+              label="I want to list my property" 
+              {...a11yProps(1)}
+              sx={{ flex: 1 }}
+            />
+          </Tabs>
+
           <TabPanel value={activeTab} index={0}>
-            <Typography variant="h6" gutterBottom sx={{ color: theme.primary }}>
-              Sign up as a Tenant
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 3, color: theme.text }}>
-              Find your perfect home with ease
-            </Typography>
-            
             <Box component="form" onSubmit={handleSubmit}>
-              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                <TextField
-                  label="First Name"
-                  variant="outlined"
-                  fullWidth
-                  required
-                  value={tenantForm.firstName}
-                  onChange={handleTenantChange('firstName')}
-                />
-                <TextField
-                  label="Last Name"
-                  variant="outlined"
-                  fullWidth
-                  required
-                  value={tenantForm.lastName}
-                  onChange={handleTenantChange('lastName')}
-                />
-              </Box>
-              
               <TextField
                 label="Username"
                 variant="outlined"
@@ -286,7 +242,6 @@ const Signup = () => {
                 margin="normal"
                 value={tenantForm.username}
                 onChange={handleTenantChange('username')}
-                helperText="This will be used to log in to your account"
               />
               
               <TextField
@@ -300,6 +255,26 @@ const Signup = () => {
                 onChange={handleTenantChange('email')}
               />
               
+              <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                <TextField
+                  label="First Name"
+                  variant="outlined"
+                  fullWidth
+                  required
+                  value={tenantForm.firstName}
+                  onChange={handleTenantChange('firstName')}
+                />
+                
+                <TextField
+                  label="Last Name"
+                  variant="outlined"
+                  fullWidth
+                  required
+                  value={tenantForm.lastName}
+                  onChange={handleTenantChange('lastName')}
+                />
+              </Box>
+              
               <TextField
                 label="Phone Number"
                 variant="outlined"
@@ -307,7 +282,7 @@ const Signup = () => {
                 margin="normal"
                 value={tenantForm.phone}
                 onChange={handleTenantChange('phone')}
-                helperText="Optional - for property owner contact"
+                helperText="Optional - helps property owners contact you"
               />
               
               <TextField
@@ -357,37 +332,8 @@ const Signup = () => {
             </Box>
           </TabPanel>
 
-          {/* Property Owner Signup Form */}
           <TabPanel value={activeTab} index={1}>
-            <Typography variant="h6" gutterBottom sx={{ color: theme.primary }}>
-              Sign up as a Property Owner
-            </Typography>
-            <Typography variant="body2" sx={{ mb: 3, color: theme.text }}>
-              List your properties and connect with tenants
-            </Typography>
-            
             <Box component="form" onSubmit={handleSubmit}>
-              <TextField
-                label="Business/Property Name"
-                variant="outlined"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.businessName}
-                onChange={handleOwnerChange('businessName')}
-                helperText="Name of your business or main property"
-              />
-              
-              <TextField
-                label="Contact Person Name"
-                variant="outlined"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.contactPerson}
-                onChange={handleOwnerChange('contactPerson')}
-              />
-              
               <TextField
                 label="Username"
                 variant="outlined"
@@ -396,7 +342,6 @@ const Signup = () => {
                 margin="normal"
                 value={ownerForm.username}
                 onChange={handleOwnerChange('username')}
-                helperText="This will be used to log in to your account"
               />
               
               <TextField
@@ -411,13 +356,36 @@ const Signup = () => {
               />
               
               <TextField
+                label="Business Name"
+                variant="outlined"
+                fullWidth
+                required
+                margin="normal"
+                value={ownerForm.businessName}
+                onChange={handleOwnerChange('businessName')}
+                helperText="Name of your property business or company"
+              />
+              
+              <TextField
+                label="Contact Person"
+                variant="outlined"
+                fullWidth
+                required
+                margin="normal"
+                value={ownerForm.contactPerson}
+                onChange={handleOwnerChange('contactPerson')}
+                helperText="Primary contact person name"
+              />
+              
+              <TextField
                 label="Phone Number"
                 variant="outlined"
                 fullWidth
+                required
                 margin="normal"
                 value={ownerForm.phone}
                 onChange={handleOwnerChange('phone')}
-                helperText="For tenant inquiries and WhatsApp contact"
+                helperText="Business contact number"
               />
               
               <TextField
@@ -425,8 +393,6 @@ const Signup = () => {
                 variant="outlined"
                 fullWidth
                 margin="normal"
-                multiline
-                rows={2}
                 value={ownerForm.address}
                 onChange={handleOwnerChange('address')}
                 helperText="Optional - your main business address"
@@ -479,7 +445,6 @@ const Signup = () => {
             </Box>
           </TabPanel>
 
-          {/* Login Link */}
           <Box sx={{ textAlign: 'center', mt: 2 }}>
             <Typography variant="body2" sx={{ color: theme.text }}>
               Already have an account?{' '}

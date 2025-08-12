@@ -1,0 +1,493 @@
+import axios from 'axios';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      clearAuthData();
+      if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/register')) {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+const clearAuthData = () => {
+  try {
+    const authKeys = ['token', 'userRole', 'userId', 'tokenExpiry'];
+    authKeys.forEach(key => localStorage.removeItem(key));
+  } catch (error) {
+    console.error('Error clearing authentication data:', error);
+  }
+};
+
+const setAuthData = (authData) => {
+  try {
+    const { token, user, expires_in } = authData;
+    
+    if (!token || !user) {
+      throw new Error('Invalid authentication data');
+    }
+    
+    localStorage.setItem('token', token);
+    localStorage.setItem('userRole', user.role);
+    localStorage.setItem('userId', user.id.toString());
+    
+    if (expires_in && typeof expires_in === 'number') {
+      const expiryTime = Date.now() + (expires_in * 1000);
+      localStorage.setItem('tokenExpiry', expiryTime.toString());
+    }
+  } catch (error) {
+    console.error('Error storing authentication data:', error);
+    clearAuthData();
+    throw new Error('Failed to store authentication data');
+  }
+};
+
+const handleAuthError = (error, operation) => {
+  console.error(`Error ${operation}:`, error);
+  
+  if (error.response?.status === 400) {
+    throw new Error(error.response.data?.message || `Invalid data for ${operation}`);
+  } else if (error.response?.status === 401) {
+    throw new Error(error.response.data?.message || 'Invalid credentials');
+  } else if (error.response?.status === 403) {
+    throw new Error('Access denied. Please contact support.');
+  } else if (error.response?.status === 404) {
+    throw new Error('User not found');
+  } else if (error.response?.status === 409) {
+    throw new Error(error.response.data?.message || 'Username or email already exists');
+  } else if (error.response?.status >= 500) {
+    throw new Error('Server error. Please try again later.');
+  }
+  
+  throw new Error(error.response?.data?.message || `Failed to ${operation}`);
+};
+
+export const loginUser = async (credentials) => {
+  try {
+    if (!credentials || !credentials.username || !credentials.password) {
+      throw new Error('Username and password are required');
+    }
+
+    const response = await apiClient.post('/auth/login', {
+      username: credentials.username.trim(),
+      password: credentials.password
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+
+    const { token, user, expires_in } = response.data;
+    
+    if (token && user) {
+      setAuthData({ token, user, expires_in });
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAuthError(error, 'logging in');
+  }
+};
+
+export const registerUser = async (userData) => {
+  try {
+    if (!userData || typeof userData !== 'object') {
+      throw new Error('User data is required');
+    }
+
+    const requiredFields = ['username', 'email', 'password', 'role'];
+    
+    for (const field of requiredFields) {
+      if (!userData[field]) {
+        throw new Error(`${field} is required`);
+      }
+    }
+
+    if (userData.username.trim().length < 3) {
+      throw new Error('Username must be at least 3 characters long');
+    }
+
+    if (userData.password.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(userData.email)) {
+      throw new Error('Please enter a valid email address');
+    }
+
+    if (!['user', 'propertyowner'].includes(userData.role)) {
+      throw new Error('Invalid role selected');
+    }
+
+    const response = await apiClient.post('/auth/register', {
+      username: userData.username.trim(),
+      email: userData.email.toLowerCase().trim(),
+      password: userData.password,
+      role: userData.role
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAuthError(error, 'registering user');
+  }
+};
+
+export const requestPasswordReset = async (email) => {
+  try {
+    if (!email) {
+      throw new Error('Email address is required');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error('Please enter a valid email address');
+    }
+
+    const response = await apiClient.post('/auth/forgot-password', {
+      email: email.toLowerCase().trim()
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAuthError(error, 'requesting password reset');
+  }
+};
+
+export const resetPassword = async (token, newPassword) => {
+  try {
+    if (!token) {
+      throw new Error('Reset token is required');
+    }
+
+    if (!newPassword) {
+      throw new Error('New password is required');
+    }
+
+    if (newPassword.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
+
+    const response = await apiClient.post('/auth/reset-password', {
+      token: token,
+      password: newPassword
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAuthError(error, 'resetting password');
+  }
+};
+
+export const verifyEmail = async (token) => {
+  try {
+    if (!token) {
+      throw new Error('Verification token is required');
+    }
+
+    const response = await apiClient.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAuthError(error, 'verifying email');
+  }
+};
+
+export const resendEmailVerification = async (email) => {
+  try {
+    if (!email) {
+      throw new Error('Email address is required');
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      throw new Error('Please enter a valid email address');
+    }
+
+    const response = await apiClient.post('/auth/resend-verification', {
+      email: email.toLowerCase().trim()
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAuthError(error, 'resending email verification');
+  }
+};
+
+export const validateToken = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+      return { valid: false, user: null };
+    }
+
+    const response = await apiClient.get('/auth/validate');
+    
+    if (!response.data) {
+      clearAuthData();
+      return { valid: false, user: null };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Token validation error:', error);
+    clearAuthData();
+    return { valid: false, user: null };
+  }
+};
+
+export const changePasswordAuth = async (currentPassword, newPassword) => {
+  try {
+    if (!currentPassword) {
+      throw new Error('Current password is required');
+    }
+
+    if (!newPassword) {
+      throw new Error('New password is required');
+    }
+
+    if (newPassword.length < 6) {
+      throw new Error('New password must be at least 6 characters long');
+    }
+
+    if (currentPassword === newPassword) {
+      throw new Error('New password must be different from current password');
+    }
+
+    const response = await apiClient.post('/auth/change-password', {
+      currentPassword: currentPassword,
+      newPassword: newPassword
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleAuthError(error, 'changing password');
+  }
+};
+
+export const logoutUser = async () => {
+  try {
+    await apiClient.post('/auth/logout');
+  } catch (error) {
+    console.error('Logout error:', error);
+  } finally {
+    clearAuthData();
+  }
+};
+
+export const checkAuthStatus = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const tokenExpiry = localStorage.getItem('tokenExpiry');
+    
+    if (!token) {
+      return { authenticated: false, user: null };
+    }
+    
+    if (tokenExpiry && Date.now() > parseInt(tokenExpiry)) {
+      clearAuthData();
+      return { authenticated: false, user: null };
+    }
+    
+    const validationResult = await validateToken();
+    
+    if (!validationResult.valid) {
+      clearAuthData();
+      return { authenticated: false, user: null };
+    }
+    
+    return {
+      authenticated: true,
+      user: validationResult.user,
+      token: token
+    };
+  } catch (error) {
+    console.error('Error checking auth status:', error);
+    clearAuthData();
+    return { authenticated: false, user: null };
+  }
+};
+
+export const getCurrentUserRole = () => {
+  try {
+    return localStorage.getItem('userRole') || null;
+  } catch (error) {
+    console.error('Error getting user role:', error);
+    return null;
+  }
+};
+
+export const getCurrentUserId = () => {
+  try {
+    const userId = localStorage.getItem('userId');
+    return userId ? parseInt(userId) : null;
+  } catch (error) {
+    console.error('Error getting user ID:', error);
+    return null;
+  }
+};
+
+export const refreshToken = async () => {
+  try {
+    const response = await apiClient.post('/auth/refresh-token');
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+
+    const { token, user, expires_in } = response.data;
+    
+    if (token && user) {
+      setAuthData({ token, user, expires_in });
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    clearAuthData();
+    throw error;
+  }
+};
+
+export const getCurrentUser = async () => {
+  try {
+    const authStatus = await checkAuthStatus();
+    
+    if (!authStatus.authenticated) {
+      return null;
+    }
+    
+    const response = await apiClient.get('/auth/me');
+    
+    if (!response.data) {
+      return authStatus.user;
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    return null;
+  }
+};
+
+export const updateLastLogin = async () => {
+  try {
+    await apiClient.post('/auth/update-last-login');
+    return true;
+  } catch (error) {
+    console.error('Error updating last login:', error);
+    return false;
+  }
+};
+
+export const getAuthConfig = async () => {
+  try {
+    const response = await apiClient.get('/auth/config');
+    
+    if (!response.data) {
+      return {
+        registration_enabled: true,
+        email_verification_required: true,
+        password_requirements: {
+          min_length: 6,
+          require_uppercase: false,
+          require_lowercase: false,
+          require_numbers: false,
+          require_special_chars: false
+        },
+        session_timeout: 8 * 60 * 60 * 1000
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error getting auth config:', error);
+    
+    return {
+      registration_enabled: true,
+      email_verification_required: true,
+      password_requirements: {
+        min_length: 6,
+        require_uppercase: false,
+        require_lowercase: false,
+        require_numbers: false,
+        require_special_chars: false
+      },
+      session_timeout: 8 * 60 * 60 * 1000
+    };
+  }
+};
+
+export const validatePasswordStrength = (password) => {
+  const checks = {
+    length: password.length >= 6,
+    uppercase: /[A-Z]/.test(password),
+    lowercase: /[a-z]/.test(password),
+    numbers: /\d/.test(password),
+    specialChars: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)
+  };
+  
+  const score = Object.values(checks).filter(Boolean).length;
+  
+  let strength = 'weak';
+  if (score >= 4) strength = 'strong';
+  else if (score >= 3) strength = 'medium';
+  
+  return {
+    score,
+    strength,
+    checks,
+    isValid: checks.length
+  };
+};

@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -16,9 +16,6 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
-    config.metadata = { startTime: new Date() };
-    
     return config;
   },
   (error) => {
@@ -27,13 +24,7 @@ apiClient.interceptors.request.use(
 );
 
 apiClient.interceptors.response.use(
-  (response) => {
-    const endTime = new Date();
-    const duration = endTime - response.config.metadata.startTime;
-    console.debug(`API Request to ${response.config.url} took ${duration}ms`);
-    
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
@@ -45,341 +36,450 @@ apiClient.interceptors.response.use(
         window.location.href = '/login';
       }
     }
-    
     return Promise.reject(error);
   }
 );
 
-export const addProperty = async (propertyData) => {
-  try {
-    const response = await apiClient.post('/properties', propertyData);
-    return response.data;
-  } catch (error) {
-    console.error('Error adding property:', error);
-    throw error;
+const validatePropertyId = (propertyId) => {
+  const id = parseInt(propertyId);
+  if (isNaN(id) || id <= 0) {
+    throw new Error('Invalid property ID provided');
   }
+  return id;
 };
 
-export const getProperties = async () => {
-  try {
-    const response = await apiClient.get('/properties');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching properties:', error);
-    throw error;
+const safeJsonParse = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return value.split(',').map(item => item.trim()).filter(item => item.length > 0);
+    }
   }
+  return [];
+};
+
+const processPropertyData = (property) => {
+  if (!property) return property;
+  
+  return {
+    ...property,
+    price: parseFloat(property.price) || 0,
+    amenities: safeJsonParse(property.amenities),
+    facilities: safeJsonParse(property.facilities),
+    images: safeJsonParse(property.images),
+    average_rating: parseFloat(property.average_rating) || 0,
+    total_ratings: parseInt(property.total_ratings) || 0,
+    total_favorites: parseInt(property.total_favorites) || 0,
+    views_count: parseInt(property.views_count) || 0,
+  };
+};
+
+const handleApiError = (error, operation) => {
+  console.error(`Error ${operation}:`, error);
+  
+  if (error.response?.status === 400) {
+    throw new Error(error.response.data?.message || `Invalid data for ${operation}`);
+  } else if (error.response?.status === 401) {
+    throw new Error('Please log in to access property features');
+  } else if (error.response?.status === 403) {
+    throw new Error('Access denied. You do not have permission for this action.');
+  } else if (error.response?.status === 404) {
+    throw new Error('Property not found');
+  } else if (error.response?.status >= 500) {
+    throw new Error('Server error. Please try again later.');
+  }
+  
+  throw new Error(error.response?.data?.message || `Failed to ${operation}`);
 };
 
 export const getAllPublicProperties = async (options = {}) => {
   try {
-    const params = new URLSearchParams();
+    const queryParams = new URLSearchParams();
     
-    if (options.limit) params.append('limit', options.limit);
-    if (options.search) params.append('search', options.search);
-    if (options.location) params.append('location', options.location);
-    if (options.propertyType) params.append('propertyType', options.propertyType);
-    if (options.minPrice) params.append('minPrice', options.minPrice);
-    if (options.maxPrice) params.append('maxPrice', options.maxPrice);
-    
-    const queryString = params.toString();
-    const url = `/properties/public${queryString ? `?${queryString}` : ''}`;
+    Object.entries(options).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        if (Array.isArray(value)) {
+          if (value.length > 0) {
+            queryParams.append(key, value.join(','));
+          }
+        } else {
+          queryParams.append(key, value.toString());
+        }
+      }
+    });
+
+    const url = `/properties/public${queryParams.toString() ? `?${queryParams}` : ''}`;
     
     const response = await apiClient.get(url);
-    return response.data;
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    const processedData = {
+      ...response.data,
+      properties: response.data.properties?.map(processPropertyData) || []
+    };
+    
+    return processedData;
   } catch (error) {
-    console.error('Error fetching public properties:', error);
-    throw error;
+    handleApiError(error, 'fetching public properties');
   }
 };
 
+export const getAllProperties = getAllPublicProperties;
+
 export const getPropertyDetailsById = async (propertyId) => {
   try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/properties/public/${validatedId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    const response = await apiClient.get(`/properties/details/${propertyId}`);
-    return response.data;
+    return processPropertyData(response.data);
   } catch (error) {
-    console.error('Error fetching property details:', error);
-    throw error;
+    handleApiError(error, 'fetching property details');
   }
 };
 
 export const getPublicPropertyById = async (propertyId) => {
   try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/properties/public/${validatedId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    const response = await apiClient.get(`/properties/public/${propertyId}`);
-    return response.data;
+    return processPropertyData(response.data);
   } catch (error) {
-    console.error('Error fetching public property details:', error);
-    throw error;
+    handleApiError(error, 'fetching public property');
   }
 };
 
-export const addPropertyDetails = async (detailsData) => {
+export const createProperty = async (propertyData) => {
   try {
-    const response = await apiClient.post('/properties/details', detailsData);
+    if (!propertyData || typeof propertyData !== 'object') {
+      throw new Error('Property data is required');
+    }
+
+    const response = await apiClient.post('/properties', propertyData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error adding property details:', error);
-    throw error;
+    handleApiError(error, 'creating property');
   }
 };
 
 export const updateProperty = async (propertyId, updateData) => {
   try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
-    }
+    const validatedId = validatePropertyId(propertyId);
     
-    const response = await apiClient.put(`/properties/${propertyId}`, updateData);
-    return response.data;
-  } catch (error) {
-    console.error('Error updating property:', error);
-    throw error;
-  }
-};
+    if (!updateData || typeof updateData !== 'object') {
+      throw new Error('Update data is required');
+    }
 
-export const updatePropertyDetails = async (propertyId, updateData) => {
-  try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
+    const response = await apiClient.put(`/properties/${validatedId}`, updateData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    const response = await apiClient.put(`/properties/details/${propertyId}`, updateData);
     return response.data;
   } catch (error) {
-    console.error('Error updating property details:', error);
-    throw error;
+    handleApiError(error, 'updating property');
   }
 };
 
 export const deleteProperty = async (propertyId) => {
   try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.delete(`/properties/${validatedId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    const response = await apiClient.delete(`/properties/${propertyId}`);
     return response.data;
   } catch (error) {
-    console.error('Error deleting property:', error);
-    throw error;
+    handleApiError(error, 'deleting property');
   }
 };
 
-export const deletePropertyDetails = async (propertyId) => {
+export const getMyProperties = async (options = {}) => {
   try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
-    }
+    const queryParams = new URLSearchParams();
     
-    const response = await apiClient.delete(`/properties/details/${propertyId}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error deleting property details:', error);
-    throw error;
-  }
-};
-
-export const searchProperties = async (searchParams) => {
-  try {
-    const response = await apiClient.get('/properties/search', {
-      params: searchParams
+    Object.entries(options).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        queryParams.append(key, value.toString());
+      }
     });
-    return response.data;
-  } catch (error) {
-    console.error('Error searching properties:', error);
-    throw error;
-  }
-};
 
-export const getPropertiesByLocation = async (location) => {
-  try {
-    if (!location) {
-      throw new Error('Location is required');
+    const url = `/properties/owner/mine${queryParams.toString() ? `?${queryParams}` : ''}`;
+    
+    const response = await apiClient.get(url);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
-    const response = await apiClient.get(`/properties/location/${encodeURIComponent(location)}`);
-    return response.data;
+    const processedData = {
+      ...response.data,
+      properties: response.data.properties?.map(processPropertyData) || []
+    };
+    
+    return processedData;
   } catch (error) {
-    console.error('Error fetching properties by location:', error);
-    throw error;
+    handleApiError(error, 'fetching owner properties');
   }
 };
 
-export const getPropertyStats = async () => {
-  try {
-    const response = await apiClient.get('/properties/stats');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching property stats:', error);
-    throw error;
-  }
-};
+export const getOwnerProperties = getMyProperties;
 
-export const uploadPropertyImage = async (imageFile) => {
+export const addPropertyDetails = async (propertyId, detailsData) => {
   try {
-    if (!imageFile) {
-      throw new Error('Image file is required');
+    const validatedId = validatePropertyId(propertyId);
+    
+    if (!detailsData || typeof detailsData !== 'object') {
+      throw new Error('Property details data is required');
+    }
+
+    const response = await apiClient.post(`/properties/${validatedId}/details`, detailsData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
     }
     
+    return response.data;
+  } catch (error) {
+    handleApiError(error, 'adding property details');
+  }
+};
+
+export const togglePropertyStatus = async (propertyId, isActive = null) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    const payload = isActive !== null ? { is_active: isActive } : {};
+    
+    const response = await apiClient.patch(`/properties/${validatedId}/status`, payload);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleApiError(error, 'toggling property status');
+  }
+};
+
+export const uploadPropertyImages = async (propertyId, imageFiles) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    if (!imageFiles || imageFiles.length === 0) {
+      throw new Error('At least one image file is required');
+    }
+
     const formData = new FormData();
-    formData.append('image', imageFile);
     
-    const response = await apiClient.post('/properties/upload', formData, {
+    if (Array.isArray(imageFiles)) {
+      imageFiles.forEach((file, index) => {
+        formData.append('propertyImages', file);
+      });
+    } else {
+      formData.append('propertyImages', imageFiles);
+    }
+
+    const uploadClient = axios.create({
+      baseURL: API_BASE_URL,
+      timeout: 120000,
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
+
+    uploadClient.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
+        }
+        return config;
+      }
+    );
+
+    const response = await uploadClient.post(`/properties/${validatedId}/images`, formData);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
     
     return response.data;
   } catch (error) {
-    console.error('Error uploading property image:', error);
-    throw error;
+    handleApiError(error, 'uploading property images');
   }
 };
 
-export const getFeaturedProperties = async (limit = 6) => {
+export const deletePropertyImage = async (propertyId, imageUrl) => {
   try {
-    const response = await apiClient.get(`/properties/featured?limit=${limit}`);
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching featured properties:', error);
-    try {
-      const fallbackResponse = await getAllPublicProperties({ limit });
-      return fallbackResponse;
-    } catch (fallbackError) {
-      console.error('Error fetching fallback properties:', fallbackError);
-      throw fallbackError;
+    const validatedId = validatePropertyId(propertyId);
+    
+    if (!imageUrl) {
+      throw new Error('Image URL is required');
     }
-  }
-};
 
-export const getPropertyRecommendations = async (preferences = {}) => {
-  try {
-    const response = await apiClient.get('/properties/recommendations', {
-      params: preferences
+    const response = await apiClient.delete(`/properties/${validatedId}/images`, {
+      data: { imageUrl }
     });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
     return response.data;
   } catch (error) {
-    console.error('Error fetching property recommendations:', error);
-    try {
-      const fallbackResponse = await getAllPublicProperties({ limit: 6 });
-      return fallbackResponse;
-    } catch (fallbackError) {
-      console.error('Error fetching fallback recommendations:', fallbackError);
-      throw fallbackError;
-    }
+    handleApiError(error, 'deleting property image');
   }
 };
 
-export const reportPropertyIssue = async (propertyId, issueData) => {
+export const getPropertyStatistics = async (propertyId) => {
   try {
-    if (!propertyId || !issueData) {
-      throw new Error('Property ID and issue data are required');
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/properties/${validatedId}/statistics`);
+    
+    if (!response.data) {
+      return {
+        views_count: 0,
+        rating_count: 0,
+        average_rating: 0,
+        favorite_count: 0,
+        booking_requests: 0
+      };
     }
     
-    const response = await apiClient.post(`/properties/${propertyId}/report`, issueData);
     return response.data;
   } catch (error) {
-    console.error('Error reporting property issue:', error);
-    throw error;
+    console.error('Error fetching property statistics:', error);
+    
+    return {
+      views_count: 0,
+      rating_count: 0,
+      average_rating: 0,
+      favorite_count: 0,
+      booking_requests: 0
+    };
   }
 };
 
-export const checkPropertyAvailability = async (propertyId, checkInDate, checkOutDate) => {
+export const searchProperties = async (searchOptions) => {
   try {
-    if (!propertyId || !checkInDate || !checkOutDate) {
-      throw new Error('Property ID, check-in date, and check-out date are required');
-    }
+    const queryParams = new URLSearchParams();
     
-    const response = await apiClient.get(`/properties/availability/${propertyId}`, {
-      params: {
-        checkIn: checkInDate,
-        checkOut: checkOutDate
+    Object.entries(searchOptions).forEach(([key, value]) => {
+      if (value !== null && value !== undefined && value !== '') {
+        if (Array.isArray(value)) {
+          if (value.length > 0) {
+            queryParams.append(key, value.join(','));
+          }
+        } else {
+          queryParams.append(key, value.toString());
+        }
       }
     });
-    return response.data;
+
+    const response = await apiClient.get(`/properties/search?${queryParams.toString()}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    const processedData = {
+      ...response.data,
+      properties: response.data.properties?.map(processPropertyData) || []
+    };
+    
+    return processedData;
   } catch (error) {
-    console.error('Error checking property availability:', error);
-    throw error;
+    handleApiError(error, 'searching properties');
   }
 };
 
-export const getSimilarProperties = async (propertyId, limit = 4) => {
+export const getPropertyTypes = async () => {
   try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
+    const response = await apiClient.get('/properties/types');
+    
+    if (!response.data) {
+      return ['Apartment', 'Villa', 'House', 'Boarding'];
     }
     
-    const response = await apiClient.get(`/properties/public/${propertyId}/similar?limit=${limit}`);
     return response.data;
+  } catch (error) {
+    console.error('Error fetching property types:', error);
+    
+    return ['Apartment', 'Villa', 'House', 'Boarding'];
+  }
+};
+
+export const recordPropertyView = async (propertyId, viewData = {}) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    const payload = {
+      property_id: validatedId,
+      view_duration: viewData.duration || null,
+      source: viewData.source || 'unknown',
+      user_location: viewData.user_location || null
+    };
+    
+    const response = await apiClient.post(`/user-interactions/view`, payload);
+    
+    return response.data || true;
+  } catch (error) {
+    console.error('Error recording property view:', error);
+    return false;
+  }
+};
+
+export const incrementPropertyViews = recordPropertyView;
+
+export const getSimilarProperties = async (propertyId, options = {}) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    const { limit = 6, includeType = true, includeLocation = true, includePriceRange = true } = options;
+    
+    const queryParams = new URLSearchParams();
+    queryParams.append('limit', limit.toString());
+    queryParams.append('include_type', includeType.toString());
+    queryParams.append('include_location', includeLocation.toString());
+    queryParams.append('include_price_range', includePriceRange.toString());
+    
+    const response = await apiClient.get(`/properties/${validatedId}/similar?${queryParams.toString()}`);
+    
+    if (!response.data) {
+      return [];
+    }
+    
+    return response.data.map(processPropertyData);
   } catch (error) {
     console.error('Error fetching similar properties:', error);
     
-    try {
-      const fallbackResponse = await getAllPublicProperties({ limit });
-      return fallbackResponse.slice(0, limit);
-    } catch (fallbackError) {
-      console.error('Error fetching fallback properties:', fallbackError);
-      throw fallbackError;
-    }
+    return [];
   }
-};
-
-export const incrementPropertyViews = async (propertyId) => {
-  try {
-    if (!propertyId) {
-      throw new Error('Property ID is required');
-    }
-    
-    const response = await apiClient.post(`/properties/public/${propertyId}/view`);
-    return response.data;
-  } catch (error) {
-    console.error('Error incrementing property views:', error);
-  }
-};
-
-export const getOwnerProperties = async () => {
-  try {
-    const response = await apiClient.get('/properties/details');
-    return response.data;
-  } catch (error) {
-    console.error('Error fetching owner properties:', error);
-    throw error;
-  }
-};
-
-export const getAllProperties = getAllPublicProperties;
-export const getPropertyById = getPublicPropertyById;
-
-export default {
-  addProperty,
-  getProperties,
-  getAllPublicProperties,
-  getAllProperties,
-  getPropertyDetailsById,
-  getPublicPropertyById,
-  getPropertyById,
-  addPropertyDetails,
-  updateProperty,
-  updatePropertyDetails,
-  deleteProperty,
-  deletePropertyDetails,
-  searchProperties,
-  getPropertiesByLocation,
-  getPropertyStats,
-  uploadPropertyImage,
-  getFeaturedProperties,
-  getPropertyRecommendations,
-  reportPropertyIssue,
-  checkPropertyAvailability,
-  getSimilarProperties,
-  incrementPropertyViews,
-  getOwnerProperties
 };

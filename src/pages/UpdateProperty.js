@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useForm, Controller, useFieldArray } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import * as yup from 'yup';
 import {
   Container,
   Typography,
-  Box,
   Grid,
   Card,
   CardContent,
+  Box,
   Button,
   TextField,
   IconButton,
@@ -14,139 +17,175 @@ import {
   Select,
   MenuItem,
   Divider,
-  Alert,
-  Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  Chip,
+  Alert
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ImageIcon from '@mui/icons-material/Image';
-import HotelIcon from '@mui/icons-material/Hotel';
-import BathtubIcon from '@mui/icons-material/Bathtub';
-import PeopleIcon from '@mui/icons-material/People';
-import ImageUpload from '../components/common/ImageUpload';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getPropertyDetailsById, updateProperty } from '../api/propertyApi';
+import { ThemeContext } from '../contexts/ThemeContext';
+import ImageUpload from '../components/common/ImageUpload';
 import AppSnackbar from '../components/common/AppSnackbar';
-import { useTheme } from '../contexts/ThemeContext';
-import { useForm, Controller, useFieldArray } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
-import * as yup from 'yup';
 
-// Updated validation schema - house rules are now optional
-const schema = yup.object().shape({
+const unitOptions = [
+  { label: 'Annex', value: 'Annex' },
+  { label: 'Full House', value: 'Full House' },
+  { label: 'Single Room', value: 'Single Room' },
+  { label: 'Shared Room', value: 'Shared Room' },
+  { label: 'Studio Apartment', value: 'Studio Apartment' },
+  { label: 'One Bedroom', value: 'One Bedroom' },
+  { label: 'Two Bedroom', value: 'Two Bedroom' },
+  { label: 'Three Bedroom', value: 'Three Bedroom' },
+];
+
+const availableAmenities = [
+  'WiFi', 'TV', 'Air Conditioning', 'Kitchen', 'Washing Machine', 'Parking',
+  'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished'
+];
+
+const RequiredFieldLabel = ({ children, required = false }) => (
+  <Box component="span">
+    {children}
+    {required && <Box component="span" sx={{ color: 'error.main', ml: 0.5 }}>*</Box>}
+  </Box>
+);
+
+const FacilityCounter = ({ facility, count, onIncrement, onDecrement, error, required = false, disabled = false }) => (
+  <>
+    <Box
+      display="flex"
+      alignItems="center"
+      justifyContent="space-between"
+      p={1}
+      border={error ? "1px solid red" : "1px solid #ccc"}
+      borderRadius={2}
+      sx={{ opacity: disabled ? 0.6 : 1 }}
+    >
+      <Typography variant="subtitle1">
+        <RequiredFieldLabel required={required}>{facility}</RequiredFieldLabel>
+      </Typography>
+      <Box display="flex" alignItems="center">
+        <IconButton 
+          onClick={onDecrement} 
+          disabled={count <= 0 || disabled}
+          size="small"
+        >
+          <RemoveIcon />
+        </IconButton>
+        <Typography variant="h6" sx={{ mx: 2, minWidth: 30, textAlign: 'center' }}>
+          {count}
+        </Typography>
+        <IconButton 
+          onClick={onIncrement} 
+          disabled={disabled}
+          size="small"
+        >
+          <AddIcon />
+        </IconButton>
+      </Box>
+    </Box>
+    {error && (
+      <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+        {error.message}
+      </Typography>
+    )}
+  </>
+);
+
+const AmenityQuantitySelector = ({ amenity, quantity, onQuantityChange, onRemove, disabled = false }) => (
+  <Card variant="outlined" sx={{ p: 2, opacity: disabled ? 0.6 : 1 }}>
+    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+      <Typography variant="subtitle2">{amenity}</Typography>
+      {!disabled && (
+        <IconButton 
+          onClick={onRemove} 
+          size="small" 
+          color="error"
+        >
+          <RemoveIcon />
+        </IconButton>
+      )}
+    </Box>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <IconButton 
+        onClick={() => onQuantityChange(Math.max(0, quantity - 1))} 
+        size="small"
+        disabled={quantity <= 0 || disabled}
+      >
+        <RemoveIcon />
+      </IconButton>
+      <Typography variant="h6" sx={{ mx: 2, minWidth: 30, textAlign: 'center' }}>
+        {quantity || 0}
+      </Typography>
+      <IconButton 
+        onClick={() => onQuantityChange((quantity || 0) + 1)} 
+        size="small"
+        disabled={disabled}
+      >
+        <AddIcon />
+      </IconButton>
+    </Box>
+  </Card>
+);
+
+const validationSchema = yup.object({
   propertyType: yup.string().required('Property type is required'),
   unitType: yup.string().required('Unit type is required'),
-  
-  amenities: yup.object().test(
-    'at-least-one-amenity',
-    'At least one amenity with quantity > 0 is required',
-    function(value) {
-      if (!value) return false;
-      return Object.values(value).some(qty => qty > 0);
-    }
-  ),
-  
-  facilities: yup.object().shape({
-    Bathroom: yup.number().min(1, "At least one bathroom is required").required("Bathroom count is required"),
-    Bedroom: yup.number().min(1, "At least one bedroom is required").required("Bedroom count is required")
-  }),
-  
-  otherFacility: yup.string().notRequired(),
   address: yup.string().required('Address is required'),
-  
-  roommates: yup.array().of(
-    yup.object().shape({
-      occupation: yup.string().required('Occupation is required'),
-      field: yup.string().required('Field is required')
-    })
-  ),
-  
-  // Rules are now optional
-  rules: yup.array().of(yup.string().trim()).notRequired(),
-  
-  contractPolicy: yup.string().required('Contract policy is required'),
-  
-  availableFrom: yup.date()
-    .min(new Date(), 'Available from date cannot be in the past')
-    .required('Available from date is required'),
-  
-  availableTo: yup.date()
-    .required('Available to date is required')
-    .test(
-      'date-not-equal',
-      'Available to date must be later than available from date',
-      function (value) {
-        const { availableFrom } = this.parent;
-        if (!value || !availableFrom) return true;
-        return dayjs(value).isAfter(dayjs(availableFrom));
-      }
-    ),
-  
-  price: yup.number()
-    .min(1, 'Price must be greater than 0')
-    .required('Monthly rent price is required'),
-  
-  billsInclusive: yup.array().of(yup.string().trim()).notRequired()
+  description: yup.string().required('Description is required'),
+  price: yup.number().positive('Price must be positive').required('Price is required'),
+  facilities: yup.object({
+    Bedroom: yup.number().min(0, 'Bedrooms cannot be negative').required('Number of bedrooms is required'),
+    Bathroom: yup.number().min(1, 'At least 1 bathroom is required').required('Number of bathrooms is required'),
+    Kitchen: yup.number().min(0, 'Kitchens cannot be negative'),
+    LivingRoom: yup.number().min(0, 'Living rooms cannot be negative'),
+    DiningRoom: yup.number().min(0, 'Dining rooms cannot be negative'),
+    ParkingSpace: yup.number().min(0, 'Parking spaces cannot be negative')
+  }).required('Facilities information is required'),
+  availableFrom: yup.date().required('Available from date is required'),
+  availableTo: yup.date().min(yup.ref('availableFrom'), 'Available to date must be after available from date'),
+  contractPolicy: yup.string().required('Contract policy is required')
 });
 
 const UpdateProperty = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { theme, isDark } = React.useContext(ThemeContext);
+  
   const [loading, setLoading] = useState(true);
+  const [editingSection, setEditingSection] = useState('');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
-  const [editingSection, setEditingSection] = useState('');
-  const { theme, isDark } = useTheme();
-
-  // Available amenities and options
-  const [availableAmenities] = useState([
-    'Television (TV)', 'Air Conditioning (AC)', 'Refrigerator', 'Wi-Fi Internet', 
-    'Washing Machine', 'Microwave', 'Parking Space', 'Balcony', 'Garden Access',
-    'Swimming Pool Access', 'Gym Access', 'Security System', 'Furnished', 'Kitchen'
-  ]);
-  
   const [selectedAmenityToAdd, setSelectedAmenityToAdd] = useState('');
 
-  const unitOptions = [
-    { label: 'Rental unit', description: 'A rented place within a multi-unit residential building or complex.' },
-    { label: 'Shared unit', description: 'A rented place shared with other tenants.' },
-    { label: 'Entire unit', description: 'An entire place rented by a single tenant.' }
-  ];
-
-  const occupationOptions = ['Student', 'Professional', 'Other'];
-  const fieldOptions = ['Engineering', 'Arts', 'Science', 'Business', 'Other'];
-
-  const {
-    control,
-    register,
-    handleSubmit,
-    reset,
-    setValue,
-    watch,
-    getValues,
-    formState: { errors }
-  } = useForm({
+  const { register, handleSubmit, control, watch, setValue, reset, formState: { errors } } = useForm({
+    resolver: yupResolver(validationSchema),
     defaultValues: {
       propertyType: '',
       unitType: '',
-      amenities: {},
-      facilities: { Bathroom: 0, Bedroom: 0 },
-      otherFacility: '',
       address: '',
+      description: '',
+      amenities: {},
+      facilities: {
+        Bedroom: 0,
+        Bathroom: 0,
+        Kitchen: 0,
+        LivingRoom: 0,
+        DiningRoom: 0,
+        ParkingSpace: 0
+      },
       roommates: [],
       rules: [],
       contractPolicy: '',
@@ -154,81 +193,42 @@ const UpdateProperty = () => {
       availableTo: null,
       price: '',
       billsInclusive: []
-    },
-    resolver: yupResolver(schema)
+    }
   });
 
-  // Field arrays
   const { fields: roommateFields, append: appendRoommate, remove: removeRoommate } = useFieldArray({
     control,
     name: 'roommates'
   });
+
   const { fields: ruleFields, append: appendRule, remove: removeRule } = useFieldArray({
     control,
     name: 'rules'
   });
-  const { fields: billsFields, append: appendBill, remove: removeBill } = useFieldArray({
+
+  const { fields: billFields, append: appendBill, remove: removeBill } = useFieldArray({
     control,
     name: 'billsInclusive'
   });
 
-  // Functions for managing amenities with quantities
-  const amenitiesValue = watch('amenities');
-  
-  const addAmenity = () => {
-    if (selectedAmenityToAdd && !amenitiesValue[selectedAmenityToAdd]) {
-      setValue('amenities', { ...amenitiesValue, [selectedAmenityToAdd]: 1 });
-      setSelectedAmenityToAdd('');
-    }
-  };
+  const amenitiesValue = watch('amenities') || {};
+  const facilitiesValue = watch('facilities') || {};
 
-  const updateAmenityQuantity = (amenity, newQuantity) => {
-    if (newQuantity === 0) {
-      const newAmenities = { ...amenitiesValue };
-      delete newAmenities[amenity];
-      setValue('amenities', newAmenities);
-    } else {
-      setValue('amenities', { ...amenitiesValue, [amenity]: newQuantity });
-    }
-  };
-
-  const removeAmenity = (amenity) => {
-    const newAmenities = { ...amenitiesValue };
-    delete newAmenities[amenity];
-    setValue('amenities', newAmenities);
-  };
-
-  const getAvailableAmenitiesForDropdown = () => {
-    return availableAmenities.filter(amenity => !amenitiesValue[amenity]);
-  };
-
-  // Functions for managing facility counts
-  const facilitiesValue = watch('facilities');
-  const incrementFacility = (facility) => {
-    const currentFacilities = getValues('facilities');
-    setValue('facilities', { ...currentFacilities, [facility]: currentFacilities[facility] + 1 });
-  };
-
-  const decrementFacility = (facility) => {
-    const currentFacilities = getValues('facilities');
-    setValue('facilities', { ...currentFacilities, [facility]: Math.max(currentFacilities[facility] - 1, 0) });
-  };
-
-  // Fetch property details and populate form
   useEffect(() => {
     const fetchProperty = async () => {
       try {
-        const token = localStorage.getItem('token');
-        const property = await getPropertyDetailsById(id, token);
-        
+        setLoading(true);
+        const property = await getPropertyDetailsById(id);
         if (property) {
           reset({
             propertyType: property.property_type || '',
             unitType: property.unit_type || '',
-            amenities: property.amenities ? JSON.parse(property.amenities) : {},
-            facilities: property.facilities ? JSON.parse(property.facilities) : { Bathroom: 0, Bedroom: 0 },
-            otherFacility: property.other_facility || '',
             address: property.address || '',
+            description: property.description || '',
+            amenities: property.amenities ? JSON.parse(property.amenities) : {},
+            facilities: property.facilities ? JSON.parse(property.facilities) : {
+              Bedroom: 0, Bathroom: 0, Kitchen: 0, LivingRoom: 0, DiningRoom: 0, ParkingSpace: 0
+            },
             roommates: property.roommates ? JSON.parse(property.roommates) : [],
             rules: property.rules ? JSON.parse(property.rules) : [],
             contractPolicy: property.contract_policy || '',
@@ -279,7 +279,48 @@ const UpdateProperty = () => {
     console.log('Uploaded files:', uploadedFiles);
   };
 
-  // Edit Section Component
+  const handleBackToMyProperties = () => {
+    navigate('/myproperties');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSection('');
+  };
+
+  const updateFacilityCount = (facility, increment) => {
+    const currentValue = facilitiesValue[facility] || 0;
+    const newValue = increment ? currentValue + 1 : Math.max(0, currentValue - 1);
+    setValue(`facilities.${facility}`, newValue);
+  };
+
+  const updateAmenityQuantity = (amenity, quantity) => {
+    const updatedAmenities = { ...amenitiesValue };
+    if (quantity <= 0) {
+      delete updatedAmenities[amenity];
+    } else {
+      updatedAmenities[amenity] = quantity;
+    }
+    setValue('amenities', updatedAmenities);
+  };
+
+  const removeAmenity = (amenity) => {
+    const updatedAmenities = { ...amenitiesValue };
+    delete updatedAmenities[amenity];
+    setValue('amenities', updatedAmenities);
+  };
+
+  const addAmenity = () => {
+    if (selectedAmenityToAdd && !amenitiesValue[selectedAmenityToAdd]) {
+      const updatedAmenities = { ...amenitiesValue, [selectedAmenityToAdd]: 1 };
+      setValue('amenities', updatedAmenities);
+      setSelectedAmenityToAdd('');
+    }
+  };
+
+  const getAvailableAmenitiesForDropdown = () => {
+    return availableAmenities.filter(amenity => !amenitiesValue[amenity]);
+  };
+
   const EditableSection = ({ title, isEditing, onEdit, onSave, onCancel, children, error }) => (
     <Card 
       sx={{ 
@@ -313,28 +354,16 @@ const UpdateProperty = () => {
           </Typography>
           <Box>
             {isEditing ? (
-              <>
-                <IconButton 
-                  onClick={onSave} 
-                  sx={{ color: theme.success, mr: 1 }}
-                  title="Save changes"
-                >
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <IconButton onClick={onSave} color="primary" size="small">
                   <SaveIcon />
                 </IconButton>
-                <IconButton 
-                  onClick={onCancel} 
-                  sx={{ color: theme.error }}
-                  title="Cancel editing"
-                >
+                <IconButton onClick={onCancel} color="secondary" size="small">
                   <CancelIcon />
                 </IconButton>
-              </>
+              </Box>
             ) : (
-              <IconButton 
-                onClick={onEdit} 
-                sx={{ color: theme.primary }}
-                title="Edit this section"
-              >
+              <IconButton onClick={onEdit} color="primary" size="small">
                 <EditIcon />
               </IconButton>
             )}
@@ -350,176 +379,48 @@ const UpdateProperty = () => {
     </Card>
   );
 
-  // Facility Counter Component
-  const FacilityCounter = ({ facility, count, onIncrement, onDecrement, error, disabled = false }) => (
-    <Box>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          p: 2,
-          border: `1px solid ${error ? theme.error : theme.border}`,
-          borderRadius: 2,
-          backgroundColor: disabled ? theme.surfaceBackground : theme.inputBackground,
-          opacity: disabled ? 0.6 : 1,
-        }}
-      >
-        <Typography variant="subtitle1" sx={{ color: theme.textPrimary }}>
-          {facility}
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <IconButton 
-            onClick={onDecrement} 
-            size="small" 
-            disabled={disabled}
-            sx={{ color: theme.primary }}
-          >
-            <RemoveIcon />
-          </IconButton>
-          <Typography variant="h6" sx={{ mx: 2, color: theme.textPrimary }}>
-            {count}
-          </Typography>
-          <IconButton 
-            onClick={onIncrement} 
-            size="small" 
-            disabled={disabled}
-            sx={{ color: theme.primary }}
-          >
-            <AddIcon />
-          </IconButton>
-        </Box>
-      </Box>
-      {error && (
-        <Typography variant="caption" sx={{ color: theme.error, mt: 1 }}>
-          {error}
-        </Typography>
-      )}
-    </Box>
-  );
-
-  // Amenity Quantity Selector Component
-  const AmenityQuantitySelector = ({ amenity, quantity, onQuantityChange, onRemove, disabled = false }) => (
-    <Box 
-      sx={{ 
-        p: 2, 
-        border: `1px solid ${theme.border}`, 
-        borderRadius: 2, 
-        backgroundColor: disabled ? theme.surfaceBackground : theme.cardBackground,
-        opacity: disabled ? 0.6 : 1,
-        transition: 'all 0.2s ease',
-        '&:hover': !disabled && {
-          borderColor: theme.primary,
-          boxShadow: theme.shadows.light
-        }
-      }}
-    >
-      <Typography variant="body1" sx={{ mb: 1, fontWeight: 500, color: theme.textPrimary }}>
-        {amenity}
-      </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <IconButton 
-            size="small" 
-            onClick={() => onQuantityChange(Math.max(0, quantity - 1))}
-            disabled={quantity <= 0 || disabled}
-            sx={{ mr: 1, color: theme.primary }}
-          >
-            <RemoveIcon />
-          </IconButton>
-          <Typography 
-            variant="h6" 
-            sx={{ 
-              minWidth: 40, 
-              textAlign: 'center',
-              px: 1,
-              py: 0.5,
-              border: `1px solid ${theme.border}`,
-              borderRadius: 1,
-              backgroundColor: theme.inputBackground,
-              color: theme.textPrimary
-            }}
-          >
-            {quantity}
-          </Typography>
-          <IconButton 
-            size="small" 
-            onClick={() => onQuantityChange(quantity + 1)}
-            disabled={disabled}
-            sx={{ ml: 1, color: theme.primary }}
-          >
-            <AddIcon />
-          </IconButton>
-        </Box>
-        <IconButton 
-          size="small" 
-          color="error"
-          onClick={onRemove}
-          disabled={disabled}
-          sx={{ 
-            '&:hover': { 
-              backgroundColor: `${theme.error}10`,
-            }
-          }}
-        >
-          <RemoveIcon />
-        </IconButton>
-      </Box>
-    </Box>
-  );
-
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ mt: 4, textAlign: 'center' }}>
-        <Typography variant="h4" sx={{ color: theme.textPrimary }}>
-          Loading Property Details...
-        </Typography>
+      <Container sx={{ mt: 4, textAlign: 'center' }}>
+        <Typography variant="h6">Loading property details...</Typography>
       </Container>
     );
   }
 
   return (
-    <Box sx={{ 
-      background: isDark 
-        ? `linear-gradient(135deg, ${theme.background} 0%, ${theme.surfaceBackground} 50%, ${theme.background} 100%)`
-        : `linear-gradient(135deg, ${theme.background} 0%, ${theme.primary}05 50%, ${theme.background} 100%)`,
-      minHeight: '100vh',
-      py: 4
-    }}>
+    <Box sx={{ backgroundColor: theme.background, minHeight: '100vh', py: 4 }}>
       <Container maxWidth="lg">
-        {/* Header Section */}
-        <Box sx={{ mb: 4, textAlign: 'center' }}>
-          <Typography variant="h3" sx={{ color: theme.textPrimary, fontWeight: 600, mb: 2 }}>
-            Edit Property Details
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
+          <IconButton 
+            onClick={handleBackToMyProperties}
+            sx={{ mr: 2, color: theme.primary }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="h4" sx={{ color: theme.textPrimary, fontWeight: 700 }}>
+            Update Property Details
           </Typography>
-          <Typography variant="h5" sx={{ color: theme.textSecondary, mb: 3 }}>
-            {watch('propertyType')} - {watch('unitType')}
-          </Typography>
-          
-          <Alert severity="info" sx={{ maxWidth: 600, mx: 'auto' }}>
-            <Typography variant="body2">
-              Click the edit icon on any section to modify that information. 
-              Changes are saved automatically when you submit the form.
-            </Typography>
-          </Alert>
         </Box>
 
+        <Alert severity="info" sx={{ mb: 4 }}>
+          Click the edit icon on any section to modify that information. You can edit one section at a time.
+        </Alert>
+
         <form onSubmit={handleSubmit(onSubmit)}>
-          {/* Basic Information Section */}
           <EditableSection
             title="Basic Information"
             isEditing={editingSection === 'basic'}
             onEdit={() => setEditingSection('basic')}
             onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
             error={errors.propertyType?.message || errors.unitType?.message}
           >
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Property Type"
                   fullWidth
-                  value={watch('propertyType')}
+                  label={<RequiredFieldLabel required>Property Type</RequiredFieldLabel>}
+                  variant="outlined"
                   disabled={editingSection !== 'basic'}
                   {...register('propertyType')}
                   error={!!errors.propertyType}
@@ -545,13 +446,48 @@ const UpdateProperty = () => {
             </Grid>
           </EditableSection>
 
-          {/* Amenities Section */}
+          <EditableSection
+            title="Location & Description"
+            isEditing={editingSection === 'location'}
+            onEdit={() => setEditingSection('location')}
+            onSave={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
+            error={errors.address?.message || errors.description?.message}
+          >
+            <Grid container spacing={3}>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label={<RequiredFieldLabel required>Address</RequiredFieldLabel>}
+                  variant="outlined"
+                  disabled={editingSection !== 'location'}
+                  {...register('address')}
+                  error={!!errors.address}
+                  helperText={errors.address?.message}
+                />
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={4}
+                  label={<RequiredFieldLabel required>Description</RequiredFieldLabel>}
+                  variant="outlined"
+                  disabled={editingSection !== 'location'}
+                  {...register('description')}
+                  error={!!errors.description}
+                  helperText={errors.description?.message}
+                />
+              </Grid>
+            </Grid>
+          </EditableSection>
+
           <EditableSection
             title="Property Amenities"
             isEditing={editingSection === 'amenities'}
             onEdit={() => setEditingSection('amenities')}
             onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
             error={errors.amenities?.message}
           >
             {Object.keys(amenitiesValue)?.length > 0 && (
@@ -604,180 +540,153 @@ const UpdateProperty = () => {
             )}
           </EditableSection>
 
-          {/* Facilities Section */}
           <EditableSection
             title="Basic Facilities"
             isEditing={editingSection === 'facilities'}
             onEdit={() => setEditingSection('facilities')}
             onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
-            error={errors.facilities?.Bedroom?.message || errors.facilities?.Bathroom?.message}
+            onCancel={handleCancelEdit}
           >
             <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <FacilityCounter
-                  facility="Bedrooms"
-                  count={facilitiesValue.Bedroom || 0}
-                  onIncrement={() => incrementFacility('Bedroom')}
-                  onDecrement={() => decrementFacility('Bedroom')}
-                  error={errors.facilities?.Bedroom?.message}
-                  disabled={editingSection !== 'facilities'}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FacilityCounter
-                  facility="Bathrooms"
-                  count={facilitiesValue.Bathroom || 0}
-                  onIncrement={() => incrementFacility('Bathroom')}
-                  onDecrement={() => decrementFacility('Bathroom')}
-                  error={errors.facilities?.Bathroom?.message}
-                  disabled={editingSection !== 'facilities'}
-                />
-              </Grid>
-              <Grid item xs={12}>
+              {Object.entries(facilitiesValue).map(([facility, count]) => (
+                <Grid item xs={12} sm={6} md={4} key={facility}>
+                  <FacilityCounter
+                    facility={facility}
+                    count={count || 0}
+                    onIncrement={() => updateFacilityCount(facility, true)}
+                    onDecrement={() => updateFacilityCount(facility, false)}
+                    error={errors.facilities?.[facility]}
+                    required={facility === 'Bedroom' || facility === 'Bathroom'}
+                    disabled={editingSection !== 'facilities'}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          </EditableSection>
+
+          <EditableSection
+            title="Pricing & Availability"
+            isEditing={editingSection === 'pricing'}
+            onEdit={() => setEditingSection('pricing')}
+            onSave={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
+            error={errors.price?.message || errors.availableFrom?.message || errors.availableTo?.message}
+          >
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={4}>
                 <TextField
                   fullWidth
-                  label="Other Facilities (Optional)"
+                  label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
                   variant="outlined"
-                  placeholder="Describe any additional facilities..."
-                  disabled={editingSection !== 'facilities'}
-                  {...register('otherFacility')}
-                  error={!!errors.otherFacility}
-                  helperText={errors.otherFacility?.message}
+                  type="number"
+                  disabled={editingSection !== 'pricing'}
+                  {...register('price')}
+                  error={!!errors.price}
+                  helperText={errors.price?.message}
                 />
               </Grid>
+              <Grid item xs={12} sm={4}>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Controller
+                    name="availableFrom"
+                    control={control}
+                    render={({ field }) => (
+                      <DatePicker
+                        label={<RequiredFieldLabel required>Available From</RequiredFieldLabel>}
+                        value={field.value}
+                        onChange={field.onChange}
+                        disabled={editingSection !== 'pricing'}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            fullWidth
+                            error={!!errors.availableFrom}
+                            helperText={errors.availableFrom?.message}
+                          />
+                        )}
+                      />
+                    )}
+                  />
+                </LocalizationProvider>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Controller
+                    name="availableTo"
+                    control={control}
+                    render={({ field }) => (
+                      <DatePicker
+                        label="Available Until (Optional)"
+                        value={field.value}
+                        onChange={field.onChange}
+                        disabled={editingSection !== 'pricing'}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            fullWidth
+                            error={!!errors.availableTo}
+                            helperText={errors.availableTo?.message}
+                          />
+                        )}
+                      />
+                    )}
+                  />
+                </LocalizationProvider>
+              </Grid>
             </Grid>
-
-            {/* Display facility summary */}
-            <Box sx={{ 
-              mt: 3, 
-              p: 2, 
-              backgroundColor: theme.surfaceBackground, 
-              borderRadius: 2,
-              display: 'flex',
-              justifyContent: 'center',
-              gap: 4
-            }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <HotelIcon sx={{ color: theme.primary }} />
-                <Typography variant="body1" sx={{ color: theme.textPrimary }}>
-                  {facilitiesValue.Bedroom || 0} Bedrooms
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <BathtubIcon sx={{ color: theme.primary }} />
-                <Typography variant="body1" sx={{ color: theme.textPrimary }}>
-                  {facilitiesValue.Bathroom || 0} Bathrooms
-                </Typography>
-              </Box>
-            </Box>
           </EditableSection>
 
-          {/* Images Section */}
           <EditableSection
-            title="Property Images"
-            isEditing={editingSection === 'images'}
-            onEdit={() => setEditingSection('images')}
-            onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
-          >
-            {editingSection === 'images' ? (
-              <ImageUpload onUpload={handleImageUpload} />
-            ) : (
-              <Box sx={{ 
-                p: 4, 
-                textAlign: 'center', 
-                backgroundColor: theme.surfaceBackground,
-                borderRadius: 2,
-                border: `1px solid ${theme.border}`
-              }}>
-                <ImageIcon sx={{ fontSize: 48, color: theme.textSecondary, mb: 2 }} />
-                <Typography variant="body1" sx={{ color: theme.textSecondary }}>
-                  Click edit to manage property images
-                </Typography>
-              </Box>
-            )}
-          </EditableSection>
-
-          {/* Address Section */}
-          <EditableSection
-            title="Property Address"
-            isEditing={editingSection === 'address'}
-            onEdit={() => setEditingSection('address')}
-            onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
-            error={errors.address?.message}
-          >
-            <TextField
-              fullWidth
-              label="Complete Address"
-              variant="outlined"
-              placeholder="Include street address, city, and postal code"
-              multiline
-              rows={3}
-              disabled={editingSection !== 'address'}
-              {...register('address')}
-              error={!!errors.address}
-              helperText={errors.address?.message}
-            />
-          </EditableSection>
-
-          {/* Roommates Section */}
-          <EditableSection
-            title="Current Roommates (Optional)"
+            title="Roommate Information (Optional)"
             isEditing={editingSection === 'roommates'}
             onEdit={() => setEditingSection('roommates')}
             onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
           >
             {roommateFields.map((item, index) => (
-              <Accordion key={item.id} sx={{ mb: 1 }}>
+              <Accordion key={item.id} sx={{ mb: 2 }}>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography>Roommate {index + 1}</Typography>
+                  <Typography variant="subtitle1">
+                    Roommate {index + 1}
+                    {editingSection === 'roommates' && (
+                      <IconButton 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeRoommate(index);
+                        }}
+                        color="error"
+                        size="small"
+                        sx={{ ml: 2 }}
+                      >
+                        <RemoveIcon />
+                      </IconButton>
+                    )}
+                  </Typography>
                 </AccordionSummary>
                 <AccordionDetails>
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
-                      <FormControl fullWidth disabled={editingSection !== 'roommates'}>
-                        <InputLabel>Occupation</InputLabel>
-                        <Select
-                          value={watch(`roommates.${index}.occupation`) || ''}
-                          {...register(`roommates.${index}.occupation`)}
-                        >
-                          {occupationOptions.map((option) => (
-                            <MenuItem key={option} value={option}>
-                              {option}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <TextField
+                        fullWidth
+                        label="Occupation"
+                        variant="outlined"
+                        disabled={editingSection !== 'roommates'}
+                        {...register(`roommates.${index}.occupation`)}
+                        error={!!errors.roommates?.[index]?.occupation}
+                        helperText={errors.roommates?.[index]?.occupation?.message}
+                      />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <FormControl fullWidth disabled={editingSection !== 'roommates'}>
-                        <InputLabel>Field</InputLabel>
-                        <Select
-                          value={watch(`roommates.${index}.field`) || ''}
-                          {...register(`roommates.${index}.field`)}
-                        >
-                          {fieldOptions.map((option) => (
-                            <MenuItem key={option} value={option}>
-                              {option}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
+                      <TextField
+                        fullWidth
+                        label="Field/Industry"
+                        variant="outlined"
+                        disabled={editingSection !== 'roommates'}
+                        {...register(`roommates.${index}.field`)}
+                        error={!!errors.roommates?.[index]?.field}
+                        helperText={errors.roommates?.[index]?.field?.message}
+                      />
                     </Grid>
-                    {editingSection === 'roommates' && (
-                      <Grid item xs={12}>
-                        <Button 
-                          onClick={() => removeRoommate(index)} 
-                          color="error"
-                          startIcon={<RemoveIcon />}
-                        >
-                          Remove Roommate
-                        </Button>
-                      </Grid>
-                    )}
                   </Grid>
                 </AccordionDetails>
               </Accordion>
@@ -794,13 +703,12 @@ const UpdateProperty = () => {
             )}
           </EditableSection>
 
-          {/* House Rules Section - Now Optional */}
           <EditableSection
             title="House Rules (Optional)"
             isEditing={editingSection === 'rules'}
             onEdit={() => setEditingSection('rules')}
             onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
           >
             {ruleFields.map((item, index) => (
               <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
@@ -835,13 +743,12 @@ const UpdateProperty = () => {
             )}
           </EditableSection>
 
-          {/* Contract Policy Section */}
           <EditableSection
             title="Contract & Cancellation Policy"
             isEditing={editingSection === 'contract'}
             onEdit={() => setEditingSection('contract')}
             onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
             error={errors.contractPolicy?.message}
           >
             <TextField
@@ -857,96 +764,20 @@ const UpdateProperty = () => {
             />
           </EditableSection>
 
-          {/* Availability & Pricing Section */}
           <EditableSection
-            title="Availability & Pricing"
-            isEditing={editingSection === 'pricing'}
-            onEdit={() => setEditingSection('pricing')}
-            onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
-            error={errors.availableFrom?.message || errors.availableTo?.message || errors.price?.message}
-          >
-            <LocalizationProvider dateAdapter={AdapterDayjs}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} sm={6}>
-                  <Controller
-                    name="availableFrom"
-                    control={control}
-                    render={({ field }) => (
-                      <DatePicker
-                        label="Available From"
-                        value={field.value}
-                        onChange={(newValue) => field.onChange(newValue)}
-                        disabled={editingSection !== 'pricing'}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            fullWidth
-                            error={!!errors.availableFrom}
-                            helperText={errors.availableFrom?.message}
-                          />
-                        )}
-                      />
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Controller
-                    name="availableTo"
-                    control={control}
-                    render={({ field }) => (
-                      <DatePicker
-                        label="Available Until"
-                        value={field.value}
-                        onChange={(newValue) => field.onChange(newValue)}
-                        disabled={editingSection !== 'pricing'}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            fullWidth
-                            error={!!errors.availableTo}
-                            helperText={errors.availableTo?.message}
-                          />
-                        )}
-                      />
-                    )}
-                  />
-                </Grid>
-                <Grid item xs={12}>
-                  <TextField
-                    label="Monthly Rent (LKR)"
-                    type="number"
-                    variant="outlined"
-                    fullWidth
-                    placeholder="e.g., 25000"
-                    disabled={editingSection !== 'pricing'}
-                    {...register('price')}
-                    error={!!errors.price}
-                    helperText={errors.price?.message || "Enter amount in Sri Lankan Rupees"}
-                    InputProps={{
-                      startAdornment: <Typography sx={{ mr: 1, color: theme.textSecondary }}>LKR</Typography>
-                    }}
-                  />
-                </Grid>
-              </Grid>
-            </LocalizationProvider>
-          </EditableSection>
-
-          {/* Bills Inclusive Section */}
-          <EditableSection
-            title="Bills Included in Rent (Optional)"
+            title="Bills Included (Optional)"
             isEditing={editingSection === 'bills'}
             onEdit={() => setEditingSection('bills')}
             onSave={() => setEditingSection('')}
-            onCancel={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
           >
-            {billsFields.map((item, index) => (
+            {billFields.map((item, index) => (
               <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
                 <TextField
                   fullWidth
                   label={`Bill ${index + 1}`}
                   variant="outlined"
-                  placeholder="e.g., Electricity, Water, Internet, Gas..."
+                  placeholder="e.g., Electricity, Water, Internet..."
                   disabled={editingSection !== 'bills'}
                   {...register(`billsInclusive.${index}`)}
                   error={!!errors.billsInclusive?.[index]}
@@ -973,7 +804,23 @@ const UpdateProperty = () => {
             )}
           </EditableSection>
 
-          {/* Action Buttons */}
+          <EditableSection
+            title="Property Images"
+            isEditing={editingSection === 'images'}
+            onEdit={() => setEditingSection('images')}
+            onSave={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
+          >
+            <ImageUpload 
+              onUpload={handleImageUpload}
+              maxFiles={10}
+              disabled={editingSection !== 'images'}
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+              Upload high-quality images of your property to attract more tenants.
+            </Typography>
+          </EditableSection>
+
           <Box sx={{ 
             mt: 6, 
             display: 'flex', 
@@ -984,7 +831,8 @@ const UpdateProperty = () => {
             <Button 
               variant="outlined" 
               size="large"
-              onClick={() => navigate('/myproperties')}
+              onClick={handleBackToMyProperties}
+              startIcon={<ArrowBackIcon />}
               sx={{ 
                 px: 6, 
                 py: 1.5,
@@ -995,12 +843,13 @@ const UpdateProperty = () => {
                 }
               }}
             >
-              Cancel Changes
+              Back to My Properties
             </Button>
             <Button 
               variant="contained" 
               size="large" 
               type="submit"
+              startIcon={<SaveIcon />}
               sx={{ 
                 px: 6, 
                 py: 1.5,

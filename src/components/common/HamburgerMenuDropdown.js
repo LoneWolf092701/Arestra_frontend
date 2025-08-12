@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   IconButton,
   Menu,
@@ -6,52 +6,40 @@ import {
   ListItemIcon,
   ListItemText,
   Divider,
-  Typography,
   Box,
-  Badge
+  Typography,
+  Tooltip
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
-import HomeIcon from '@mui/icons-material/Home';
-import PersonIcon from '@mui/icons-material/Person';
-import FavoriteIcon from '@mui/icons-material/Favorite';
-import NotificationsIcon from '@mui/icons-material/Notifications';
-import LogoutIcon from '@mui/icons-material/Logout';
-import AddHomeIcon from '@mui/icons-material/AddHome';
-import BusinessIcon from '@mui/icons-material/Business';
-import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
-import PendingActionsIcon from '@mui/icons-material/PendingActions';
-import ViewListIcon from '@mui/icons-material/ViewList';
-import BookmarkIcon from '@mui/icons-material/Bookmark';
-import MessageIcon from '@mui/icons-material/Message';
-import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
-import Brightness4Icon from '@mui/icons-material/Brightness4';
-import Brightness7Icon from '@mui/icons-material/Brightness7';
+import {
+  Menu as MenuIcon,
+  Home as HomeIcon,
+  Search as SearchIcon,
+  Favorite as FavoriteIcon,
+  Notifications as NotificationsIcon,
+  Person as PersonIcon,
+  Settings as SettingsIcon,
+  ExitToApp as LogoutIcon,
+  Info as InfoIcon,
+  Help as HelpIcon,
+  ContactSupport as ContactIcon,
+  Business as BusinessIcon,
+  Dashboard as DashboardIcon,
+  List as ListIcon,
+  Add as AddIcon,
+  BookOnline as BookingIcon
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import { isAuthenticated } from '../../utils/auth';
+import { isAuthenticated, getUserRole, logoutUser } from '../../utils/auth';
 
 const HamburgerMenuDropdown = () => {
   const [anchorEl, setAnchorEl] = useState(null);
-  const [notificationCount, setNotificationCount] = useState(0);
   const navigate = useNavigate();
-  const { toggleTheme, isDark } = useTheme();
-  const menuRef = useRef(null);
-
-  const authenticated = isAuthenticated();
-  const roleValue = localStorage.getItem('userRole');
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setAnchorEl(null);
-      }
-    };
-
-    if (anchorEl) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [anchorEl]);
+  const { theme } = useTheme();
+  
+  const isLoggedIn = isAuthenticated();
+  const userRole = getUserRole();
+  const open = Boolean(anchorEl);
 
   const handleMenuOpen = (event) => {
     setAnchorEl(event.currentTarget);
@@ -61,406 +49,193 @@ const HamburgerMenuDropdown = () => {
     setAnchorEl(null);
   };
 
-  const handleMenuItemClick = (action) => {
+  const handleMenuItemClick = (path) => {
     handleMenuClose();
-    
-    switch (action) {
-      case 'home':
-        if (!authenticated) {
-          navigate('/user-home');
-        } else {
-          switch (roleValue) {
-            case 'user':
-              navigate('/user-home');
-              break;
-            case 'propertyowner':
-              navigate('/home');
-              break;
-            case 'admin':
-              navigate('/admin/home');
-              break;
-            default:
-              navigate('/user-home');
-          }
-        }
-        break;
-
-      case 'properties':
-        if (!authenticated) {
-          navigate('/user-allproperties');
-        } else {
-          navigate(roleValue === "propertyowner" ? '/myproperties' : '/user-allproperties');
-        }
-        break;
-      
-      case 'add-property':
-        if (!authenticated) {
-          navigate('/login');
-        } else if (roleValue === "propertyowner") {
-          navigate('/addproperty');
-        } else {
-          navigate('/login');
-        }
-        break;
-      
-      case 'notifications':
-        if (!authenticated) {
-          navigate('/login');
-        } else {
-          navigate(roleValue === "propertyowner" ? '/notifications' : '/user-notifications');
-        }
-        break;
-
-      case 'theme':
-        toggleTheme();
-        break;
-      
-      case 'favourites':
-        if (!authenticated) {
-          navigate('/login');
-        } else if (roleValue === 'user') {
-          navigate('/user-favourites');
-        } else {
-          navigate('/login');
-        }
-        break;
-      
-      case 'admin-home':
-        if (roleValue === 'admin') {
-          navigate('/admin/home');
-        }
-        break;
-      
-      case 'review-listings':
-        if (roleValue === 'admin') {
-          navigate('/admin/new-listings');
-        }
-        break;
-      
-      case 'all-properties':
-        if (roleValue === 'admin') {
-          navigate('/admin/all-properties');
-        }
-        break;
-
-      case 'booking-requests':
-        if (!authenticated) {
-          navigate('/login');
-        } else if (roleValue === "propertyowner") {
-          navigate('/bookings');
-        } else if (roleValue === "user") {
-          navigate('/user-bookings');
-        } else {
-          navigate('/login');
-        }
-        break;
-      
-      case 'logout':
-        localStorage.removeItem('token');
-        localStorage.removeItem('userRole');
-        localStorage.removeItem('userId');
-        localStorage.removeItem('tokenExpiry');
-        localStorage.clear();
-        navigate('/user-home');
-        window.location.reload();
-        break;
-      
-      case 'account':
-        if (!authenticated) {
-          navigate('/login');
-        } else {
-          navigate('/profile');
-        }
-        break;
-      
-      case 'messages':
-        if (!authenticated) {
-          navigate('/login');
-        } else {
-          navigate('/messages');
-        }
-        break;
-        
-      case 'transactions':
-        if (!authenticated) {
-          navigate('/login');
-        } else {
-          navigate('/transactions');
-        }
-        break;
-      
-      default:
-        console.warn('Unknown menu action:', action);
-    }
+    navigate(path);
   };
 
+  const handleLogout = () => {
+    handleMenuClose();
+    logoutUser();
+    navigate('/user-home');
+  };
+
+  // Define menu items based on authentication status and user role
   const getMenuItems = () => {
-    const baseItems = [
-      {
-        label: 'Home',
-        icon: <HomeIcon />,
-        action: 'home',
-        show: true
-      },
-      {
-        label: 'Theme',
-        icon: isDark ? <Brightness7Icon /> : <Brightness4Icon />,
-        action: 'theme',
-        show: true
-      }
-    ];
+    const menuItems = [];
 
-    if (!authenticated) {
-      return [
-        ...baseItems,
-        {
-          label: 'All Properties',
-          icon: <ViewListIcon />,
-          action: 'properties',
-          show: true
-        }
-      ];
+    if (!isLoggedIn) {
+      // Guest menu items
+      menuItems.push(
+        { icon: <HomeIcon />, text: 'Home', path: '/user-home' },
+        { icon: <SearchIcon />, text: 'Browse Properties', path: '/user-allproperties' },
+        { icon: <InfoIcon />, text: 'About Us', path: '/about' },
+        { icon: <HelpIcon />, text: 'Help', path: '/help' },
+        { icon: <ContactIcon />, text: 'Contact', path: '/contact' }
+      );
+    } else {
+      // Common authenticated user items
+      if (userRole === 'user') {
+        menuItems.push(
+          { icon: <HomeIcon />, text: 'Home', path: '/user-home' },
+          { icon: <SearchIcon />, text: 'Browse Properties', path: '/user-allproperties' },
+          { icon: <FavoriteIcon />, text: 'My Favorites', path: '/user-favourites' },
+          { icon: <BookingIcon />, text: 'My Bookings', path: '/user-bookings' },
+          { icon: <NotificationsIcon />, text: 'Notifications', path: '/user-notifications' },
+          { icon: <PersonIcon />, text: 'Profile', path: '/profile' }
+        );
+      } else if (userRole === 'propertyowner') {
+        menuItems.push(
+          { icon: <DashboardIcon />, text: 'Dashboard', path: '/home' },
+          { icon: <ListIcon />, text: 'My Properties', path: '/my-properties' },
+          { icon: <AddIcon />, text: 'Add Property', path: '/add-property' },
+          { icon: <BookingIcon />, text: 'Booking Requests', path: '/property-owner-bookings' },
+          { icon: <NotificationsIcon />, text: 'Notifications', path: '/notifications' },
+          { icon: <PersonIcon />, text: 'Profile', path: '/profile' }
+        );
+      } else if (userRole === 'admin') {
+        menuItems.push(
+          { icon: <DashboardIcon />, text: 'Admin Dashboard', path: '/admin/home' },
+          { icon: <BusinessIcon />, text: 'All Properties', path: '/admin/all-properties' },
+          { icon: <ListIcon />, text: 'New Listings', path: '/admin/new-listings' },
+          { icon: <PersonIcon />, text: 'Manage Users', path: '/admin/users' },
+          { icon: <NotificationsIcon />, text: 'Notifications', path: '/notifications' },
+          { icon: <SettingsIcon />, text: 'Settings', path: '/admin/settings' },
+          { icon: <PersonIcon />, text: 'Profile', path: '/profile' }
+        );
+      }
+
+      // Add common items for all authenticated users
+      menuItems.push(
+        { divider: true },
+        { icon: <SettingsIcon />, text: 'Settings', path: '/settings' },
+        { icon: <HelpIcon />, text: 'Help & Support', path: '/help' },
+        { icon: <LogoutIcon />, text: 'Logout', action: 'logout' }
+      );
     }
 
-    const authenticatedItems = [
-      {
-        label: 'Account',
-        icon: <PersonIcon />,
-        action: 'account',
-        show: true
-      },
-      {
-        label: 'Messages',
-        icon: <MessageIcon />,
-        action: 'messages',
-        show: true
-      },
-      {
-        label: 'Transactions',
-        icon: <AccountBalanceWalletIcon />,
-        action: 'transactions',
-        show: true
-      }
-    ];
-
-    switch (roleValue) {
-      case 'user':
-        return [
-          ...baseItems,
-          {
-            label: 'All Properties',
-            icon: <ViewListIcon />,
-            action: 'properties',
-            show: true
-          },
-          {
-            label: 'Favourites',
-            icon: <FavoriteIcon />,
-            action: 'favourites',
-            show: true
-          },
-          {
-            label: 'My Bookings',
-            icon: <BookmarkIcon />,
-            action: 'booking-requests',
-            show: true
-          },
-          {
-            label: 'Notifications',
-            icon: notificationCount > 0 ? (
-              <Badge badgeContent={notificationCount} color="error">
-                <NotificationsIcon />
-              </Badge>
-            ) : (
-              <NotificationsIcon />
-            ),
-            action: 'notifications',
-            show: true
-          },
-          { divider: true },
-          ...authenticatedItems,
-          { divider: true },
-          {
-            label: 'Logout',
-            icon: <LogoutIcon />,
-            action: 'logout',
-            show: true
-          }
-        ];
-
-      case 'propertyowner':
-        return [
-          ...baseItems,
-          {
-            label: 'My Properties',
-            icon: <BusinessIcon />,
-            action: 'properties',
-            show: true
-          },
-          {
-            label: 'Add Property',
-            icon: <AddHomeIcon />,
-            action: 'add-property',
-            show: true
-          },
-          {
-            label: 'Booking Requests',
-            icon: <PendingActionsIcon />,
-            action: 'booking-requests',
-            show: true
-          },
-          {
-            label: 'Notifications',
-            icon: notificationCount > 0 ? (
-              <Badge badgeContent={notificationCount} color="error">
-                <NotificationsIcon />
-              </Badge>
-            ) : (
-              <NotificationsIcon />
-            ),
-            action: 'notifications',
-            show: true
-          },
-          { divider: true },
-          ...authenticatedItems,
-          { divider: true },
-          {
-            label: 'Logout',
-            icon: <LogoutIcon />,
-            action: 'logout',
-            show: true
-          }
-        ];
-
-      case 'admin':
-        return [
-          ...baseItems,
-          {
-            label: 'Admin Dashboard',
-            icon: <AdminPanelSettingsIcon />,
-            action: 'admin-home',
-            show: true
-          },
-          {
-            label: 'Review New Listings',
-            icon: <PendingActionsIcon />,
-            action: 'review-listings',
-            show: true
-          },
-          {
-            label: 'All Properties',
-            icon: <ViewListIcon />,
-            action: 'all-properties',
-            show: true
-          },
-          { divider: true },
-          ...authenticatedItems,
-          { divider: true },
-          {
-            label: 'Logout',
-            icon: <LogoutIcon />,
-            action: 'logout',
-            show: true
-          }
-        ];
-
-      default:
-        return [
-          ...authenticatedItems,
-          { divider: true },
-          {
-            label: 'Logout',
-            icon: <LogoutIcon />,
-            action: 'logout',
-            show: true
-          }
-        ];
-    }
+    return menuItems;
   };
 
   const menuItems = getMenuItems();
 
   return (
-    <>
-      <IconButton
-        edge="start"
-        color="inherit"
-        aria-label="menu"
-        onClick={handleMenuOpen}
-        sx={{ 
-          mr: 2,
-          '&:hover': {
-            backgroundColor: 'rgba(255, 255, 255, 0.1)'
-          }
-        }}
-      >
-        <MenuIcon />
-      </IconButton>
-      
+    <React.Fragment>
+      <Tooltip title="Menu">
+        <IconButton
+          onClick={handleMenuOpen}
+          sx={{
+            color: 'white',
+            '&:hover': {
+              backgroundColor: 'rgba(255, 255, 255, 0.1)',
+              transform: 'scale(1.05)',
+            },
+            transition: 'all 0.2s ease-in-out',
+          }}
+          aria-label="navigation menu"
+          aria-controls={open ? 'navigation-menu' : undefined}
+          aria-haspopup="true"
+          aria-expanded={open ? 'true' : undefined}
+        >
+          <MenuIcon />
+        </IconButton>
+      </Tooltip>
+
       <Menu
-        ref={menuRef}
+        id="navigation-menu"
         anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
+        open={open}
         onClose={handleMenuClose}
+        MenuListProps={{
+          'aria-labelledby': 'navigation-menu-button',
+        }}
         PaperProps={{
           sx: {
-            minWidth: 200,
-            mt: 1,
-            '& .MuiMenuItem-root': {
-              px: 2,
-              py: 1,
-              '&:hover': {
-                backgroundColor: 'action.hover'
-              }
-            }
+            backgroundColor: theme.paperBackground,
+            border: `1px solid ${theme.border}`,
+            borderRadius: 2,
+            boxShadow: theme.shadows.heavy,
+            minWidth: 220,
+            mt: 1
           }
         }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'left'
-        }}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'left'
-        }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
       >
-        {authenticated && (
-          <>
-            <Box sx={{ px: 2, py: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                {roleValue === 'propertyowner' ? 'Property Owner' : 
-                 roleValue === 'admin' ? 'Administrator' : 'User'}
-              </Typography>
-            </Box>
-            <Divider />
-          </>
+        {!isLoggedIn && (
+          <Box sx={{ px: 2, py: 1, borderBottom: `1px solid ${theme.border}` }}>
+            <Typography variant="body2" color="text.secondary">
+              Welcome to StayWise.lk
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Please log in to access all features
+            </Typography>
+          </Box>
+        )}
+
+        {isLoggedIn && (
+          <Box sx={{ px: 2, py: 1, borderBottom: `1px solid ${theme.border}` }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: theme.textPrimary }}>
+              {userRole === 'admin' ? 'Admin Panel' : 
+               userRole === 'propertyowner' ? 'Property Owner' : 'User Dashboard'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {userRole === 'admin' ? 'Manage platform operations' : 
+               userRole === 'propertyowner' ? 'Manage your properties' : 'Find your perfect home'}
+            </Typography>
+          </Box>
         )}
 
         {menuItems.map((item, index) => {
           if (item.divider) {
-            return <Divider key={`divider-${index}`} />;
+            return <Divider key={`divider-${index}`} sx={{ my: 1 }} />;
           }
-
-          if (!item.show) return null;
 
           return (
             <MenuItem
-              key={item.action || index}
-              onClick={() => handleMenuItemClick(item.action)}
+              key={item.text}
+              onClick={() => {
+                if (item.action === 'logout') {
+                  handleLogout();
+                } else {
+                  handleMenuItemClick(item.path);
+                }
+              }}
               sx={{
-                minHeight: 48,
-                gap: 1
+                px: 2,
+                py: 1.5,
+                color: theme.textPrimary,
+                '&:hover': {
+                  backgroundColor: theme.hover,
+                  transform: 'translateX(4px)',
+                },
+                transition: 'all 0.2s ease-in-out',
+                ...(item.action === 'logout' && {
+                  color: 'error.main',
+                  '&:hover': {
+                    backgroundColor: 'rgba(211, 47, 47, 0.08)',
+                  }
+                })
               }}
             >
-              <ListItemIcon sx={{ minWidth: 40 }}>
+              <ListItemIcon sx={{ 
+                color: item.action === 'logout' ? 'error.main' : theme.primary,
+                minWidth: 36
+              }}>
                 {item.icon}
               </ListItemIcon>
-              <ListItemText primary={item.label} />
+              <ListItemText 
+                primary={item.text}
+                primaryTypographyProps={{
+                  variant: 'body2',
+                  sx: { fontWeight: 500 }
+                }}
+              />
             </MenuItem>
           );
         })}
       </Menu>
-    </>
+    </React.Fragment>
   );
 };
 
