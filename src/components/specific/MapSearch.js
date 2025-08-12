@@ -41,7 +41,9 @@ const MapSearch = ({ address, setAddress }) => {
         variant="outlined" 
         margin="normal"
         value={address}
-        onChange={(e) => setAddress(e.target.value)}
+        onChange={(e) => {setAddress(e.target.value);
+          console.log({e});
+        }}
       />
       <Button variant="contained" onClick={handleSearch} sx={{ mb: 2 }} disabled={!address}>
         Search
