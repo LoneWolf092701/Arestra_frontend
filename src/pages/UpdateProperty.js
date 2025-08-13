@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useForm, Controller, useFieldArray } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -39,6 +39,8 @@ import { ThemeContext } from '../contexts/ThemeContext';
 import ImageUpload from '../components/common/ImageUpload';
 import AppSnackbar from '../components/common/AppSnackbar';
 
+const propertyTypes = ['ROOMS', 'FLATS', 'HOTELS', 'VILLAS'];
+
 const unitOptions = [
   { label: 'Annex', value: 'Annex' },
   { label: 'Full House', value: 'Full House' },
@@ -55,6 +57,20 @@ const availableAmenities = [
   'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished'
 ];
 
+const availableFacilities = [
+  'Swimming Pool', 'Recreation Room', 'Bed Linens', 'Hot Water', 'Air Conditioning', 'Kitchen',
+  'Washing Machine', 'WiFi', 'TV', 'Parking', 'Security', 'Garden'
+];
+
+const schema = yup.object().shape({
+  propertyType: yup.string().required('Property type is required'),
+  unitType: yup.string().required('Unit type is required'),
+  address: yup.string().required('Address is required'),
+  description: yup.string().required('Description is required'),
+  price: yup.number().positive('Price must be positive').required('Price is required'),
+  contractPolicy: yup.string().required('Contract policy is required'),
+});
+
 const RequiredFieldLabel = ({ children, required = false }) => (
   <Box component="span">
     {children}
@@ -62,136 +78,107 @@ const RequiredFieldLabel = ({ children, required = false }) => (
   </Box>
 );
 
-const FacilityCounter = ({ facility, count, onIncrement, onDecrement, error, required = false, disabled = false }) => (
-  <>
-    <Box
-      display="flex"
-      alignItems="center"
-      justifyContent="space-between"
-      p={1}
-      border={error ? "1px solid red" : "1px solid #ccc"}
-      borderRadius={2}
-      sx={{ opacity: disabled ? 0.6 : 1 }}
-    >
-      <Typography variant="subtitle1">
-        <RequiredFieldLabel required={required}>{facility}</RequiredFieldLabel>
-      </Typography>
-      <Box display="flex" alignItems="center">
-        <IconButton 
-          onClick={onDecrement} 
-          disabled={count <= 0 || disabled}
-          size="small"
-        >
-          <RemoveIcon />
-        </IconButton>
-        <Typography variant="h6" sx={{ mx: 2, minWidth: 30, textAlign: 'center' }}>
-          {count}
+const EditableSection = ({ title, isEditing, onEdit, onSave, onCancel, children, error }) => (
+  <Card sx={{ mb: 4, borderRadius: 3 }}>
+    <CardContent sx={{ p: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          {title}
         </Typography>
-        <IconButton 
-          onClick={onIncrement} 
-          disabled={disabled}
-          size="small"
-        >
-          <AddIcon />
-        </IconButton>
+        {!isEditing ? (
+          <IconButton onClick={onEdit} color="primary">
+            <EditIcon />
+          </IconButton>
+        ) : (
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <IconButton onClick={onSave} color="primary">
+              <SaveIcon />
+            </IconButton>
+            <IconButton onClick={onCancel} color="secondary">
+              <CancelIcon />
+            </IconButton>
+          </Box>
+        )}
       </Box>
-    </Box>
-    {error && (
-      <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
-        {error.message}
-      </Typography>
-    )}
-  </>
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+      
+      {children}
+    </CardContent>
+  </Card>
 );
 
-const AmenityQuantitySelector = ({ amenity, quantity, onQuantityChange, onRemove, disabled = false }) => (
-  <Card variant="outlined" sx={{ p: 2, opacity: disabled ? 0.6 : 1 }}>
-    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-      <Typography variant="subtitle2">{amenity}</Typography>
-      {!disabled && (
-        <IconButton 
-          onClick={onRemove} 
-          size="small" 
-          color="error"
-        >
-          <RemoveIcon />
-        </IconButton>
-      )}
-    </Box>
-    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+const AmenityQuantitySelector = ({ amenity, quantity, onQuantityChange, onRemove, disabled }) => (
+  <Box sx={{ 
+    display: 'flex', 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    p: 2,
+    border: '1px solid #ccc',
+    borderRadius: 2,
+    backgroundColor: disabled ? '#f5f5f5' : 'transparent'
+  }}>
+    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+      {amenity}
+    </Typography>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <IconButton 
-        onClick={() => onQuantityChange(Math.max(0, quantity - 1))} 
-        size="small"
-        disabled={quantity <= 0 || disabled}
+        size="small" 
+        onClick={() => onQuantityChange(Math.max(0, quantity - 1))}
+        disabled={disabled || quantity <= 0}
       >
         <RemoveIcon />
       </IconButton>
-      <Typography variant="h6" sx={{ mx: 2, minWidth: 30, textAlign: 'center' }}>
-        {quantity || 0}
+      <Typography variant="body1" sx={{ minWidth: '20px', textAlign: 'center' }}>
+        {quantity}
       </Typography>
       <IconButton 
-        onClick={() => onQuantityChange((quantity || 0) + 1)} 
-        size="small"
+        size="small" 
+        onClick={() => onQuantityChange(quantity + 1)}
         disabled={disabled}
       >
         <AddIcon />
       </IconButton>
+      {!disabled && (
+        <Button size="small" color="error" onClick={onRemove}>
+          Remove
+        </Button>
+      )}
     </Box>
-  </Card>
+  </Box>
 );
-
-const validationSchema = yup.object({
-  propertyType: yup.string().required('Property type is required'),
-  unitType: yup.string().required('Unit type is required'),
-  address: yup.string().required('Address is required'),
-  description: yup.string().required('Description is required'),
-  price: yup.number().positive('Price must be positive').required('Price is required'),
-  facilities: yup.object({
-    Bedroom: yup.number().min(0, 'Bedrooms cannot be negative').required('Number of bedrooms is required'),
-    Bathroom: yup.number().min(1, 'At least 1 bathroom is required').required('Number of bathrooms is required'),
-    Kitchen: yup.number().min(0, 'Kitchens cannot be negative'),
-    LivingRoom: yup.number().min(0, 'Living rooms cannot be negative'),
-    DiningRoom: yup.number().min(0, 'Dining rooms cannot be negative'),
-    ParkingSpace: yup.number().min(0, 'Parking spaces cannot be negative')
-  }).required('Facilities information is required'),
-  availableFrom: yup.date().required('Available from date is required'),
-  availableTo: yup.date().min(yup.ref('availableFrom'), 'Available to date must be after available from date'),
-  contractPolicy: yup.string().required('Contract policy is required')
-});
 
 const UpdateProperty = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { theme, isDark } = React.useContext(ThemeContext);
+  const { theme, isDark } = useContext(ThemeContext);
   
   const [loading, setLoading] = useState(true);
   const [editingSection, setEditingSection] = useState('');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedAmenityToAdd, setSelectedAmenityToAdd] = useState('');
+  const [selectedFacilityToAdd, setSelectedFacilityToAdd] = useState('');
 
   const { register, handleSubmit, control, watch, setValue, reset, formState: { errors } } = useForm({
-    resolver: yupResolver(validationSchema),
+    resolver: yupResolver(schema),
     defaultValues: {
       propertyType: '',
       unitType: '',
       address: '',
       description: '',
+      price: '',
       amenities: {},
-      facilities: {
-        Bedroom: 0,
-        Bathroom: 0,
-        Kitchen: 0,
-        LivingRoom: 0,
-        DiningRoom: 0,
-        ParkingSpace: 0
-      },
-      roommates: [],
-      rules: [],
+      facilities: {},
       contractPolicy: '',
       availableFrom: null,
       availableTo: null,
-      price: '',
+      roommates: [],
+      rules: [],
       billsInclusive: []
     }
   });
@@ -214,61 +201,107 @@ const UpdateProperty = () => {
   const amenitiesValue = watch('amenities') || {};
   const facilitiesValue = watch('facilities') || {};
 
+  // Load property data when component mounts
   useEffect(() => {
-    const fetchProperty = async () => {
+    const loadPropertyData = async () => {
       try {
         setLoading(true);
-        const property = await getPropertyDetailsById(id);
-        if (property) {
+        const propertyData = await getPropertyDetailsById(id);
+        
+        if (propertyData) {
+          // Parse JSON fields safely
+          const amenities = typeof propertyData.amenities === 'string' ? 
+            JSON.parse(propertyData.amenities || '{}') : propertyData.amenities || {};
+          
+          const facilities = typeof propertyData.facilities === 'string' ? 
+            JSON.parse(propertyData.facilities || '{}') : propertyData.facilities || {};
+          
+          const rules = typeof propertyData.rules === 'string' ? 
+            JSON.parse(propertyData.rules || '[]') : propertyData.rules || [];
+          
+          const roommates = typeof propertyData.roommates === 'string' ? 
+            JSON.parse(propertyData.roommates || '[]') : propertyData.roommates || [];
+          
+          const billsInclusive = typeof propertyData.bills_inclusive === 'string' ? 
+            JSON.parse(propertyData.bills_inclusive || '[]') : propertyData.bills_inclusive || [];
+
+          // Populate form with existing data
           reset({
-            propertyType: property.property_type || '',
-            unitType: property.unit_type || '',
-            address: property.address || '',
-            description: property.description || '',
-            amenities: property.amenities ? JSON.parse(property.amenities) : {},
-            facilities: property.facilities ? JSON.parse(property.facilities) : {
-              Bedroom: 0, Bathroom: 0, Kitchen: 0, LivingRoom: 0, DiningRoom: 0, ParkingSpace: 0
-            },
-            roommates: property.roommates ? JSON.parse(property.roommates) : [],
-            rules: property.rules ? JSON.parse(property.rules) : [],
-            contractPolicy: property.contract_policy || '',
-            availableFrom: property.available_from ? dayjs(property.available_from) : null,
-            availableTo: property.available_to ? dayjs(property.available_to) : null,
-            price: property.price || '',
-            billsInclusive: property.bills_inclusive ? JSON.parse(property.bills_inclusive) : []
+            propertyType: propertyData.property_type || '',
+            unitType: propertyData.unit_type || '',
+            address: propertyData.address || '',
+            description: propertyData.description || '',
+            price: propertyData.price || '',
+            amenities: amenities,
+            facilities: facilities,
+            contractPolicy: propertyData.contract_policy || '',
+            availableFrom: propertyData.available_from ? dayjs(propertyData.available_from) : null,
+            availableTo: propertyData.available_to ? dayjs(propertyData.available_to) : null,
+            roommates: roommates,
+            rules: rules,
+            billsInclusive: billsInclusive
           });
         }
       } catch (error) {
-        console.error('Error fetching property details:', error);
+        console.error('Error loading property data:', error);
         setSnackbarMessage('Error loading property details');
         setSnackbarOpen(true);
       } finally {
         setLoading(false);
       }
     };
-    fetchProperty();
+
+    if (id) {
+      loadPropertyData();
+    }
   }, [id, reset]);
 
   const onSubmit = async (data) => {
-    const formattedData = {
-      ...data,
-      availableFrom: data.availableFrom ? dayjs(data.availableFrom).format('YYYY-MM-DD HH:mm:ss') : null,
-      availableTo: data.availableTo ? dayjs(data.availableTo).format('YYYY-MM-DD HH:mm:ss') : null
-    };
-    
     try {
-      const token = localStorage.getItem('token');
-      await updateProperty(id, formattedData, token);
+      setLoading(true);
+      
+      // Prepare data for API submission
+      const updateData = {
+        property_type: data.propertyType,
+        unit_type: data.unitType,
+        address: data.address,
+        description: data.description,
+        price: parseFloat(data.price),
+        amenities: data.amenities,
+        facilities: data.facilities,
+        contract_policy: data.contractPolicy,
+        available_from: data.availableFrom ? dayjs(data.availableFrom).format('YYYY-MM-DD') : null,
+        available_to: data.availableTo ? dayjs(data.availableTo).format('YYYY-MM-DD') : null,
+        rules: data.rules.filter(rule => rule && rule.trim().length > 0),
+        roommates: data.roommates.filter(roommate => 
+          roommate && (roommate.occupation || roommate.field)
+        ),
+        bills_inclusive: data.billsInclusive.filter(bill => bill && bill.trim().length > 0)
+      };
+
+      await updateProperty(id, updateData);
       setSnackbarMessage('Property updated successfully!');
       setSnackbarOpen(true);
+      
       setTimeout(() => {
         navigate('/myproperties');
       }, 2000);
+      
     } catch (error) {
-      console.error('Error updating property details:', error);
-      setSnackbarMessage('Error updating property details');
+      console.error('Error updating property:', error);
+      setSnackbarMessage('Error updating property. Please try again.');
       setSnackbarOpen(true);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingSection('');
+  };
+
+  const handleBackToMyProperties = () => {
+    navigate('/myproperties');
   };
 
   const handleSnackbarClose = () => {
@@ -276,15 +309,7 @@ const UpdateProperty = () => {
   };
 
   const handleImageUpload = (uploadedFiles) => {
-    console.log('Uploaded files:', uploadedFiles);
-  };
-
-  const handleBackToMyProperties = () => {
-    navigate('/myproperties');
-  };
-
-  const handleCancelEdit = () => {
-    setEditingSection('');
+    setValue('images', uploadedFiles);
   };
 
   const updateFacilityCount = (facility, increment) => {
@@ -293,27 +318,27 @@ const UpdateProperty = () => {
     setValue(`facilities.${facility}`, newValue);
   };
 
-  const updateAmenityQuantity = (amenity, quantity) => {
-    const updatedAmenities = { ...amenitiesValue };
-    if (quantity <= 0) {
-      delete updatedAmenities[amenity];
-    } else {
-      updatedAmenities[amenity] = quantity;
-    }
-    setValue('amenities', updatedAmenities);
+  const updateAmenityQuantity = (amenity, newQuantity) => {
+    setValue(`amenities.${amenity}`, newQuantity);
   };
 
   const removeAmenity = (amenity) => {
-    const updatedAmenities = { ...amenitiesValue };
-    delete updatedAmenities[amenity];
-    setValue('amenities', updatedAmenities);
+    const newAmenities = { ...amenitiesValue };
+    delete newAmenities[amenity];
+    setValue('amenities', newAmenities);
   };
 
   const addAmenity = () => {
-    if (selectedAmenityToAdd && !amenitiesValue[selectedAmenityToAdd]) {
-      const updatedAmenities = { ...amenitiesValue, [selectedAmenityToAdd]: 1 };
-      setValue('amenities', updatedAmenities);
+    if (selectedAmenityToAdd) {
+      setValue(`amenities.${selectedAmenityToAdd}`, 1);
       setSelectedAmenityToAdd('');
+    }
+  };
+
+  const addFacility = () => {
+    if (selectedFacilityToAdd) {
+      setValue(`facilities.${selectedFacilityToAdd}`, 1);
+      setSelectedFacilityToAdd('');
     }
   };
 
@@ -321,63 +346,9 @@ const UpdateProperty = () => {
     return availableAmenities.filter(amenity => !amenitiesValue[amenity]);
   };
 
-  const EditableSection = ({ title, isEditing, onEdit, onSave, onCancel, children, error }) => (
-    <Card 
-      sx={{ 
-        mb: 3, 
-        backgroundColor: theme.cardBackground,
-        border: `2px solid ${isEditing ? theme.primary : theme.border}`,
-        borderStyle: isEditing ? 'dashed' : 'solid',
-        transition: 'all 0.3s ease',
-        '&:hover': {
-          borderColor: isEditing ? theme.secondary : theme.primary,
-          boxShadow: theme.shadows.medium,
-        }
-      }}
-    >
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-            {title}
-            {isEditing && (
-              <Chip 
-                label="EDITING" 
-                size="small" 
-                sx={{ 
-                  ml: 2, 
-                  backgroundColor: theme.warning,
-                  color: '#FFFFFF',
-                  fontWeight: 600
-                }} 
-              />
-            )}
-          </Typography>
-          <Box>
-            {isEditing ? (
-              <Box sx={{ display: 'flex', gap: 1 }}>
-                <IconButton onClick={onSave} color="primary" size="small">
-                  <SaveIcon />
-                </IconButton>
-                <IconButton onClick={onCancel} color="secondary" size="small">
-                  <CancelIcon />
-                </IconButton>
-              </Box>
-            ) : (
-              <IconButton onClick={onEdit} color="primary" size="small">
-                <EditIcon />
-              </IconButton>
-            )}
-          </Box>
-        </Box>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
-            {error}
-          </Alert>
-        )}
-        {children}
-      </CardContent>
-    </Card>
-  );
+  const getAvailableFacilitiesForDropdown = () => {
+    return availableFacilities.filter(facility => !facilitiesValue[facility]);
+  };
 
   if (loading) {
     return (
@@ -417,15 +388,20 @@ const UpdateProperty = () => {
           >
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label={<RequiredFieldLabel required>Property Type</RequiredFieldLabel>}
-                  variant="outlined"
-                  disabled={editingSection !== 'basic'}
-                  {...register('propertyType')}
-                  error={!!errors.propertyType}
-                  helperText={errors.propertyType?.message}
-                />
+                <FormControl fullWidth disabled={editingSection !== 'basic'}>
+                  <InputLabel>Property Type</InputLabel>
+                  <Select
+                    value={watch('propertyType')}
+                    onChange={(e) => setValue('propertyType', e.target.value)}
+                    error={!!errors.propertyType}
+                  >
+                    {propertyTypes.map((type) => (
+                      <MenuItem key={type} value={type}>
+                        {type}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth disabled={editingSection !== 'basic'}>
@@ -436,12 +412,24 @@ const UpdateProperty = () => {
                     error={!!errors.unitType}
                   >
                     {unitOptions.map((option) => (
-                      <MenuItem key={option.label} value={option.label}>
+                      <MenuItem key={option.value} value={option.value}>
                         {option.label}
                       </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
+              </Grid>
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
+                  type="number"
+                  variant="outlined"
+                  disabled={editingSection !== 'basic'}
+                  {...register('price')}
+                  error={!!errors.price}
+                  helperText={errors.price?.message}
+                />
               </Grid>
             </Grid>
           </EditableSection>
@@ -532,70 +520,84 @@ const UpdateProperty = () => {
                 </Button>
               </Box>
             )}
-
-            {Object.keys(amenitiesValue)?.length > 0 && (
-              <Typography variant="body2" sx={{ color: theme.primary, mt: 2 }}>
-                {Object.keys(amenitiesValue)?.length} amenities configured
-              </Typography>
-            )}
           </EditableSection>
 
           <EditableSection
-            title="Basic Facilities"
+            title="Property Facilities"
             isEditing={editingSection === 'facilities'}
             onEdit={() => setEditingSection('facilities')}
             onSave={() => setEditingSection('')}
             onCancel={handleCancelEdit}
           >
             <Grid container spacing={3}>
-              {Object.entries(facilitiesValue).map(([facility, count]) => (
+              {['Bedrooms', 'Bathrooms', 'Kitchen', 'Balcony', 'Living Area', 'Other'].map((facility) => (
                 <Grid item xs={12} sm={6} md={4} key={facility}>
-                  <FacilityCounter
-                    facility={facility}
-                    count={count || 0}
-                    onIncrement={() => updateFacilityCount(facility, true)}
-                    onDecrement={() => updateFacilityCount(facility, false)}
-                    error={errors.facilities?.[facility]}
-                    required={facility === 'Bedroom' || facility === 'Bathroom'}
-                    disabled={editingSection !== 'facilities'}
-                  />
+                  <Box
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="space-between"
+                    p={2}
+                    border="1px solid #ccc"
+                    borderRadius={2}
+                    sx={{ backgroundColor: editingSection !== 'facilities' ? '#f5f5f5' : 'transparent' }}
+                  >
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                      {facility}
+                      {(facility === 'Bedrooms' || facility === 'Bathrooms') && 
+                        <Box component="span" sx={{ color: 'error.main', ml: 0.5 }}>*</Box>
+                      }
+                    </Typography>
+                    <Box display="flex" alignItems="center">
+                      <IconButton 
+                        onClick={() => updateFacilityCount(facility, false)} 
+                        disabled={editingSection !== 'facilities' || (facilitiesValue[facility] || 0) <= 0}
+                      >
+                        <RemoveIcon />
+                      </IconButton>
+                      <Typography variant="h6" sx={{ mx: 2, minWidth: '20px', textAlign: 'center' }}>
+                        {facilitiesValue[facility] || 0}
+                      </Typography>
+                      <IconButton 
+                        onClick={() => updateFacilityCount(facility, true)}
+                        disabled={editingSection !== 'facilities'}
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    </Box>
+                  </Box>
                 </Grid>
               ))}
             </Grid>
+            
+            {editingSection === 'facilities' && (
+              <Box sx={{ mt: 3 }}>
+                <Alert severity="info">
+                  Bedrooms and Bathrooms are required. Set Bedrooms to 0 for studio apartments.
+                </Alert>
+              </Box>
+            )}
           </EditableSection>
 
           <EditableSection
-            title="Pricing & Availability"
-            isEditing={editingSection === 'pricing'}
-            onEdit={() => setEditingSection('pricing')}
+            title="Availability"
+            isEditing={editingSection === 'availability'}
+            onEdit={() => setEditingSection('availability')}
             onSave={() => setEditingSection('')}
             onCancel={handleCancelEdit}
-            error={errors.price?.message || errors.availableFrom?.message || errors.availableTo?.message}
+            error={errors.availableFrom?.message || errors.availableTo?.message}
           >
             <Grid container spacing={3}>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
-                  variant="outlined"
-                  type="number"
-                  disabled={editingSection !== 'pricing'}
-                  {...register('price')}
-                  error={!!errors.price}
-                  helperText={errors.price?.message}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
+              <Grid item xs={12} sm={6}>
                 <LocalizationProvider dateAdapter={AdapterDayjs}>
                   <Controller
                     name="availableFrom"
                     control={control}
                     render={({ field }) => (
                       <DatePicker
-                        label={<RequiredFieldLabel required>Available From</RequiredFieldLabel>}
+                        label="Available From"
                         value={field.value}
                         onChange={field.onChange}
-                        disabled={editingSection !== 'pricing'}
+                        disabled={editingSection !== 'availability'}
                         renderInput={(params) => (
                           <TextField
                             {...params}
@@ -609,23 +611,23 @@ const UpdateProperty = () => {
                   />
                 </LocalizationProvider>
               </Grid>
-              <Grid item xs={12} sm={4}>
+              <Grid item xs={12} sm={6}>
                 <LocalizationProvider dateAdapter={AdapterDayjs}>
                   <Controller
                     name="availableTo"
                     control={control}
                     render={({ field }) => (
                       <DatePicker
-                        label="Available Until (Optional)"
+                        label="Available Until"
                         value={field.value}
                         onChange={field.onChange}
-                        disabled={editingSection !== 'pricing'}
+                        disabled={editingSection !== 'availability'}
                         renderInput={(params) => (
                           <TextField
                             {...params}
                             fullWidth
                             error={!!errors.availableTo}
-                            helperText={errors.availableTo?.message}
+                            helperText={errors.availableTo?.message || "Leave empty for no end date"}
                           />
                         )}
                       />
@@ -637,7 +639,29 @@ const UpdateProperty = () => {
           </EditableSection>
 
           <EditableSection
-            title="Roommate Information (Optional)"
+            title="Contract Policy"
+            isEditing={editingSection === 'contract'}
+            onEdit={() => setEditingSection('contract')}
+            onSave={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
+            error={errors.contractPolicy?.message}
+          >
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              label={<RequiredFieldLabel required>Contract Policy</RequiredFieldLabel>}
+              variant="outlined"
+              placeholder="Enter contract terms, payment policy, lease duration, etc."
+              disabled={editingSection !== 'contract'}
+              {...register('contractPolicy')}
+              error={!!errors.contractPolicy}
+              helperText={errors.contractPolicy?.message}
+            />
+          </EditableSection>
+
+          <EditableSection
+            title="Roommate Details (Optional)"
             isEditing={editingSection === 'roommates'}
             onEdit={() => setEditingSection('roommates')}
             onSave={() => setEditingSection('')}
@@ -646,25 +670,10 @@ const UpdateProperty = () => {
             {roommateFields.map((item, index) => (
               <Accordion key={item.id} sx={{ mb: 2 }}>
                 <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="subtitle1">
-                    Roommate {index + 1}
-                    {editingSection === 'roommates' && (
-                      <IconButton 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeRoommate(index);
-                        }}
-                        color="error"
-                        size="small"
-                        sx={{ ml: 2 }}
-                      >
-                        <RemoveIcon />
-                      </IconButton>
-                    )}
-                  </Typography>
+                  <Typography>Roommate {index + 1}</Typography>
                 </AccordionSummary>
                 <AccordionDetails>
-                  <Grid container spacing={2}>
+                  <Grid container spacing={3}>
                     <Grid item xs={12} sm={6}>
                       <TextField
                         fullWidth
@@ -687,6 +696,17 @@ const UpdateProperty = () => {
                         helperText={errors.roommates?.[index]?.field?.message}
                       />
                     </Grid>
+                    {editingSection === 'roommates' && (
+                      <Grid item xs={12}>
+                        <Button 
+                          onClick={() => removeRoommate(index)} 
+                          color="error"
+                          startIcon={<RemoveIcon />}
+                        >
+                          Remove Roommate
+                        </Button>
+                      </Grid>
+                    )}
                   </Grid>
                 </AccordionDetails>
               </Accordion>
@@ -696,7 +716,6 @@ const UpdateProperty = () => {
                 onClick={() => appendRoommate({ occupation: '', field: '' })} 
                 startIcon={<AddIcon />}
                 variant="outlined"
-                sx={{ mt: 2 }}
               >
                 Add Roommate
               </Button>
@@ -711,12 +730,11 @@ const UpdateProperty = () => {
             onCancel={handleCancelEdit}
           >
             {ruleFields.map((item, index) => (
-              <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+              <Box key={item.id} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
                 <TextField
                   fullWidth
                   label={`Rule ${index + 1}`}
                   variant="outlined"
-                  placeholder="e.g., No smoking, No pets, Quiet hours after 10 PM..."
                   disabled={editingSection !== 'rules'}
                   {...register(`rules.${index}`)}
                   error={!!errors.rules?.[index]}
@@ -738,30 +756,9 @@ const UpdateProperty = () => {
                 startIcon={<AddIcon />}
                 variant="outlined"
               >
-                Add Rule
+                Add House Rule
               </Button>
             )}
-          </EditableSection>
-
-          <EditableSection
-            title="Contract & Cancellation Policy"
-            isEditing={editingSection === 'contract'}
-            onEdit={() => setEditingSection('contract')}
-            onSave={() => setEditingSection('')}
-            onCancel={handleCancelEdit}
-            error={errors.contractPolicy?.message}
-          >
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              variant="outlined"
-              placeholder="Include lease duration, deposit amount, notice period for cancellation..."
-              disabled={editingSection !== 'contract'}
-              {...register('contractPolicy')}
-              error={!!errors.contractPolicy}
-              helperText={errors.contractPolicy?.message}
-            />
           </EditableSection>
 
           <EditableSection
@@ -772,12 +769,12 @@ const UpdateProperty = () => {
             onCancel={handleCancelEdit}
           >
             {billFields.map((item, index) => (
-              <Box key={item.id} sx={{ display: 'flex', alignItems: 'center', mb: 2, gap: 1 }}>
+              <Box key={item.id} sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
                 <TextField
                   fullWidth
                   label={`Bill ${index + 1}`}
                   variant="outlined"
-                  placeholder="e.g., Electricity, Water, Internet..."
+                  placeholder="e.g., Water, Electricity, Internet"
                   disabled={editingSection !== 'bills'}
                   {...register(`billsInclusive.${index}`)}
                   error={!!errors.billsInclusive?.[index]}
