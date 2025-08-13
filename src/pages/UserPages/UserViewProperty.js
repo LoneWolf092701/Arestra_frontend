@@ -753,13 +753,28 @@ const UserViewProperty = () => {
               </Grid>
               
               <Grid item xs={12} md={6}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, backgroundColor: '#f8f9fa', borderRadius: 2, mb: 2 }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  p: 2, 
+                  backgroundColor: theme.surfaceBackground, 
+                  borderRadius: 2, 
+                  mb: 2,
+                  border: `1px solid ${theme.border}`
+                }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <StarIcon sx={{ color: '#ffc107', mr: 1 }} />
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    <Typography variant="h6" sx={{ 
+                      fontWeight: 600,
+                      color: theme.textPrimary
+                    }}>
                       {propertyRating.averageRating?.toFixed(1) || '0.0'}
                     </Typography>
-                    <Typography variant="body2" sx={{ ml: 1, color: 'text.secondary' }}>
+                    <Typography variant="body2" sx={{ 
+                      ml: 1, 
+                      color: theme.textSecondary
+                    }}>
                       ({propertyRating.totalRatings || 0} reviews)
                     </Typography>
                   </Box>
@@ -768,15 +783,33 @@ const UserViewProperty = () => {
                       variant="outlined"
                       size="small"
                       onClick={() => setRatingDialogOpen(true)}
+                      sx={{
+                        borderColor: theme.primary,
+                        color: theme.primary,
+                        '&:hover': {
+                          backgroundColor: theme.primary,
+                          color: 'white'
+                        }
+                      }}
                     >
                       {userRatingData?.has_rated ? 'Update Rating' : 'Rate Property'}
                     </Button>
                   )}
                 </Box>
                 
-                <Box sx={{ display: 'flex', alignItems: 'center', p: 2, backgroundColor: '#f8f9fa', borderRadius: 2 }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  p: 2, 
+                  backgroundColor: theme.surfaceBackground, 
+                  borderRadius: 2,
+                  border: `1px solid ${theme.border}`
+                }}>
                   <ViewsIcon sx={{ color: theme.primary, mr: 1 }} />
-                  <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                  <Typography variant="body1" sx={{ 
+                    fontWeight: 500,
+                    color: theme.textPrimary
+                  }}>
                     {property.views_count || 0} views
                   </Typography>
                 </Box>
