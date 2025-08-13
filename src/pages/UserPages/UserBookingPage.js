@@ -130,16 +130,30 @@ const UserBookingPage = () => {
       
       setProperty(propertyData);
       
+      // Auto-fill user profile information when available
       if (userProfile) {
+        console.log('Auto-filling user profile data:', userProfile);
         setPersonalDetails(prev => ({
           ...prev,
-          first_name: userProfile.first_name || '',
-          last_name: userProfile.last_name || '',
+          // Map common profile fields to booking form fields
+          first_name: userProfile.first_name || userProfile.firstName || '',
+          last_name: userProfile.last_name || userProfile.lastName || '',
           email: userProfile.email || '',
-          mobile_number: userProfile.phone || '',
-          current_address: userProfile.address || '',
-          occupation: userProfile.occupation || ''
+          mobile_number: userProfile.phone || userProfile.mobile_number || userProfile.phoneNumber || '',
+          current_address: userProfile.address || userProfile.current_address || '',
+          occupation: userProfile.occupation || '',
+          // Some profiles might have additional fields we can use
+          id_number: userProfile.id_number || userProfile.nationalId || userProfile.idNumber || '',
+          emergency_contact_name: userProfile.emergency_contact_name || userProfile.emergencyContactName || '',
+          emergency_contact_number: userProfile.emergency_contact_number || userProfile.emergencyContactNumber || '',
+          purpose_of_stay: userProfile.purpose_of_stay || ''
         }));
+        
+        setSnackbar({
+          open: true,
+          message: 'Profile information auto-filled. Please review and update as needed.',
+          severity: 'info'
+        });
       }
     } catch (error) {
       console.error('Error loading data:', error);
