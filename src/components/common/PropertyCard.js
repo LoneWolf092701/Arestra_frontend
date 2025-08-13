@@ -72,8 +72,35 @@ const PropertyCard = ({
   const images = parseJsonField(property.images);
 
   const primaryImage = images && images.length > 0 ? 
-    (typeof images[0] === 'string' ? images[0] : images[0]?.url || images[0]?.path) : 
-    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?ixlib=rb-4.0.3&auto=format&fit=crop&w=500&q=80';
+    (typeof images[0] === 'string' ? images[0] : images[0]?.url) : 
+    '/api/placeholder/400/250';
+
+  const getAmenitiesDisplay = () => {
+    if (!amenities) return [];
+    
+    if (Array.isArray(amenities)) {
+      return amenities;
+    }
+    
+    if (typeof amenities === 'object') {
+      return Object.keys(amenities).filter(key => amenities[key] > 0);
+    }
+    
+    return [];
+  };
+
+  const getFacilitiesDisplay = () => {
+    if (!facilities || typeof facilities !== 'object') return {};
+    
+    const displayFacilities = {};
+    Object.entries(facilities).forEach(([key, value]) => {
+      if (value && parseInt(value) > 0) {
+        displayFacilities[key] = parseInt(value);
+      }
+    });
+    
+    return displayFacilities;
+  };
 
   const handleDetailsOpen = () => {
     setDetailsOpen(true);
@@ -83,39 +110,8 @@ const PropertyCard = ({
     setDetailsOpen(false);
   };
 
-  const getFacilityIcon = (facility) => {
-    switch (facility.toLowerCase()) {
-      case 'bedroom':
-        return <HomeIcon fontSize="small" />;
-      case 'bathroom':
-        return <BathtubIcon fontSize="small" />;
-      case 'kitchen':
-        return <KitchenIcon fontSize="small" />;
-      case 'parkingspace':
-        return <ParkingIcon fontSize="small" />;
-      default:
-        return <HomeIcon fontSize="small" />;
-    }
-  };
-
-  const formatFacilityName = (facility) => {
-    switch (facility) {
-      case 'Bedroom':
-        return 'Bedrooms';
-      case 'Bathroom':
-        return 'Bathrooms';
-      case 'Kitchen':
-        return 'Kitchens';
-      case 'LivingRoom':
-        return 'Living Rooms';
-      case 'DiningRoom':
-        return 'Dining Rooms';
-      case 'ParkingSpace':
-        return 'Parking Spaces';
-      default:
-        return facility;
-    }
-  };
+  const displayAmenities = getAmenitiesDisplay();
+  const displayFacilities = getFacilitiesDisplay();
 
   return (
     <>
@@ -124,11 +120,9 @@ const PropertyCard = ({
           height: '100%', 
           display: 'flex', 
           flexDirection: 'column',
-          transition: 'all 0.3s ease',
-          '&:hover': {
-            transform: 'translateY(-4px)',
-            boxShadow: 4
-          }
+          borderRadius: 2,
+          boxShadow: 3,
+          '&:hover': { boxShadow: 6 }
         }}
       >
         <CardMedia
@@ -138,89 +132,68 @@ const PropertyCard = ({
           alt={property.property_type}
           sx={{ objectFit: 'cover' }}
         />
-        
-        <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-            <Typography variant="h6" component="h3" sx={{ fontWeight: 600 }}>
-              {property.property_type} - {property.unit_type}
-            </Typography>
-            {property.approval_status && (
-              <Chip 
-                label={property.approval_status} 
-                size="small"
-                color={
-                  property.approval_status === 'approved' ? 'success' :
-                  property.approval_status === 'pending' ? 'warning' : 'error'
-                }
-              />
-            )}
-          </Box>
+
+        <CardContent sx={{ flexGrow: 1, p: 2 }}>
+          <Typography variant="h6" component="h3" gutterBottom>
+            {property.property_type} - {property.unit_type}
+          </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
             <LocationIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
             <Typography variant="body2" color="text.secondary" noWrap>
-              {property.address}
+              {property.address?.substring(0, 50)}
+              {property.address?.length > 50 ? '...' : ''}
             </Typography>
           </Box>
 
-          <Typography variant="h5" color="primary" sx={{ fontWeight: 'bold', mb: 2 }}>
+          <Typography variant="h6" color="primary" sx={{ mb: 2 }}>
             LKR {property.price?.toLocaleString() || 'N/A'}/month
           </Typography>
 
-          {facilities && (
-            <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-              {Object.entries(facilities).map(([facility, count]) => {
-                if (count > 0) {
-                  return (
-                    <Box key={facility} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      {getFacilityIcon(facility)}
-                      <Typography variant="caption">
-                        {count} {formatFacilityName(facility)}
-                      </Typography>
-                    </Box>
-                  );
-                }
-                return null;
-              })}
-            </Box>
-          )}
-
-          {amenities && Object.keys(amenities).length > 0 && (
+          {Object.keys(displayFacilities).length > 0 && (
             <Box sx={{ mb: 2 }}>
-              <Typography variant="caption" color="text.secondary">
-                Amenities:
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Facilities
               </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                {Object.entries(amenities).slice(0, 3).map(([amenity, quantity]) => {
-                  if (quantity > 0) {
-                    return (
-                      <Chip 
-                        key={amenity} 
-                        label={amenity} 
-                        size="small" 
-                        variant="outlined" 
-                      />
-                    );
-                  }
-                  return null;
-                })}
-                {Object.keys(amenities).length > 3 && (
-                  <Chip 
-                    label={`+${Object.keys(amenities).length - 3} more`} 
-                    size="small" 
-                    variant="outlined" 
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {Object.entries(displayFacilities).map(([facility, count]) => (
+                  <Chip
+                    key={facility}
+                    label={`${count} ${facility}`}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: '0.75rem' }}
                   />
-                )}
+                ))}
               </Box>
             </Box>
           )}
 
-          {rules && rules.length > 0 && (
-            <Box sx={{ mb: 1 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <RuleIcon fontSize="small" />
-                {rules.length} House Rule{rules.length > 1 ? 's' : ''}
+          {displayAmenities.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
+                Amenities
               </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {displayAmenities.slice(0, 3).map((amenity) => (
+                  <Chip
+                    key={amenity}
+                    label={amenity}
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    sx={{ fontSize: '0.75rem' }}
+                  />
+                ))}
+                {displayAmenities.length > 3 && (
+                  <Chip
+                    label={`+${displayAmenities.length - 3} more`}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: '0.75rem' }}
+                  />
+                )}
+              </Box>
             </Box>
           )}
 
@@ -348,94 +321,76 @@ const PropertyCard = ({
           <Divider sx={{ my: 2 }} />
 
           {/* Facilities */}
-          {facilities && Object.keys(facilities).length > 0 && (
+          {Object.keys(displayFacilities).length > 0 && (
             <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom>Property Details</Typography>
+              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <HomeIcon />
+                Facilities
+              </Typography>
               <Grid container spacing={2}>
-                {Object.entries(facilities).map(([facility, count]) => {
-                  if (count > 0) {
-                    return (
-                      <Grid item xs={6} sm={4} key={facility}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {getFacilityIcon(facility)}
-                          <Box>
-                            <Typography variant="h6" component="span">{count}</Typography>
-                            <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
-                              {formatFacilityName(facility)}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Grid>
-                    );
-                  }
-                  return null;
-                })}
+                {Object.entries(displayFacilities).map(([facility, count]) => (
+                  <Grid item xs={6} sm={4} key={facility}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      {facility.toLowerCase().includes('bathroom') && <BathtubIcon />}
+                      {facility.toLowerCase().includes('kitchen') && <KitchenIcon />}
+                      {facility.toLowerCase().includes('parking') && <ParkingIcon />}
+                      {!facility.toLowerCase().includes('bathroom') && 
+                       !facility.toLowerCase().includes('kitchen') && 
+                       !facility.toLowerCase().includes('parking') && <HomeIcon />}
+                      <Typography variant="body1">{count} {facility}</Typography>
+                    </Box>
+                  </Grid>
+                ))}
               </Grid>
             </Box>
           )}
 
           {/* Amenities */}
-          {amenities && Object.keys(amenities).length > 0 && (
+          {displayAmenities.length > 0 && (
             <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom>Amenities</Typography>
+              <Typography variant="h6" gutterBottom>
+                Amenities
+              </Typography>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {Object.entries(amenities).map(([amenity, quantity]) => {
-                  if (quantity > 0) {
-                    return (
-                      <Chip
-                        key={amenity}
-                        label={quantity > 1 ? `${amenity} (${quantity})` : amenity}
-                        variant="outlined"
-                        color="primary"
-                      />
-                    );
-                  }
-                  return null;
-                })}
+                {displayAmenities.map((amenity) => (
+                  <Chip
+                    key={amenity}
+                    label={amenity}
+                    color="primary"
+                    variant="outlined"
+                  />
+                ))}
               </Box>
             </Box>
           )}
 
-          {/* Roommate Details */}
+          {/* Roommates */}
           {roommates && roommates.length > 0 && (
             <Box sx={{ mb: 3 }}>
               <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <PersonIcon />
-                Roommate Information
+                Roommates ({roommates.length})
               </Typography>
-              {roommates.map((roommate, index) => (
-                <Accordion key={index} sx={{ mb: 1 }}>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="subtitle1">Roommate {index + 1}</Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} sm={6}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <WorkIcon color="action" />
-                          <Box>
-                            <Typography variant="body2" color="text.secondary">Occupation</Typography>
-                            <Typography variant="body1" fontWeight="medium">
-                              {roommate.occupation || 'Not specified'}
-                            </Typography>
-                          </Box>
+              <Grid container spacing={2}>
+                {roommates.map((roommate, index) => (
+                  <Grid item xs={12} sm={6} key={index}>
+                    <Card variant="outlined" sx={{ p: 2 }}>
+                      <Typography variant="subtitle2" gutterBottom>Roommate {index + 1}</Typography>
+                      {roommate.occupation && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                          <WorkIcon fontSize="small" />
+                          <Typography variant="body2">{roommate.occupation}</Typography>
                         </Box>
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <WorkIcon color="action" />
-                          <Box>
-                            <Typography variant="body2" color="text.secondary">Field/Industry</Typography>
-                            <Typography variant="body1" fontWeight="medium">
-                              {roommate.field || 'Not specified'}
-                            </Typography>
-                          </Box>
-                        </Box>
-                      </Grid>
-                    </Grid>
-                  </AccordionDetails>
-                </Accordion>
-              ))}
+                      )}
+                      {roommate.field && (
+                        <Typography variant="body2" color="text.secondary">
+                          Field: {roommate.field}
+                        </Typography>
+                      )}
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
             </Box>
           )}
 
@@ -447,7 +402,7 @@ const PropertyCard = ({
                 House Rules
               </Typography>
               <List dense>
-                {rules.filter(rule => rule && rule.trim()).map((rule, index) => (
+                {rules.map((rule, index) => (
                   <ListItem key={index} sx={{ py: 0.5 }}>
                     <ListItemIcon sx={{ minWidth: 32 }}>
                       <InfoIcon sx={{ fontSize: 16, color: 'primary.main' }} />

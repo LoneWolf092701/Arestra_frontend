@@ -6,7 +6,6 @@ import {
   Grid,
   Card,
   CardContent,
-  CardMedia,
   TextField,
   Button,
   Box,
@@ -18,22 +17,14 @@ import {
   Paper,
   Chip,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
-  Tooltip,
   Breadcrumbs,
   Link
 } from '@mui/material';
@@ -43,51 +34,40 @@ import {
 } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
+import isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+// import isBefore from 'dayjs/plugin/isBefore';
+// import isAfter from 'dayjs/plugin/isAfter';
 import {
-  ExpandMore as ExpandMoreIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
-  Info as InfoIcon,
-  LocationOn as LocationOnIcon,
   CalendarToday as CalendarTodayIcon,
   People as PeopleIcon,
   Home as HomeIcon,
   Payment as PaymentIcon,
-  Receipt as ReceiptIcon,
-  AttachFile as AttachFileIcon,
-  Phone as PhoneIcon,
-  Email as EmailIcon,
+  LocationOn as LocationOnIcon,
+  Bed as BedIcon,
+  Bathtub as BathtubIcon,
   Person as PersonIcon,
+  Email as EmailIcon,
+  Phone as PhoneIcon,
   Business as BusinessIcon,
-  Description as DescriptionIcon,
-  NavigateNext as NavigateNextIcon
+  CheckCircle as CheckCircleIcon,
+  Schedule as ScheduleIcon,
+  AccountBalance as AccountBalanceIcon,
+  Receipt as ReceiptIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { getPublicPropertyById } from '../../api/propertyApi';
 import { getUserProfile } from '../../api/profileApi';
-import { 
-  submitBookingRequest, 
-  getPropertyAvailabilityStatus,
-  getUserBookings,
-  getBookingDetails 
-} from '../../api/bookingApi';
-import { 
-  calculateBookingPricing, 
-  validateBookingDates, 
-  formatCurrency,
-  generateBookingSummary 
-} from '../../utils/BookingCalculationUtils';
+import { submitBookingRequest } from '../../api/bookingApi';
+import { calculateBookingPricing, formatCurrency } from '../../utils/BookingCalculationUtils';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import { useTheme } from '../../contexts/ThemeContext';
 
-const steps = ['Select Dates', 'Personal Details', 'Review & Confirm'];
+// Extend dayjs with required plugins
+dayjs.extend(isSameOrBefore);
+// dayjs.extend(isBefore);
+// dayjs.extend(isAfter);
 
-const safeParse = (str) => {
-  try {
-    return typeof str === 'string' ? JSON.parse(str) : (str || []);
-  } catch (error) {
-    return [];
-  }
-};
+const steps = ['Booking Overview', 'Personal Details', 'Payment'];
 
 const UserBookingPage = () => {
   const { id } = useParams();
@@ -99,15 +79,11 @@ const UserBookingPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [propertyStatus, setPropertyStatus] = useState(null);
-  const [existingBookings, setExistingBookings] = useState([]);
-  const [userBookings, setUserBookings] = useState([]);
   
   const [bookingData, setBookingData] = useState({
     check_in_date: null,
     check_out_date: null,
     number_of_guests: 1,
-    booking_type: 'monthly',
     special_requests: ''
   });
   
@@ -116,7 +92,6 @@ const UserBookingPage = () => {
     last_name: '',
     email: '',
     mobile_number: '',
-    alternative_contact: '',
     emergency_contact_name: '',
     emergency_contact_number: '',
     occupation: '',
@@ -125,12 +100,8 @@ const UserBookingPage = () => {
     purpose_of_stay: ''
   });
   
-  const [dateErrors, setDateErrors] = useState({});
-  const [personalDetailsErrors, setPersonalDetailsErrors] = useState({});
+  const [errors, setErrors] = useState({});
   const [pricingBreakdown, setPricingBreakdown] = useState(null);
-  const [dateValidation, setDateValidation] = useState({ isValid: false, errors: [], warnings: [] });
-  const [competitionInfo, setCompetitionInfo] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   useEffect(() => {
@@ -141,7 +112,6 @@ const UserBookingPage = () => {
 
   useEffect(() => {
     if (bookingData.check_in_date && bookingData.check_out_date && property) {
-      validateDates();
       calculatePricing();
     } else {
       setPricingBreakdown(null);
@@ -153,93 +123,44 @@ const UserBookingPage = () => {
     setError('');
     
     try {
-      const [propertyData, userProfile, userBookingsData] = await Promise.all([
-        getPublicPropertyById(id).catch(err => {
-          console.error('Property fetch error:', err);
-          throw new Error('Failed to load property details');
-        }),
-        getUserProfile().catch(err => {
-          console.warn('User profile fetch failed:', err);
-          return null;
-        }),
-        getUserBookings({ property_id: id }).catch(err => {
-          console.warn('User bookings fetch failed:', err);
-          return { bookings: [] };
-        })
+      const [propertyData, userProfile] = await Promise.all([
+        getPublicPropertyById(id),
+        getUserProfile().catch(() => null)
       ]);
-
-      if (!propertyData) {
-        throw new Error('Property not found');
-      }
-
+      
       setProperty(propertyData);
-      setUserBookings(userBookingsData.bookings || []);
-
+      
+      // Auto-fill user profile information when available
       if (userProfile) {
+        console.log('Auto-filling user profile data:', userProfile);
         setPersonalDetails(prev => ({
           ...prev,
-          first_name: userProfile.first_name || '',
-          last_name: userProfile.last_name || '',
+          // Map common profile fields to booking form fields
+          first_name: userProfile.first_name || userProfile.firstName || '',
+          last_name: userProfile.last_name || userProfile.lastName || '',
           email: userProfile.email || '',
-          mobile_number: userProfile.phone || ''
+          mobile_number: userProfile.phone || userProfile.mobile_number || userProfile.phoneNumber || '',
+          current_address: userProfile.address || userProfile.current_address || '',
+          occupation: userProfile.occupation || '',
+          // Some profiles might have additional fields we can use
+          id_number: userProfile.id_number || userProfile.nationalId || userProfile.idNumber || '',
+          emergency_contact_name: userProfile.emergency_contact_name || userProfile.emergencyContactName || '',
+          emergency_contact_number: userProfile.emergency_contact_number || userProfile.emergencyContactNumber || '',
+          purpose_of_stay: userProfile.purpose_of_stay || ''
         }));
+        
+        setSnackbar({
+          open: true,
+          message: 'Profile information auto-filled. Please review and update as needed.',
+          severity: 'info'
+        });
       }
-
-      const today = dayjs();
-      const availableFrom = propertyData.available_from ? dayjs(propertyData.available_from) : today.add(1, 'day');
-      const defaultCheckIn = availableFrom.isAfter(today) ? availableFrom : today.add(1, 'day');
-      
-      setBookingData(prev => ({
-        ...prev,
-        check_in_date: defaultCheckIn,
-        check_out_date: defaultCheckIn.add(30, 'day')
-      }));
-
     } catch (error) {
-      console.error('Error loading property data:', error);
-      setError(error.message || 'Failed to load property details');
+      console.error('Error loading data:', error);
+      setError('Failed to load property details. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const validateDates = () => {
-    if (!bookingData.check_in_date || !bookingData.check_out_date) {
-      setDateValidation({ isValid: false, errors: [], warnings: [] });
-      setDateErrors({});
-      return;
-    }
-
-    const checkIn = dayjs(bookingData.check_in_date);
-    const checkOut = dayjs(bookingData.check_out_date);
-    const validation = validateBookingDates(checkIn.toDate(), checkOut.toDate());
-    
-    const errors = {};
-    
-    if (property?.available_from && checkIn.isBefore(dayjs(property.available_from))) {
-      errors.check_in_date = `Property is available from ${dayjs(property.available_from).format('MMM DD, YYYY')}`;
-      validation.isValid = false;
-    }
-
-    if (property?.available_to && checkOut.isAfter(dayjs(property.available_to))) {
-      errors.check_out_date = `Property is available until ${dayjs(property.available_to).format('MMM DD, YYYY')}`;
-      validation.isValid = false;
-    }
-
-    const hasConflict = existingBookings.some(booking => {
-      const bookingStart = dayjs(booking.check_in_date);
-      const bookingEnd = dayjs(booking.check_out_date);
-      return checkIn.isBefore(bookingEnd) && checkOut.isAfter(bookingStart);
-    });
-
-    if (hasConflict) {
-      errors.check_in_date = 'Selected dates conflict with existing booking';
-      errors.check_out_date = 'Selected dates conflict with existing booking';
-      validation.isValid = false;
-    }
-
-    setDateErrors(errors);
-    setDateValidation(validation);
   };
 
   const calculatePricing = () => {
@@ -267,102 +188,95 @@ const UserBookingPage = () => {
     }
   };
 
-  const validatePersonalDetails = () => {
-    const errors = {};
-    const required = ['first_name', 'last_name', 'email', 'mobile_number', 'id_number'];
+  const validateStep = (step) => {
+    const newErrors = {};
     
-    required.forEach(field => {
-      if (!personalDetails[field]?.trim()) {
-        errors[field] = `${field.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} is required`;
+    if (step === 0) {
+      if (!bookingData.check_in_date) {
+        newErrors.check_in_date = 'Check-in date is required';
       }
-    });
-
-    if (personalDetails.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personalDetails.email)) {
-      errors.email = 'Please enter a valid email address';
+      if (!bookingData.check_out_date) {
+        newErrors.check_out_date = 'Check-out date is required';
+      }
+      
+      if (bookingData.check_in_date && bookingData.check_out_date) {
+        const checkIn = dayjs(bookingData.check_in_date);
+        const checkOut = dayjs(bookingData.check_out_date);
+        const today = dayjs().startOf('day');
+        
+        if (checkIn.isBefore(today)) {
+          newErrors.check_in_date = 'Check-in date cannot be in the past';
+        }
+        
+        if (checkOut.isSameOrBefore(checkIn)) {
+          newErrors.check_out_date = 'Check-out date must be after check-in date';
+        }
+      }
     }
+    
+    if (step === 1) {
+      const required = ['first_name', 'last_name', 'email', 'mobile_number', 'id_number'];
+      
+      required.forEach(field => {
+        if (!personalDetails[field]?.trim()) {
+          newErrors[field] = `${field.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} is required`;
+        }
+      });
 
-    if (personalDetails.mobile_number && !/^\+?[\d\s-()]+$/.test(personalDetails.mobile_number)) {
-      errors.mobile_number = 'Please enter a valid mobile number';
+      if (personalDetails.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(personalDetails.email)) {
+        newErrors.email = 'Please enter a valid email address';
+      }
+
+      if (personalDetails.mobile_number && !/^[\d\+\-\(\)\s]+$/.test(personalDetails.mobile_number)) {
+        newErrors.mobile_number = 'Please enter a valid mobile number';
+      }
     }
-
-    setPersonalDetailsErrors(errors);
-    return Object.keys(errors).length === 0;
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleNext = () => {
-    if (activeStep === 0) {
-      if (!dateValidation.isValid || Object.keys(dateErrors).length > 0) {
-        setSnackbar({
-          open: true,
-          message: 'Please select valid dates before proceeding',
-          severity: 'error'
-        });
-        return;
+    if (validateStep(activeStep)) {
+      if (activeStep === steps.length - 1) {
+        handleSubmit();
+      } else {
+        setActiveStep(prev => prev + 1);
       }
     }
-    
-    if (activeStep === 1) {
-      if (!validatePersonalDetails()) {
-        setSnackbar({
-          open: true,
-          message: 'Please fill in all required fields correctly',
-          severity: 'error'
-        });
-        return;
-      }
-    }
-    
-    setActiveStep(prev => prev + 1);
   };
 
   const handleBack = () => {
     setActiveStep(prev => prev - 1);
   };
 
-  const handleSubmitBooking = async () => {
-    if (!validatePersonalDetails()) {
-      setSnackbar({
-        open: true,
-        message: 'Please fill in all required fields correctly',
-        severity: 'error'
-      });
-      return;
-    }
-
-    setConfirmDialog(true);
-  };
-
-  const confirmSubmitBooking = async () => {
+  const handleSubmit = async () => {
+    if (!validateStep(1)) return;
+    
     setSubmitting(true);
-    setConfirmDialog(false);
-
+    
     try {
       const bookingRequest = {
         property_id: parseInt(id),
+        ...bookingData,
+        ...personalDetails,
         check_in_date: dayjs(bookingData.check_in_date).format('YYYY-MM-DD'),
         check_out_date: dayjs(bookingData.check_out_date).format('YYYY-MM-DD'),
-        number_of_guests: bookingData.number_of_guests,
-        booking_type: bookingData.booking_type,
-        special_requests: bookingData.special_requests,
-        total_price: pricingBreakdown?.totalAmount || 0,
-        service_fee: pricingBreakdown?.serviceFee || 300,
-        booking_days: pricingBreakdown?.totalDays || 0,
-        booking_months: pricingBreakdown?.totalMonths || 0,
-        ...personalDetails
+        total_amount: pricingBreakdown?.total || 0
       };
 
-      const response = await submitBookingRequest(bookingRequest);
+      await submitBookingRequest(bookingRequest);
       
       setSnackbar({
         open: true,
-        message: 'Booking request submitted successfully! You will receive a notification once the owner responds.',
+        message: 'Booking request submitted successfully! You will receive a confirmation email shortly.',
         severity: 'success'
       });
-
+      
       setTimeout(() => {
-        navigate('/user-allproperties');
+        navigate('/user-home');
       }, 2000);
-
+      
     } catch (error) {
       console.error('Error submitting booking:', error);
       setSnackbar({
@@ -375,460 +289,1080 @@ const UserBookingPage = () => {
     }
   };
 
-  const renderDateSelection = () => (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
-        <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 2 }}>
-          Select Your Dates
-        </Typography>
-        <Alert severity="info" sx={{ mb: 3 }}>
-          Choose your check-in and check-out dates. Minimum booking period is 1 day.
-        </Alert>
-      </Grid>
+  const renderStepContent = () => {
+    switch (activeStep) {
+      case 0:
+        return renderBookingOverview();
+      case 1:
+        return renderPersonalDetails();
+      case 2:
+        return renderPayment();
+      default:
+        return null;
+    }
+  };
 
-      <Grid item xs={12} md={6}>
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <DatePicker
-            label="Check-in Date"
-            value={bookingData.check_in_date}
-            onChange={(newValue) => setBookingData(prev => ({ ...prev, check_in_date: newValue }))}
-            minDate={property?.available_from ? dayjs(property.available_from) : dayjs()}
-            maxDate={property?.available_to ? dayjs(property.available_to) : dayjs().add(2, 'year')}
-            slotProps={{
-              textField: {
-                fullWidth: true,
-                error: !!dateErrors.check_in_date,
-                helperText: dateErrors.check_in_date
-              }
-            }}
-          />
-        </LocalizationProvider>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <DatePicker
-            label="Check-out Date"
-            value={bookingData.check_out_date}
-            onChange={(newValue) => setBookingData(prev => ({ ...prev, check_out_date: newValue }))}
-            minDate={bookingData.check_in_date ? dayjs(bookingData.check_in_date).add(1, 'day') : dayjs().add(1, 'day')}
-            maxDate={property?.available_to ? dayjs(property.available_to) : dayjs().add(2, 'year')}
-            slotProps={{
-              textField: {
-                fullWidth: true,
-                error: !!dateErrors.check_out_date,
-                helperText: dateErrors.check_out_date
-              }
-            }}
-          />
-        </LocalizationProvider>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <FormControl fullWidth>
-          <InputLabel>Booking Type</InputLabel>
-          <Select
-            value={bookingData.booking_type}
-            onChange={(e) => setBookingData(prev => ({ ...prev, booking_type: e.target.value }))}
-            label="Booking Type"
-          >
-            <MenuItem value="daily">Daily</MenuItem>
-            <MenuItem value="monthly">Monthly</MenuItem>
-            <MenuItem value="long_term">Long Term (6+ months)</MenuItem>
-          </Select>
-        </FormControl>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Number of Guests"
-          type="number"
-          inputProps={{ min: 1, max: 10 }}
-          value={bookingData.number_of_guests}
-          onChange={(e) => setBookingData(prev => ({ ...prev, number_of_guests: parseInt(e.target.value) || 1 }))}
-        />
-      </Grid>
-
-      <Grid item xs={12}>
-        <TextField
-          fullWidth
-          label="Special Requests (Optional)"
-          multiline
-          rows={3}
-          value={bookingData.special_requests}
-          onChange={(e) => setBookingData(prev => ({ ...prev, special_requests: e.target.value }))}
-          placeholder="Any specific requirements or requests for your stay..."
-        />
-      </Grid>
-
-      {pricingBreakdown && (
-        <Grid item xs={12}>
-          <Paper 
-            sx={{ 
-              p: 3, 
-              backgroundColor: theme.cardBackground,
-              border: `1px solid ${theme.isDark ? '#333' : '#e0e0e0'}`
-            }}
-          >
-            <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 2 }}>
-              Pricing Breakdown
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                  Base Price ({pricingBreakdown.totalDays} days):
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" sx={{ color: theme.textPrimary, textAlign: 'right' }}>
-                  {formatCurrency(pricingBreakdown.baseAmount)}
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                  Service Fee:
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="body2" sx={{ color: theme.textPrimary, textAlign: 'right' }}>
-                  {formatCurrency(pricingBreakdown.serviceFee)}
-                </Typography>
-              </Grid>
-              <Grid item xs={12}>
-                <Divider sx={{ my: 1 }} />
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="h6" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-                  Total:
-                </Typography>
-              </Grid>
-              <Grid item xs={6}>
-                <Typography variant="h6" sx={{ color: theme.primary, textAlign: 'right', fontWeight: 600 }}>
-                  {formatCurrency(pricingBreakdown.totalAmount)}
-                </Typography>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Grid>
-      )}
-
-      {property && (
-        <Grid item xs={12}>
-          <Card sx={{ backgroundColor: theme.cardBackground }}>
-            <Grid container>
-              <Grid item xs={12} md={4}>
-                <CardMedia
-                  component="img"
-                  height="200"
-                  image={safeParse(property.images)?.[0] || '/placeholder-property.jpg'}
-                  alt={property.property_type}
-                  sx={{ objectFit: 'cover' }}
-                />
-              </Grid>
-              <Grid item xs={12} md={8}>
-                <CardContent>
-                  <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 1 }}>
+  const renderBookingOverview = () => (
+    <Grid container spacing={4}>
+      <Grid item xs={12} md={8}>
+        {/* Property Details Section */}
+        {property && (
+          <Card sx={{ 
+            mb: 3, 
+            backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+            border: isDark ? `1px solid ${theme.border}` : 'none'
+          }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ 
+                mb: 2, 
+                fontWeight: 600,
+                color: isDark ? theme.textPrimary : 'inherit'
+              }}>
+                Property Details
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <HomeIcon sx={{ mr: 1, color: theme.primary }} />
+                    <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                      Property Type:
+                    </Typography>
+                  </Box>
+                  <Typography variant="body1" sx={{ 
+                    ml: 4,
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}>
                     {property.property_type} - {property.unit_type}
                   </Typography>
-                  <Typography variant="body2" sx={{ color: theme.textSecondary, mb: 2 }}>
-                    <LocationOnIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <LocationOnIcon sx={{ mr: 1, color: theme.primary }} />
+                    <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                      Location:
+                    </Typography>
+                  </Box>
+                  <Typography variant="body1" sx={{ 
+                    ml: 4,
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}>
                     {property.address}
                   </Typography>
-                  <Typography variant="body2" sx={{ color: theme.textSecondary }}>
-                    Monthly Rent: {formatCurrency(property.price)}
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <BedIcon sx={{ mr: 1, color: theme.primary }} />
+                    <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                      Bedrooms:
+                    </Typography>
+                  </Box>
+                  <Typography variant="body1" sx={{ 
+                    ml: 4,
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}>
+                    {property.bedrooms || 0}
                   </Typography>
-                </CardContent>
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                    <BathtubIcon sx={{ mr: 1, color: theme.primary }} />
+                    <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                      Bathrooms:
+                    </Typography>
+                  </Box>
+                  <Typography variant="body1" sx={{ 
+                    ml: 4,
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}>
+                    {property.bathrooms || 0}
+                  </Typography>
+                </Grid>
               </Grid>
-            </Grid>
+              
+              <Divider sx={{ my: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+              
+              <Typography variant="body2" sx={{ 
+                color: isDark ? theme.textSecondary : 'inherit',
+                mb: 1 
+              }}>
+                Description:
+              </Typography>
+              <Typography variant="body1" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+                {property.description}
+              </Typography>
+            </CardContent>
           </Card>
-        </Grid>
-      )}
+        )}
+
+        {/* Date Selection Section */}
+        <Card sx={{ 
+          mb: 3, 
+          backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+          border: isDark ? `1px solid ${theme.border}` : 'none'
+        }}>
+          <CardContent>
+            <Typography variant="h6" sx={{ 
+              mb: 3, 
+              fontWeight: 600,
+              color: isDark ? theme.textPrimary : 'inherit'
+            }}>
+              Select Your Dates
+            </Typography>
+            
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <DatePicker
+                    label="Move In"
+                    value={bookingData.check_in_date}
+                    onChange={(newValue) => {
+                      setBookingData(prev => ({ ...prev, check_in_date: newValue }));
+                      if (errors.check_in_date) {
+                        setErrors(prev => ({ ...prev, check_in_date: '' }));
+                      }
+                    }}
+                    minDate={dayjs()}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        fullWidth
+                        error={!!errors.check_in_date}
+                        helperText={errors.check_in_date}
+                        sx={{
+                          '& .MuiInputBase-root': {
+                            backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                            color: isDark ? theme.textPrimary : 'inherit',
+                          },
+                          '& .MuiInputLabel-root': {
+                            color: isDark ? theme.textSecondary : 'inherit',
+                          },
+                          '& .MuiOutlinedInput-notchedOutline': {
+                            borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                          },
+                          '& .MuiFormHelperText-root': {
+                            color: isDark ? theme.textSecondary : 'inherit',
+                          }
+                        }}
+                      />
+                    )}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} sm={6}>
+                  <DatePicker
+                    label="Move Out"
+                    value={bookingData.check_out_date}
+                    onChange={(newValue) => {
+                      setBookingData(prev => ({ ...prev, check_out_date: newValue }));
+                      if (errors.check_out_date) {
+                        setErrors(prev => ({ ...prev, check_out_date: '' }));
+                      }
+                    }}
+                    minDate={bookingData.check_in_date ? dayjs(bookingData.check_in_date).add(1, 'day') : dayjs().add(1, 'day')}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        fullWidth
+                        error={!!errors.check_out_date}
+                        helperText={errors.check_out_date}
+                        sx={{
+                          '& .MuiInputBase-root': {
+                            backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                            color: isDark ? theme.textPrimary : 'inherit',
+                          },
+                          '& .MuiInputLabel-root': {
+                            color: isDark ? theme.textSecondary : 'inherit',
+                          },
+                          '& .MuiOutlinedInput-notchedOutline': {
+                            borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                          },
+                          '& .MuiFormHelperText-root': {
+                            color: isDark ? theme.textSecondary : 'inherit',
+                          }
+                        }}
+                      />
+                    )}
+                  />
+                </Grid>
+              </Grid>
+            </LocalizationProvider>
+
+            <Box sx={{ mt: 3 }}>
+              <FormControl fullWidth>
+                <InputLabel sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                  Number of Guests
+                </InputLabel>
+                <Select
+                  value={bookingData.number_of_guests}
+                  onChange={(e) => setBookingData(prev => ({ ...prev, number_of_guests: e.target.value }))}
+                  label="Number of Guests"
+                  sx={{
+                    backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                    color: isDark ? theme.textPrimary : 'inherit',
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                    },
+                  }}
+                >
+                  {[1, 2, 3, 4, 5, 6].map(num => (
+                    <MenuItem key={num} value={num}>{num} Guest{num > 1 ? 's' : ''}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+
+            <Box sx={{ mt: 3 }}>
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Special Requests (Optional)"
+                placeholder="Any special requests or requirements..."
+                value={bookingData.special_requests}
+                onChange={(e) => setBookingData(prev => ({ ...prev, special_requests: e.target.value }))}
+                sx={{
+                  '& .MuiInputBase-root': {
+                    backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                    color: isDark ? theme.textPrimary : 'inherit',
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: isDark ? theme.textSecondary : 'inherit',
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                  },
+                  '& .MuiFormHelperText-root': {
+                    color: isDark ? theme.textSecondary : 'inherit',
+                  }
+                }}
+              />
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* Pricing Details */}
+        {pricingBreakdown && (
+          <Card sx={{ 
+            backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+            border: isDark ? `1px solid ${theme.border}` : 'none'
+          }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ 
+                mb: 2, 
+                fontWeight: 600,
+                color: isDark ? theme.textPrimary : 'inherit'
+              }}>
+                Price Details
+              </Typography>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                  Rental for the first Month:
+                </Typography>
+                <Typography variant="body2" sx={{ 
+                  fontWeight: 600,
+                  color: isDark ? theme.textPrimary : 'inherit'
+                }}>
+                  Rs. {pricingBreakdown.subtotal.toLocaleString()}
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                  One time service fee:
+                </Typography>
+                <Typography variant="body2" sx={{ 
+                  fontWeight: 600,
+                  color: isDark ? theme.textPrimary : 'inherit'
+                }}>
+                  Rs. {pricingBreakdown.serviceFee.toLocaleString()}
+                </Typography>
+              </Box>
+
+              <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 600,
+                  color: isDark ? theme.textPrimary : 'inherit'
+                }}>
+                  Sub Total
+                </Typography>
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 600,
+                  color: theme.primary
+                }}>
+                  Rs. {pricingBreakdown.total.toLocaleString()}
+                </Typography>
+              </Box>
+            </CardContent>
+          </Card>
+        )}
+      </Grid>
+
+      {/* Right Side - Next Steps Section */}
+      <Grid item xs={12} md={4}>
+        <Paper sx={{ 
+          p: 4, 
+          mb: 4, 
+          backgroundColor: isDark ? theme.surfaceBackground : '#f5f5f5',
+          border: isDark ? `1px solid ${theme.border}` : 'none',
+          position: 'sticky',
+          top: 20
+        }}>
+          <Typography variant="h5" sx={{ 
+            fontWeight: 600, 
+            mb: 3,
+            color: isDark ? theme.textPrimary : 'inherit'
+          }}>
+            Next Steps – Payment Procedure
+          </Typography>
+          
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h6" sx={{ 
+              fontWeight: 600, 
+              mb: 2,
+              color: isDark ? theme.textPrimary : 'inherit'
+            }}>
+              1. After Request is Sent
+            </Typography>
+            <List dense>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemText 
+                  primary="• The landlord will review your request."
+                  primaryTypographyProps={{
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}
+                />
+              </ListItem>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemText 
+                  primary="• Once the landlord accepts the request, you will receive a confirmation message."
+                  primaryTypographyProps={{
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}
+                />
+              </ListItem>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemText 
+                  primary="• The landlord's account number will also be shared with you for payment."
+                  primaryTypographyProps={{
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}
+                />
+              </ListItem>
+            </List>
+          </Box>
+
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h6" sx={{ 
+              fontWeight: 600, 
+              mb: 2,
+              color: isDark ? theme.textPrimary : 'inherit'
+            }}>
+              2. Payment Submission
+            </Typography>
+            <List dense>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemText 
+                  primary="• Make the payment to the provided account."
+                  primaryTypographyProps={{
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}
+                />
+              </ListItem>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemText 
+                  primary="• Upload the payment receipt (photo or screenshot) via the platform and relevant details."
+                  primaryTypographyProps={{
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}
+                />
+              </ListItem>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemText 
+                  primary="• Your submission will be sent to the landlord for verification."
+                  primaryTypographyProps={{
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}
+                />
+              </ListItem>
+            </List>
+          </Box>
+
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h6" sx={{ 
+              fontWeight: 600, 
+              mb: 2,
+              color: isDark ? theme.textPrimary : 'inherit'
+            }}>
+              3. Booking Confirmation
+            </Typography>
+            <List dense>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemText 
+                  primary="• Once the landlord approves the payment, your booking is confirmed."
+                  primaryTypographyProps={{
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}
+                />
+              </ListItem>
+              <ListItem sx={{ pl: 0 }}>
+                <ListItemText 
+                  primary="• You will receive a final confirmation once this step is completed."
+                  primaryTypographyProps={{
+                    color: isDark ? theme.textPrimary : 'inherit'
+                  }}
+                />
+              </ListItem>
+            </List>
+          </Box>
+
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            mb: 3, 
+            p: 2, 
+            backgroundColor: isDark ? theme.cardBackground : '#e3f2fd', 
+            borderRadius: 1,
+            border: isDark ? `1px solid ${theme.border}` : 'none'
+          }}>
+            <HomeIcon sx={{ mr: 2, color: isDark ? theme.primary : '#1976d2' }} />
+            <Box>
+              <Typography variant="subtitle2" sx={{ 
+                fontWeight: 600,
+                color: isDark ? theme.textPrimary : 'inherit'
+              }}>
+                On Move In
+              </Typography>
+              <Typography variant="body2" sx={{
+                color: isDark ? theme.textSecondary : 'inherit'
+              }}>
+                You have 24 hours to report any issues with the accommodation.
+              </Typography>
+            </Box>
+          </Box>
+
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            p: 2, 
+            backgroundColor: isDark ? theme.cardBackground : '#e8f5e8', 
+            borderRadius: 1,
+            border: isDark ? `1px solid ${theme.border}` : 'none'
+          }}>
+            <HomeIcon sx={{ mr: 2, color: isDark ? theme.success : '#2e7d32' }} />
+            <Box>
+              <Typography variant="subtitle2" sx={{ 
+                fontWeight: 600,
+                color: isDark ? theme.textPrimary : 'inherit'
+              }}>
+                On Move Out
+              </Typography>
+              <Typography variant="body2" sx={{
+                color: isDark ? theme.textSecondary : 'inherit'
+              }}>
+                If the property is in good condition, the landlord should return your security deposit.
+              </Typography>
+              <Typography variant="body2" sx={{ 
+                mt: 1,
+                color: isDark ? theme.textSecondary : 'inherit'
+              }}>
+                If you leave before the agreed date, the landlord may retain the deposit.
+              </Typography>
+            </Box>
+          </Box>
+        </Paper>
+
+        {/* Booking Summary for Right Side */}
+        {pricingBreakdown && (
+          <Card sx={{ 
+            backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+            border: isDark ? `1px solid ${theme.border}` : 'none',
+            position: 'sticky',
+            top: 20
+          }}>
+            <CardContent>
+              <Typography variant="h6" sx={{ 
+                mb: 2, 
+                fontWeight: 600,
+                color: isDark ? theme.textPrimary : 'inherit'
+              }}>
+                Cozy Private Room for Rent Near Colombo City Center
+              </Typography>
+              
+              <Typography variant="body2" sx={{ 
+                mb: 2,
+                color: isDark ? theme.textSecondary : 'inherit'
+              }}>
+                100, Sea Street, Colombo 02
+              </Typography>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <BedIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+                  {property?.bedrooms || 3} Bedrooms
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                <BathtubIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+                  {property?.bathrooms || 2} Bathrooms
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                <HomeIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+                  1 Parking
+                </Typography>
+              </Box>
+
+              <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+
+              <Typography variant="h6" sx={{ 
+                mb: 2, 
+                fontWeight: 600,
+                color: isDark ? theme.textPrimary : 'inherit'
+              }}>
+                Price Details
+              </Typography>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                  Rental for the first Month:
+                </Typography>
+                <Typography variant="body2" sx={{ 
+                  fontWeight: 600,
+                  color: isDark ? theme.textPrimary : 'inherit'
+                }}>
+                  Rs. {pricingBreakdown.subtotal.toLocaleString()}
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                  One time service fee:
+                </Typography>
+                <Typography variant="body2" sx={{ 
+                  fontWeight: 600,
+                  color: isDark ? theme.textPrimary : 'inherit'
+                }}>
+                  Rs. {pricingBreakdown.serviceFee.toLocaleString()}
+                </Typography>
+              </Box>
+
+              <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 600,
+                  color: isDark ? theme.textPrimary : 'inherit'
+                }}>
+                  Sub Total
+                </Typography>
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 600,
+                  color: theme.primary
+                }}>
+                  Rs. {pricingBreakdown.total.toLocaleString()}
+                </Typography>
+              </Box>
+
+              <Alert 
+                severity="info" 
+                sx={{ 
+                  mt: 2,
+                  backgroundColor: isDark ? theme.surfaceBackground : undefined,
+                  color: isDark ? theme.textPrimary : undefined,
+                  '& .MuiAlert-icon': {
+                    color: isDark ? theme.info : undefined,
+                  }
+                }}
+              >
+                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+                  You will be charged once the owner accepts your request
+                </Typography>
+              </Alert>
+            </CardContent>
+          </Card>
+        )}
+      </Grid>
     </Grid>
   );
 
   const renderPersonalDetails = () => (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
-        <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 2 }}>
+    <Card sx={{ 
+      backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+      border: isDark ? `1px solid ${theme.border}` : 'none'
+    }}>
+      <CardContent>
+        <Typography variant="h6" sx={{ 
+          mb: 3, 
+          fontWeight: 600,
+          color: isDark ? theme.textPrimary : 'inherit'
+        }}>
           Personal Information
         </Typography>
-        <Alert severity="info" sx={{ mb: 3 }}>
-          Please provide your personal details for the booking request.
-        </Alert>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="First Name *"
-          value={personalDetails.first_name}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, first_name: e.target.value }))}
-          error={!!personalDetailsErrors.first_name}
-          helperText={personalDetailsErrors.first_name}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Last Name *"
-          value={personalDetails.last_name}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, last_name: e.target.value }))}
-          error={!!personalDetailsErrors.last_name}
-          helperText={personalDetailsErrors.last_name}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Email *"
-          type="email"
-          value={personalDetails.email}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, email: e.target.value }))}
-          error={!!personalDetailsErrors.email}
-          helperText={personalDetailsErrors.email}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Mobile Number *"
-          value={personalDetails.mobile_number}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, mobile_number: e.target.value }))}
-          error={!!personalDetailsErrors.mobile_number}
-          helperText={personalDetailsErrors.mobile_number}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Alternative Contact"
-          value={personalDetails.alternative_contact}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, alternative_contact: e.target.value }))}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="ID Number *"
-          value={personalDetails.id_number}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, id_number: e.target.value }))}
-          error={!!personalDetailsErrors.id_number}
-          helperText={personalDetailsErrors.id_number}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Emergency Contact Name"
-          value={personalDetails.emergency_contact_name}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, emergency_contact_name: e.target.value }))}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Emergency Contact Number"
-          value={personalDetails.emergency_contact_number}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, emergency_contact_number: e.target.value }))}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Occupation"
-          value={personalDetails.occupation}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, occupation: e.target.value }))}
-        />
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <TextField
-          fullWidth
-          label="Purpose of Stay"
-          value={personalDetails.purpose_of_stay}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, purpose_of_stay: e.target.value }))}
-        />
-      </Grid>
-
-      <Grid item xs={12}>
-        <TextField
-          fullWidth
-          label="Current Address"
-          multiline
-          rows={2}
-          value={personalDetails.current_address}
-          onChange={(e) => setPersonalDetails(prev => ({ ...prev, current_address: e.target.value }))}
-        />
-      </Grid>
-    </Grid>
+        
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="First Name"
+              required
+              value={personalDetails.first_name}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, first_name: e.target.value }))}
+              error={!!errors.first_name}
+              helperText={errors.first_name}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Last Name"
+              required
+              value={personalDetails.last_name}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, last_name: e.target.value }))}
+              error={!!errors.last_name}
+              helperText={errors.last_name}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Email Address"
+              type="email"
+              required
+              value={personalDetails.email}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, email: e.target.value }))}
+              error={!!errors.email}
+              helperText={errors.email}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Mobile Number"
+              required
+              value={personalDetails.mobile_number}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, mobile_number: e.target.value }))}
+              error={!!errors.mobile_number}
+              helperText={errors.mobile_number}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="ID Number"
+              required
+              value={personalDetails.id_number}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, id_number: e.target.value }))}
+              error={!!errors.id_number}
+              helperText={errors.id_number}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Occupation"
+              value={personalDetails.occupation}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, occupation: e.target.value }))}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Current Address"
+              multiline
+              rows={2}
+              value={personalDetails.current_address}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, current_address: e.target.value }))}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Emergency Contact Name"
+              value={personalDetails.emergency_contact_name}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, emergency_contact_name: e.target.value }))}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Emergency Contact Number"
+              value={personalDetails.emergency_contact_number}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, emergency_contact_number: e.target.value }))}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Purpose of Stay"
+              value={personalDetails.purpose_of_stay}
+              onChange={(e) => setPersonalDetails(prev => ({ ...prev, purpose_of_stay: e.target.value }))}
+              sx={{
+                '& .MuiInputBase-root': {
+                  backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+                  color: isDark ? theme.textPrimary : 'inherit',
+                },
+                '& .MuiInputLabel-root': {
+                  color: isDark ? theme.textSecondary : 'inherit',
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+                },
+                '& .MuiFormHelperText-root': {
+                  backgroundColor: isDark ? theme.cardBackground : 'transparent',
+                  color: isDark ? theme.textSecondary : 'inherit',
+                }
+              }}
+            />
+          </Grid>
+        </Grid>
+      </CardContent>
+    </Card>
   );
 
-  const renderReviewConfirm = () => (
-    <Grid container spacing={3}>
-      <Grid item xs={12}>
-        <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 2 }}>
-          Review & Confirm Booking
+  const renderPayment = () => (
+    <Card sx={{ 
+      backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+      border: isDark ? `1px solid ${theme.border}` : 'none'
+    }}>
+      <CardContent>
+        <Typography variant="h6" sx={{ 
+          mb: 3, 
+          fontWeight: 600,
+          color: isDark ? theme.textPrimary : 'inherit'
+        }}>
+          Booking Summary & Payment
         </Typography>
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          Please review all details carefully before submitting your booking request.
-        </Alert>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <Paper sx={{ p: 3, backgroundColor: theme.cardBackground }}>
-          <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 2 }}>
-            <CalendarTodayIcon sx={{ mr: 1 }} />
-            Booking Details
-          </Typography>
-          <List dense>
-            <ListItem>
-              <ListItemText 
-                primary="Check-in Date" 
-                secondary={dayjs(bookingData.check_in_date).format('MMM DD, YYYY')} 
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText 
-                primary="Check-out Date" 
-                secondary={dayjs(bookingData.check_out_date).format('MMM DD, YYYY')} 
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText 
-                primary="Booking Type" 
-                secondary={bookingData.booking_type} 
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText 
-                primary="Number of Guests" 
-                secondary={bookingData.number_of_guests} 
-              />
-            </ListItem>
-            {bookingData.special_requests && (
-              <ListItem>
-                <ListItemText 
-                  primary="Special Requests" 
-                  secondary={bookingData.special_requests} 
-                />
-              </ListItem>
-            )}
-          </List>
-        </Paper>
-      </Grid>
-
-      <Grid item xs={12} md={6}>
-        <Paper sx={{ p: 3, backgroundColor: theme.cardBackground }}>
-          <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 2 }}>
-            <PersonIcon sx={{ mr: 1 }} />
-            Personal Details
-          </Typography>
-          <List dense>
-            <ListItem>
-              <ListItemText 
-                primary="Name" 
-                secondary={`${personalDetails.first_name} ${personalDetails.last_name}`} 
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText 
-                primary="Email" 
-                secondary={personalDetails.email} 
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText 
-                primary="Mobile" 
-                secondary={personalDetails.mobile_number} 
-              />
-            </ListItem>
-            <ListItem>
-              <ListItemText 
-                primary="ID Number" 
-                secondary={personalDetails.id_number} 
-              />
-            </ListItem>
-            {personalDetails.occupation && (
-              <ListItem>
-                <ListItemText 
-                  primary="Occupation" 
-                  secondary={personalDetails.occupation} 
-                />
-              </ListItem>
-            )}
-          </List>
-        </Paper>
-      </Grid>
-
-      {pricingBreakdown && (
-        <Grid item xs={12}>
-          <Paper sx={{ p: 3, backgroundColor: theme.cardBackground }}>
-            <Typography variant="h6" sx={{ color: theme.textPrimary, mb: 2 }}>
-              <ReceiptIcon sx={{ mr: 1 }} />
-              Final Pricing
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={8}>
-                <Typography variant="body1" sx={{ color: theme.textSecondary }}>
-                  Base Price ({pricingBreakdown.totalDays} days):
+        
+        {pricingBreakdown && (
+          <>
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                p: 3, 
+                mb: 3, 
+                backgroundColor: isDark ? theme.surfaceBackground : '#f5f5f5',
+                border: isDark ? `1px solid ${theme.border}` : 'none'
+              }}
+            >
+              <Typography variant="h6" sx={{ 
+                mb: 2,
+                color: isDark ? theme.textPrimary : 'inherit'
+              }}>
+                Price Breakdown
+              </Typography>
+              
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body1" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                  Duration: {pricingBreakdown.breakdown?.description || 'N/A'}
                 </Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="body1" sx={{ color: theme.textPrimary, textAlign: 'right' }}>
-                  {formatCurrency(pricingBreakdown.baseAmount)}
+              </Box>
+              
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body1" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+                  Rental Amount:
                 </Typography>
-              </Grid>
-              <Grid item xs={8}>
-                <Typography variant="body1" sx={{ color: theme.textSecondary }}>
+                <Typography variant="body1" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+                  {formatCurrency(pricingBreakdown.subtotal)}
+                </Typography>
+              </Box>
+              
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                <Typography variant="body1" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
                   Service Fee:
                 </Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="body1" sx={{ color: theme.textPrimary, textAlign: 'right' }}>
+                <Typography variant="body1" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
                   {formatCurrency(pricingBreakdown.serviceFee)}
                 </Typography>
-              </Grid>
-              <Grid item xs={12}>
-                <Divider sx={{ my: 1 }} />
-              </Grid>
-              <Grid item xs={8}>
-                <Typography variant="h5" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
+              </Box>
+              
+              <Divider sx={{ my: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+              
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 600,
+                  color: isDark ? theme.textPrimary : 'inherit'
+                }}>
                   Total Amount:
                 </Typography>
-              </Grid>
-              <Grid item xs={4}>
-                <Typography variant="h5" sx={{ color: theme.primary, textAlign: 'right', fontWeight: 600 }}>
-                  {formatCurrency(pricingBreakdown.totalAmount)}
+                <Typography variant="h6" sx={{ 
+                  fontWeight: 600, 
+                  color: theme.primary 
+                }}>
+                  {formatCurrency(pricingBreakdown.total)}
                 </Typography>
-              </Grid>
-            </Grid>
-          </Paper>
-        </Grid>
-      )}
+              </Box>
+            </Paper>
 
-      <Grid item xs={12}>
-        <Alert severity="info">
-          After submitting your booking request, the property owner will review your application and respond within 24-48 hours. 
-          You will receive a notification once they approve or provide feedback on your request.
-        </Alert>
-      </Grid>
-    </Grid>
+            <Alert 
+              severity="info" 
+              sx={{ 
+                mb: 3,
+                backgroundColor: isDark ? theme.surfaceBackground : undefined,
+                color: isDark ? theme.textPrimary : undefined,
+                '& .MuiAlert-icon': {
+                  color: isDark ? theme.info : undefined,
+                }
+              }}
+            >
+              <List dense>
+                <ListItem sx={{ pl: 0 }}>
+                  <ListItemIcon>
+                    <CheckCircleIcon sx={{ color: theme.success, fontSize: 20 }} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="The landlord will review your request."
+                    primaryTypographyProps={{ 
+                      variant: 'body2',
+                      sx: { color: isDark ? theme.textPrimary : 'inherit' }
+                    }}
+                  />
+                </ListItem>
+                
+                <ListItem sx={{ pl: 0 }}>
+                  <ListItemIcon>
+                    <EmailIcon sx={{ color: theme.info, fontSize: 20 }} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Once the landlord accepts the request, you will receive a confirmation message."
+                    primaryTypographyProps={{ 
+                      variant: 'body2',
+                      sx: { color: isDark ? theme.textPrimary : 'inherit' }
+                    }}
+                  />
+                </ListItem>
+                
+                <ListItem sx={{ pl: 0 }}>
+                  <ListItemIcon>
+                    <AccountBalanceIcon sx={{ color: theme.warning, fontSize: 20 }} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="The landlord's account number will also be shared with you for payment."
+                    primaryTypographyProps={{ 
+                      variant: 'body2',
+                      sx: { color: isDark ? theme.textPrimary : 'inherit' }
+                    }}
+                  />
+                </ListItem>
+                
+                <ListItem sx={{ pl: 0 }}>
+                  <ListItemIcon>
+                    <PaymentIcon sx={{ color: theme.primary, fontSize: 20 }} />
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary="Make the payment to the provided account."
+                    primaryTypographyProps={{ 
+                      variant: 'body2',
+                      sx: { color: isDark ? theme.textPrimary : 'inherit' }
+                    }}
+                  />
+                </ListItem>
+              </List>
+            </Alert>
+
+            <Button
+              fullWidth
+              variant="contained"
+              size="large"
+              onClick={handleSubmit}
+              disabled={submitting}
+              sx={{
+                backgroundColor: theme.primary,
+                color: 'white',
+                py: 1.5,
+                fontSize: '1.1rem',
+                fontWeight: 600,
+                '&:hover': {
+                  backgroundColor: theme.secondary,
+                },
+                '&:disabled': {
+                  backgroundColor: isDark ? theme.textDisabled : 'rgba(0, 0, 0, 0.12)',
+                }
+              }}
+            >
+              {submitting ? (
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <CircularProgress size={24} color="inherit" sx={{ mr: 1 }} />
+                  Submitting Request...
+                </Box>
+              ) : (
+                'Submit Booking Request'
+              )}
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-          <CircularProgress />
+      <Container sx={{ py: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+          <CircularProgress size={60} sx={{ color: theme.primary }} />
         </Box>
       </Container>
     );
@@ -836,12 +1370,26 @@ const UserBookingPage = () => {
 
   if (error) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Alert severity="error" sx={{ mb: 4 }}>
+      <Container sx={{ py: 4 }}>
+        <Alert 
+          severity="error" 
+          sx={{ 
+            mb: 3,
+            backgroundColor: isDark ? theme.surfaceBackground : undefined,
+            color: isDark ? theme.textPrimary : undefined,
+          }}
+        >
           {error}
         </Alert>
-        <Button onClick={() => navigate('/user-allproperties')}>
-          Back to Properties
+        <Button 
+          onClick={() => navigate('/user-home')} 
+          variant="outlined"
+          sx={{ 
+            color: theme.primary,
+            borderColor: theme.primary 
+          }}
+        >
+          Back to Home
         </Button>
       </Container>
     );
@@ -849,120 +1397,103 @@ const UserBookingPage = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Breadcrumbs sx={{ mb: 4 }}>
+      <Breadcrumbs 
+        separator="/" 
+        sx={{ 
+          mb: 3,
+          '& .MuiBreadcrumbs-separator': {
+            color: isDark ? theme.textSecondary : 'inherit',
+          }
+        }}
+      >
         <Link 
           color="inherit" 
-          href="/user-allproperties"
-          sx={{ color: theme.textSecondary }}
+          href="/user-home" 
+          underline="hover"
+          sx={{ color: isDark ? theme.textSecondary : 'inherit' }}
         >
-          Properties
+          Home
         </Link>
-        <Typography sx={{ color: theme.textPrimary }}>
-          Book Property
+        <Link 
+          color="inherit" 
+          href="/user-all-properties" 
+          underline="hover"
+          sx={{ color: isDark ? theme.textSecondary : 'inherit' }}
+        >
+          Booking
+        </Link>
+        <Typography sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+          Boarding
         </Typography>
       </Breadcrumbs>
 
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ color: theme.textPrimary, fontWeight: 600, mb: 2 }}>
-          Book Your Stay
-        </Typography>
-        {property && (
-          <Typography variant="body1" sx={{ color: theme.textSecondary }}>
-            Complete your booking for {property.property_type} in {property.address}
-          </Typography>
-        )}
+        <Stepper 
+          activeStep={activeStep} 
+          sx={{ 
+            '& .MuiStepConnector-line': {
+              borderColor: isDark ? theme.border : 'rgba(0, 0, 0, 0.12)',
+            }
+          }}
+        >
+          {steps.map((label, index) => (
+            <Step key={label}>
+              <StepLabel>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    backgroundColor: activeStep >= index ? theme.primary : isDark ? theme.textDisabled : '#e0e0e0',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 600,
+                    mr: 2
+                  }}>
+                    {index + 1}
+                  </Box>
+                  <Typography 
+                    variant="body1" 
+                    sx={{ 
+                      fontWeight: activeStep === index ? 600 : 400,
+                      color: isDark ? theme.textPrimary : 'inherit'
+                    }}
+                  >
+                    {label}
+                  </Typography>
+                </Box>
+              </StepLabel>
+            </Step>
+          ))}
+        </Stepper>
       </Box>
 
-      <Stepper activeStep={activeStep} sx={{ mb: 4 }}>
-        {steps.map((label) => (
-          <Step key={label}>
-            <StepLabel>{label}</StepLabel>
-          </Step>
-        ))}
-      </Stepper>
+      {renderStepContent()}
 
-      <Card sx={{ backgroundColor: theme.cardBackground, mb: 4 }}>
-        <CardContent sx={{ p: 4 }}>
-          {activeStep === 0 && renderDateSelection()}
-          {activeStep === 1 && renderPersonalDetails()}
-          {activeStep === 2 && renderReviewConfirm()}
-        </CardContent>
-      </Card>
-
-      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
         <Button
           onClick={handleBack}
           disabled={activeStep === 0}
-          sx={{ color: theme.textPrimary }}
+          sx={{ color: isDark ? theme.textPrimary : 'inherit' }}
         >
           Back
         </Button>
         
-        <Box>
-          {activeStep === steps.length - 1 ? (
-            <Button
-              variant="contained"
-              onClick={handleSubmitBooking}
-              disabled={submitting}
-              sx={{
-                backgroundColor: theme.primary,
-                '&:hover': { backgroundColor: theme.secondary }
-              }}
-            >
-              {submitting ? 'Submitting...' : 'Submit Booking Request'}
-            </Button>
-          ) : (
-            <Button
-              variant="contained"
-              onClick={handleNext}
-              sx={{
-                backgroundColor: theme.primary,
-                '&:hover': { backgroundColor: theme.secondary }
-              }}
-            >
-              Next
-            </Button>
-          )}
-        </Box>
-      </Box>
-
-      <Dialog
-        open={confirmDialog}
-        onClose={() => setConfirmDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Confirm Booking Request</DialogTitle>
-        <DialogContent>
-          <Typography variant="body1">
-            Are you sure you want to submit this booking request? Once submitted, 
-            you cannot modify the details until the owner responds.
-          </Typography>
-          {pricingBreakdown && (
-            <Box sx={{ mt: 2, p: 2, backgroundColor: theme.isDark ? '#333' : '#f5f5f5', borderRadius: 1 }}>
-              <Typography variant="h6" sx={{ color: theme.primary }}>
-                Total Amount: {formatCurrency(pricingBreakdown.totalAmount)}
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmDialog(false)} sx={{ color: theme.textSecondary }}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={confirmSubmitBooking} 
+        {activeStep < steps.length - 1 && (
+          <Button
             variant="contained"
-            disabled={submitting}
+            onClick={handleNext}
             sx={{
               backgroundColor: theme.primary,
               '&:hover': { backgroundColor: theme.secondary }
             }}
           >
-            {submitting ? 'Submitting...' : 'Confirm & Submit'}
+            Next
           </Button>
-        </DialogActions>
-      </Dialog>
+        )}
+      </Box>
 
       <AppSnackbar
         open={snackbar.open}

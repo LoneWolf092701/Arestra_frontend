@@ -1,142 +1,116 @@
 /**
- * Validate property availability status
+ * Property Validation Utilities
+ * Provides comprehensive validation functions for property data
+ */
+
+/**
+ * Validate property availability based on dates and status
  * @param {Object} property - Property object
- * @returns {Object} Validation result with isAvailable and reasons
+ * @returns {Object} Availability validation result
  */
 export const validatePropertyAvailability = (property) => {
   const validation = {
     isAvailable: true,
-    reasons: [],
-    warnings: []
+    reasons: []
   };
 
   if (!property) {
     validation.isAvailable = false;
-    validation.reasons.push('Property data is missing');
+    validation.reasons.push('Property data not found');
     return validation;
   }
 
-  // Check if property is active
-  if (property.is_active === false || property.is_active === 0) {
+  if (!property.is_active) {
     validation.isAvailable = false;
     validation.reasons.push('Property is currently inactive');
   }
 
-  // Check approval status
   if (property.approval_status !== 'approved') {
     validation.isAvailable = false;
-    validation.reasons.push(`Property is ${property.approval_status || 'pending approval'}`);
+    validation.reasons.push(`Property is ${property.approval_status}, not approved for booking`);
   }
 
-  // Check availability flag
-  if (property.is_available === false || property.is_available === 0) {
+  const currentDate = new Date();
+  const availableFrom = property.available_from ? new Date(property.available_from) : null;
+  const availableTo = property.available_to ? new Date(property.available_to) : null;
+
+  if (availableFrom && currentDate < availableFrom) {
     validation.isAvailable = false;
-    validation.reasons.push('Property is marked as unavailable');
+    validation.reasons.push(`Property will be available from ${availableFrom.toLocaleDateString()}`);
   }
 
-  // Check availability dates
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  if (property.available_from) {
-    const availableFrom = new Date(property.available_from);
-    availableFrom.setHours(0, 0, 0, 0);
-    
-    if (availableFrom > today) {
-      const daysUntilAvailable = Math.ceil((availableFrom - today) / (1000 * 60 * 60 * 24));
-      validation.warnings.push(`Property will be available in ${daysUntilAvailable} days`);
-    }
-  }
-
-  if (property.available_to) {
-    const availableTo = new Date(property.available_to);
-    availableTo.setHours(23, 59, 59, 999);
-    
-    if (availableTo < today) {
-      validation.isAvailable = false;
-      validation.reasons.push('Property availability period has expired');
-    }
-  }
-
-  // Check if property has required fields
-  const requiredFields = ['property_type', 'address', 'price'];
-  const missingFields = requiredFields.filter(field => !property[field]);
-  
-  if (missingFields.length > 0) {
+  if (availableTo && currentDate > availableTo) {
     validation.isAvailable = false;
-    validation.reasons.push(`Missing required information: ${missingFields.join(', ')}`);
+    validation.reasons.push(`Property availability ended on ${availableTo.toLocaleDateString()}`);
   }
 
   return validation;
 };
 
 /**
- * Validate property price against market standards
- * @param {number} price - Property price
- * @param {string} propertyType - Type of property
- * @param {string} location - Property location
- * @returns {Object} Price validation result
+ * Validate property pricing reasonableness
+ * @param {Object} property - Property object
+ * @returns {Object} Pricing validation result
  */
-export const validatePropertyPrice = (price, propertyType, location = '') => {
+export const validatePropertyPricing = (property) => {
   const validation = {
-    isValid: true,
+    isReasonable: true,
     warnings: [],
     suggestions: []
   };
 
-  if (!price || isNaN(price) || price <= 0) {
-    validation.isValid = false;
-    validation.warnings.push('Price must be a positive number');
+  if (!property || !property.price) {
+    validation.isReasonable = false;
+    validation.warnings.push('Property price is not set');
     return validation;
   }
 
-  // Define minimum and maximum reasonable prices by property type (in LKR)
-  const priceRanges = {
-    'Room': { min: 3000, max: 50000, typical: [8000, 25000] },
-    'Hostels': { min: 2000, max: 30000, typical: [5000, 15000] },
-    'Flat': { min: 10000, max: 100000, typical: [20000, 60000] },
-    'Apartment': { min: 15000, max: 150000, typical: [25000, 80000] },
-    'House': { min: 25000, max: 300000, typical: [40000, 120000] },
-    'Villa': { min: 50000, max: 500000, typical: [80000, 200000] }
+  const price = parseFloat(property.price);
+  const propertyType = property.property_type;
+  const unitType = property.unit_type;
+
+  const pricingRanges = {
+    'Rooms': {
+      'Single Room': { min: 8000, max: 25000 },
+      'Shared Room': { min: 5000, max: 15000 },
+      'Annex': { min: 12000, max: 35000 }
+    },
+    'Flats': {
+      'Studio Apartment': { min: 20000, max: 50000 },
+      'One Bedroom': { min: 25000, max: 60000 },
+      'Two Bedroom': { min: 35000, max: 80000 },
+      'Three Bedroom': { min: 50000, max: 120000 }
+    },
+    'Hostels': {
+      'Single Room': { min: 6000, max: 20000 },
+      'Shared Room': { min: 3000, max: 12000 },
+      'Dormitory': { min: 2000, max: 8000 }
+    },
+    'Villas': {
+      'Full House': { min: 80000, max: 300000 },
+      'Villa': { min: 100000, max: 500000 }
+    }
   };
 
-  const range = priceRanges[propertyType];
+  const range = pricingRanges[propertyType]?.[unitType];
   
   if (range) {
-    // Check if price is below minimum
     if (price < range.min) {
       validation.warnings.push(
-        `Price (LKR ${price.toLocaleString()}) seems very low for a ${propertyType}. ` +
-        `Minimum expected: LKR ${range.min.toLocaleString()}`
+        `Price seems low for ${propertyType} - ${unitType}. Typical range: LKR ${range.min.toLocaleString()} - ${range.max.toLocaleString()}`
       );
-    }
-    
-    // Check if price is above maximum
-    if (price > range.max) {
+      validation.suggestions.push('Consider reviewing your pricing to ensure it reflects the property value');
+    } else if (price > range.max) {
       validation.warnings.push(
-        `Price (LKR ${price.toLocaleString()}) seems very high for a ${propertyType}. ` +
-        `Maximum typical: LKR ${range.max.toLocaleString()}`
+        `Price seems high for ${propertyType} - ${unitType}. Typical range: LKR ${range.min.toLocaleString()} - ${range.max.toLocaleString()}`
       );
-    }
-    
-    // Provide typical range suggestion
-    if (price < range.typical[0] || price > range.typical[1]) {
-      validation.suggestions.push(
-        `Typical ${propertyType} prices range from LKR ${range.typical[0].toLocaleString()} ` +
-        `to LKR ${range.typical[1].toLocaleString()}`
-      );
+      validation.suggestions.push('High pricing may reduce interest. Consider pricing competitively or highlighting premium features');
     }
   }
 
-  // Location-based price adjustments (basic implementation)
-  const premiumAreas = ['colombo', 'dehiwala', 'mount lavinia', 'nugegoda', 'maharagama'];
-  const isLocationPremium = premiumAreas.some(area => 
-    location.toLowerCase().includes(area.toLowerCase())
-  );
-
-  if (isLocationPremium && range && price < range.typical[0] * 1.2) {
+  if (price > range?.max * 1.5) {
     validation.suggestions.push(
-      `This appears to be in a premium area. Consider pricing 20-50% higher than typical range.`
+      'Consider pricing 20-50% higher than typical range.'
     );
   }
 
@@ -162,11 +136,11 @@ export const validatePropertyCompleteness = (property) => {
     return validation;
   }
 
-  // Required fields (80% of score)
   const requiredFields = [
     { field: 'property_type', weight: 10, label: 'Property Type' },
     { field: 'unit_type', weight: 8, label: 'Unit Type' },
     { field: 'address', weight: 15, label: 'Address' },
+    { field: 'description', weight: 10, label: 'Description' },
     { field: 'price', weight: 15, label: 'Price' },
     { field: 'available_from', weight: 8, label: 'Available From Date' },
     { field: 'available_to', weight: 8, label: 'Available To Date' },
@@ -174,7 +148,6 @@ export const validatePropertyCompleteness = (property) => {
     { field: 'facilities', weight: 6, label: 'Facilities' }
   ];
 
-  // Optional fields (20% of score)
   const optionalFields = [
     { field: 'other_facility', weight: 3, label: 'Additional Facilities' },
     { field: 'rules', weight: 5, label: 'House Rules' },
@@ -184,7 +157,6 @@ export const validatePropertyCompleteness = (property) => {
     { field: 'images', weight: 3, label: 'Property Photos' }
   ];
 
-  // Check required fields
   requiredFields.forEach(({ field, weight, label }) => {
     const value = property[field];
     let hasValue = false;
@@ -210,7 +182,6 @@ export const validatePropertyCompleteness = (property) => {
     }
   });
 
-  // Check optional fields
   optionalFields.forEach(({ field, weight, label }) => {
     const value = property[field];
     let hasValue = false;
@@ -234,7 +205,6 @@ export const validatePropertyCompleteness = (property) => {
     }
   });
 
-  // Generate recommendations based on completeness
   if (validation.score < 60) {
     validation.recommendations.push('Complete required information to improve property visibility');
   }
@@ -249,6 +219,14 @@ export const validatePropertyCompleteness = (property) => {
   
   if (validation.missingOptional.includes('House Rules')) {
     validation.recommendations.push('Set clear house rules to prevent misunderstandings');
+  }
+
+  if (validation.missingOptional.includes('Contract Policy')) {
+    validation.recommendations.push('Add contract policy to build trust with potential tenants');
+  }
+
+  if (property.property_type === 'Rooms' && validation.missingOptional.includes('Roommate Information')) {
+    validation.recommendations.push('Add roommate information to help tenants understand the living situation');
   }
 
   return validation;
@@ -273,25 +251,21 @@ export const validateBookingEligibility = (property, user) => {
     return validation;
   }
 
-  // Check if property is available for booking
   const availabilityCheck = validatePropertyAvailability(property);
   if (!availabilityCheck.isAvailable) {
     validation.canBook = false;
     validation.restrictions.push(...availabilityCheck.reasons);
   }
 
-  // Check if user can book (not property owner)
   if (property.user_id === user.id) {
     validation.canBook = false;
     validation.restrictions.push('Property owners cannot book their own properties');
   }
 
-  // Check user role
   if (user.role === 'propertyowner') {
     validation.requirements.push('Property owners should create tenant accounts for booking');
   }
 
-  // Check if user profile is complete enough for booking
   const requiredUserFields = ['email', 'phone'];
   const missingUserFields = requiredUserFields.filter(field => !user[field]);
   
@@ -318,133 +292,252 @@ export const getPropertyTypeInfo = (propertyType) => {
       description: 'Single private room in shared accommodation',
       icon: '🛏️',
       averageSize: '10-15 sqm',
-      targetTenants: ['Students', 'Young professionals', 'Budget travelers']
+      targetTenants: 'Students, young professionals',
+      commonFeatures: ['Shared kitchen', 'Shared bathroom', 'Individual room'],
+      pricingFactors: ['Room size', 'Sharing arrangements', 'Facilities provided']
+    },
+    'Flats': {
+      singular: 'Flat',
+      plural: 'Flats',
+      description: 'Complete apartment units with private facilities',
+      icon: '🏠',
+      averageSize: '30-80 sqm',
+      targetTenants: 'Families, couples, professionals',
+      commonFeatures: ['Private kitchen', 'Private bathroom', 'Living area'],
+      pricingFactors: ['Number of bedrooms', 'Floor level', 'Amenities included']
     },
     'Hostels': {
       singular: 'Hostel',
       plural: 'Hostels',
       description: 'Budget-friendly shared accommodation',
       icon: '🏨',
-      averageSize: '6-12 sqm per bed',
-      targetTenants: ['Students', 'Backpackers', 'Budget travelers', 'Short-term visitors']
-    },
-    'Flats': {
-      singular: 'Flat',
-      plural: 'Flats',
-      description: 'Self-contained residential unit in a building',
-      icon: '🏠',
-      averageSize: '40-80 sqm',
-      targetTenants: ['Small families', 'Couples', 'Young professionals']
+      averageSize: '8-12 sqm per bed',
+      targetTenants: 'Students, budget travelers, short-term stays',
+      commonFeatures: ['Shared facilities', 'Common areas', 'Basic furnishing'],
+      pricingFactors: ['Bed type', 'Sharing ratio', 'Location convenience']
     },
     'Villas': {
       singular: 'Villa',
       plural: 'Villas',
-      description: 'Luxury house with premium features',
-      icon: '🏰',
-      averageSize: '200-500 sqm',
-      targetTenants: ['High-income families', 'Expatriates', 'Luxury seekers']
+      description: 'Premium standalone houses with private grounds',
+      icon: '🏡',
+      averageSize: '150-500 sqm',
+      targetTenants: 'Families, executives, long-term residents',
+      commonFeatures: ['Private garden', 'Multiple bedrooms', 'Premium finishes'],
+      pricingFactors: ['Plot size', 'Luxury features', 'Location exclusivity']
     }
   };
 
   return typeInfo[propertyType] || {
     singular: propertyType,
-    plural: propertyType + 's',
-    description: 'Property accommodation',
-    icon: '🏠',
+    plural: propertyType,
+    description: 'Property type',
+    icon: '🏢',
     averageSize: 'Varies',
-    targetTenants: ['Various']
+    targetTenants: 'General',
+    commonFeatures: [],
+    pricingFactors: []
   };
 };
 
-
 /**
- * Generate property listing optimization suggestions
- * @param {Object} property - Property object
- * @returns {Array} Array of optimization suggestions
+ * Validate property rules for appropriateness
+ * @param {Array} rules - Array of property rules
+ * @returns {Object} Rules validation result
  */
-export const generateOptimizationSuggestions = (property) => {
-  const suggestions = [];
-  
-  if (!property) return suggestions;
+export const validatePropertyRules = (rules) => {
+  const validation = {
+    isValid: true,
+    warnings: [],
+    suggestions: []
+  };
 
-  const completeness = validatePropertyCompleteness(property);
-  const priceValidation = validatePropertyPrice(
-    property.price, 
-    property.property_type, 
-    property.address
+  if (!Array.isArray(rules) || rules.length === 0) {
+    validation.suggestions.push('Consider adding house rules to set clear expectations');
+    return validation;
+  }
+
+  const inappropriateKeywords = [
+    'discriminat', 'race', 'religion', 'gender', 'sexual orientation',
+    'disability', 'nationality', 'ethnicity'
+  ];
+
+  const recommendedRules = [
+    'smoking policy', 'visitor policy', 'noise restrictions',
+    'cleaning responsibilities', 'pet policy'
+  ];
+
+  rules.forEach((rule, index) => {
+    if (!rule || rule.trim().length === 0) {
+      validation.warnings.push(`Rule ${index + 1} is empty`);
+      return;
+    }
+
+    const ruleLower = rule.toLowerCase();
+    
+    inappropriateKeywords.forEach(keyword => {
+      if (ruleLower.includes(keyword)) {
+        validation.isValid = false;
+        validation.warnings.push(
+          `Rule ${index + 1} may contain discriminatory language: "${rule}"`
+        );
+      }
+    });
+
+    if (rule.length > 200) {
+      validation.warnings.push(
+        `Rule ${index + 1} is very long. Consider making it more concise.`
+      );
+    }
+  });
+
+  const hasCommonRules = recommendedRules.some(commonRule =>
+    rules.some(rule => rule.toLowerCase().includes(commonRule.split(' ')[0]))
   );
 
-  // Completeness suggestions
-  if (completeness.score < 70) {
-    suggestions.push({
-      type: 'completeness',
-      priority: 'high',
-      title: 'Complete Missing Information',
-      description: `Your listing is ${completeness.score}% complete. Add missing details to improve visibility.`,
-      action: 'Complete required fields',
-      impact: 'Increases visibility by up to 40%'
-    });
+  if (!hasCommonRules) {
+    validation.suggestions.push(
+      'Consider adding common rules like smoking policy, visitor policy, or noise restrictions'
+    );
   }
 
-  // Photo suggestions
-  if (!property.images || property.images.length === 0) {
-    suggestions.push({
-      type: 'photos',
-      priority: 'high',
-      title: 'Add Property Photos',
-      description: 'Properties with photos receive 10x more inquiries than those without.',
-      action: 'Upload high-quality photos',
-      impact: 'Increases inquiries by up to 1000%'
-    });
-  }
-
-  // Price suggestions
-  if (priceValidation.warnings.length > 0) {
-    suggestions.push({
-      type: 'pricing',
-      priority: 'medium',
-      title: 'Review Pricing',
-      description: priceValidation.warnings[0],
-      action: 'Adjust price to market standards',
-      impact: 'Improves booking likelihood'
-    });
-  }
-
-  // Amenities suggestions
-  if (!property.amenities || Object.keys(JSON.parse(property.amenities || '{}')).length < 3) {
-    suggestions.push({
-      type: 'amenities',
-      priority: 'medium',
-      title: 'Highlight More Amenities',
-      description: 'List all available amenities to attract more tenants.',
-      action: 'Add WiFi, parking, kitchen access, etc.',
-      impact: 'Increases search visibility'
-    });
-  }
-
-  // Description suggestions
-  if (!property.description || property.description.length < 50) {
-    suggestions.push({
-      type: 'description',
-      priority: 'low',
-      title: 'Improve Property Description',
-      description: 'A detailed description helps tenants understand your property better.',
-      action: 'Write a compelling 100+ word description',
-      impact: 'Improves tenant confidence'
-    });
-  }
-
-  return suggestions.sort((a, b) => {
-    const priorityOrder = { high: 3, medium: 2, low: 1 };
-    return priorityOrder[b.priority] - priorityOrder[a.priority];
-  });
+  return validation;
 };
 
-export default {
-  validatePropertyAvailability,
-  validatePropertyPrice,
-  validatePropertyCompleteness,
-  validateBookingEligibility,
-  getPropertyTypeInfo,
-  generateOptimizationSuggestions
+/**
+ * Validate contract policy completeness
+ * @param {string} contractPolicy - Contract policy text
+ * @returns {Object} Contract policy validation result
+ */
+export const validateContractPolicy = (contractPolicy) => {
+  const validation = {
+    isComplete: true,
+    missingElements: [],
+    suggestions: []
+  };
+
+  if (!contractPolicy || contractPolicy.trim().length === 0) {
+    validation.isComplete = false;
+    validation.missingElements.push('Contract policy is required');
+    return validation;
+  }
+
+  const essentialElements = [
+    { keyword: ['lease', 'duration', 'term'], label: 'Lease duration' },
+    { keyword: ['deposit', 'security'], label: 'Security deposit information' },
+    { keyword: ['notice', 'cancellation', 'termination'], label: 'Notice period for cancellation' },
+    { keyword: ['payment', 'rent', 'due'], label: 'Payment terms' },
+    { keyword: ['maintenance', 'repair'], label: 'Maintenance responsibilities' }
+  ];
+
+  const policyLower = contractPolicy.toLowerCase();
+
+  essentialElements.forEach(({ keyword, label }) => {
+    const hasElement = keyword.some(k => policyLower.includes(k));
+    if (!hasElement) {
+      validation.missingElements.push(label);
+    }
+  });
+
+  if (validation.missingElements.length > 0) {
+    validation.isComplete = false;
+    validation.suggestions.push(
+      'Consider including: ' + validation.missingElements.join(', ')
+    );
+  }
+
+  if (contractPolicy.length < 100) {
+    validation.suggestions.push(
+      'Contract policy seems brief. Consider providing more detailed terms.'
+    );
+  }
+
+  return validation;
+};
+
+/**
+ * Validate roommate information completeness
+ * @param {Array} roommates - Array of roommate objects
+ * @param {string} propertyType - Type of property
+ * @returns {Object} Roommate validation result
+ */
+export const validateRoommateInfo = (roommates, propertyType) => {
+  const validation = {
+    isAppropriate: true,
+    warnings: [],
+    suggestions: []
+  };
+
+  if (propertyType !== 'Rooms') {
+    if (roommates && roommates.length > 0) {
+      validation.warnings.push(
+        'Roommate information is typically only relevant for room rentals'
+      );
+    }
+    return validation;
+  }
+
+  if (!Array.isArray(roommates) || roommates.length === 0) {
+    validation.suggestions.push(
+      'Consider adding roommate information to help potential tenants understand the living situation'
+    );
+    return validation;
+  }
+
+  roommates.forEach((roommate, index) => {
+    if (!roommate.occupation || roommate.occupation.trim().length === 0) {
+      validation.warnings.push(
+        `Roommate ${index + 1} is missing occupation information`
+      );
+    }
+
+    if (!roommate.field || roommate.field.trim().length === 0) {
+      validation.warnings.push(
+        `Roommate ${index + 1} is missing field/industry information`
+      );
+    }
+  });
+
+  if (roommates.length > 6) {
+    validation.warnings.push(
+      'Large number of roommates may indicate overcrowding'
+    );
+  }
+
+  return validation;
+};
+
+/**
+ * Comprehensive property validation
+ * @param {Object} property - Complete property object
+ * @returns {Object} Comprehensive validation result
+ */
+export const validatePropertyData = (property) => {
+  const completeness = validatePropertyCompleteness(property);
+  const availability = validatePropertyAvailability(property);
+  const pricing = validatePropertyPricing(property);
+  const rules = validatePropertyRules(property.rules);
+  const contractPolicy = validateContractPolicy(property.contract_policy);
+  const roommateInfo = validateRoommateInfo(property.roommates, property.property_type);
+
+  return {
+    overall: {
+      isValid: availability.isAvailable && rules.isValid && contractPolicy.isComplete,
+      score: completeness.score,
+      maxScore: completeness.maxScore
+    },
+    completeness,
+    availability,
+    pricing,
+    rules,
+    contractPolicy,
+    roommateInfo,
+    recommendations: [
+      ...completeness.recommendations,
+      ...pricing.suggestions,
+      ...rules.suggestions,
+      ...contractPolicy.suggestions,
+      ...roommateInfo.suggestions
+    ].slice(0, 5)
+  };
 };
