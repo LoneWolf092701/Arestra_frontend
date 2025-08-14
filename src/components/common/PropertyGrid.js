@@ -30,6 +30,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getMyProperties } from '../../api/propertyApi';
+import Room from '../../assets/images/Room.jpg';
 
 const PropertyGrid = ({ 
   properties = [], 
@@ -49,6 +50,7 @@ const PropertyGrid = ({
   const userRole = localStorage.getItem('userRole');
   const [myProperties, setMyProperties] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [imageErrors, setImageErrors] = useState(new Set());
 
   useEffect(() => {
     if (showMyProperties) {
@@ -104,6 +106,54 @@ const PropertyGrid = ({
 
   const limitedProperties = limit ? displayProperties.slice(0, limit) : displayProperties;
 
+  // Enhanced image URL resolver to handle API response format
+  const getImageUrl = (images, propertyId) => {
+    const imageKey = `property_${propertyId}`;
+    
+    if (imageErrors.has(imageKey)) {
+      return Room;
+    }
+
+    // Handle different image data structures from API
+    let imageArray = [];
+    
+    if (Array.isArray(images)) {
+      imageArray = images;
+    } else if (typeof images === 'string') {
+      try {
+        imageArray = JSON.parse(images);
+      } catch {
+        return Room;
+      }
+    } else {
+      return Room;
+    }
+    
+    if (!Array.isArray(imageArray) || imageArray.length === 0) {
+      return Room;
+    }
+
+    const firstImage = imageArray[0];
+    
+    // Handle string URLs
+    if (typeof firstImage === 'string' && firstImage.trim()) {
+      return firstImage.trim();
+    }
+    
+    // Handle object with URL property (API format)
+    if (typeof firstImage === 'object' && firstImage?.url && typeof firstImage.url === 'string') {
+      return firstImage.url.trim();
+    }
+    
+    return Room;
+  };
+
+  // Handle image loading errors
+  const handleImageError = (propertyId) => {
+    const imageKey = `property_${propertyId}`;
+    setImageErrors(prev => new Set([...prev, imageKey]));
+  };
+
   const safeJsonParse = (str) => {
     if (!str) return null;
     if (typeof str === 'object') return str;
@@ -127,13 +177,9 @@ const PropertyGrid = ({
   const handleView = (propertyId) => {
     if (onViewProperty) {
       onViewProperty(propertyId);
-    } else if (showMyProperties && userRole === 'propertyowner') {
-      // For property owners viewing their own properties, go to the user property view page
-      navigate(`/user-property-view/${propertyId}`);
-    } else if (showMyProperties) {
-      navigate(`/property/${propertyId}`);
     } else {
-      navigate(`/user-property-view/${propertyId}`);
+      // Always navigate to view-property page for better UX
+      navigate(`/view-property/${propertyId}`);
     }
   };
 
@@ -196,14 +242,10 @@ const PropertyGrid = ({
     <Box>
       <Grid container spacing={3}>
         {limitedProperties.map((property) => {
-          const images = safeJsonParse(property.images);
           const amenities = safeJsonParse(property.amenities);
           const facilities = safeJsonParse(property.facilities);
           
-          const primaryImage = images && images.length > 0 ? 
-            (typeof images[0] === 'string' ? images[0] : images[0]?.url) : 
-            '/api/placeholder/400/250';
-
+          const primaryImage = getImageUrl(property.images, property.id);
           const bedroomCount = facilities?.Bedroom || facilities?.Bedrooms || property.bedrooms || 0;
           const bathroomCount = facilities?.Bathroom || facilities?.Bathrooms || property.bathrooms || 0;
 
@@ -231,6 +273,7 @@ const PropertyGrid = ({
                   height="200"
                   image={primaryImage}
                   alt={`${property.property_type} - ${property.unit_type}`}
+                  onError={() => handleImageError(property.id)}
                   sx={{ 
                     objectFit: 'cover',
                     backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
@@ -282,110 +325,87 @@ const PropertyGrid = ({
                     </Typography>
                   </Box>
 
-                  <Box sx={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
-                    justifyContent: 'space-between',
-                    mb: 2 
-                  }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      {bedroomCount > 0 && (
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <BedIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-                          <Typography variant="body2" color="text.secondary">
-                            {bedroomCount}
-                          </Typography>
-                        </Box>
-                      )}
-                      
-                      {bathroomCount > 0 && (
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <BathtubIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-                          <Typography variant="body2" color="text.secondary">
-                            {bathroomCount}
-                          </Typography>
-                        </Box>
-                      )}
-                    </Box>
-
-                    {property.views_count > 0 && (
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <VisibilityIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-                        <Typography variant="body2" color="text.secondary">
-                          {property.views_count}
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
-
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 'auto' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <PriceIcon sx={{ fontSize: 18, color: theme.primary, mr: 0.5 }} />
                     <Typography 
                       variant="h6" 
                       sx={{ 
-                        fontWeight: 'bold',
+                        fontWeight: 700, 
                         color: theme.primary,
-                        fontSize: '1.1rem'
+                        fontSize: '1.25rem'
                       }}
                     >
                       {formatPrice(property.price)}
                     </Typography>
-                    
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={<VisibilityIcon />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleView(property.id);
-                      }}
-                      sx={{
-                        borderColor: theme.primary,
-                        color: theme.primary,
-                        '&:hover': {
-                          backgroundColor: `${theme.primary}10`,
-                          borderColor: theme.primary,
-                        },
-                      }}
-                    >
-                      View
-                    </Button>
+                    <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                      /month
+                    </Typography>
                   </Box>
 
-                  {showActions && (showMyProperties || userRole === 'propertyowner' || userRole === 'admin') && (
-                    <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                      {userRole === 'propertyowner' && property.user_id === parseInt(localStorage.getItem('userId')) && (
-                        <>
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<EditIcon />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEdit(property.id);
-                            }}
-                            fullWidth
-                          >
-                            Edit
-                          </Button>
-                        </>
+                  <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <BedIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {bedroomCount} Bed
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <BathtubIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {bathroomCount} Bath
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  {showActions && (
+                    <Box sx={{ 
+                      display: 'flex', 
+                      gap: 1, 
+                      mt: 'auto',
+                      pt: 1,
+                      borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`
+                    }}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<VisibilityIcon />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleView(property.id);
+                        }}
+                        sx={{ flex: 1 }}
+                      >
+                        View
+                      </Button>
+                      
+                      {showMyProperties && userRole === 'propertyowner' && (
+                        <Button
+                          size="small"
+                          variant="contained"
+                          startIcon={<EditIcon />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(property.id);
+                          }}
+                          sx={{ flex: 1 }}
+                        >
+                          Edit
+                        </Button>
                       )}
                       
-                      {userRole === 'tenant' && !showMyProperties && (
+                      {!showMyProperties && userRole === 'user' && (
                         <Button
-                          variant="contained"
                           size="small"
+                          variant="contained"
                           startIcon={<BookingIcon />}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleBook(property.id);
                           }}
-                          fullWidth
-                          sx={{ 
-                            backgroundColor: theme.primary,
-                            '&:hover': { backgroundColor: theme.secondary }
-                          }}
+                          color="primary"
+                          sx={{ flex: 1 }}
                         >
-                          Book Now
+                          Book
                         </Button>
                       )}
                     </Box>

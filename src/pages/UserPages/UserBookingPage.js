@@ -132,29 +132,54 @@ const UserBookingPage = () => {
       
       // Auto-fill user profile information when available
       if (userProfile) {
-        console.log('Auto-filling user profile data:', userProfile);
-        setPersonalDetails(prev => ({
-          ...prev,
-          // Map common profile fields to booking form fields
-          first_name: userProfile.first_name || userProfile.firstName || '',
-          last_name: userProfile.last_name || userProfile.lastName || '',
-          email: userProfile.email || '',
-          mobile_number: userProfile.phone || userProfile.mobile_number || userProfile.phoneNumber || '',
-          current_address: userProfile.address || userProfile.current_address || '',
-          occupation: userProfile.occupation || '',
-          // Some profiles might have additional fields we can use
-          id_number: userProfile.id_number || userProfile.nationalId || userProfile.idNumber || '',
-          emergency_contact_name: userProfile.emergency_contact_name || userProfile.emergencyContactName || '',
-          emergency_contact_number: userProfile.emergency_contact_number || userProfile.emergencyContactNumber || '',
-          purpose_of_stay: userProfile.purpose_of_stay || ''
-        }));
+        console.log('Raw user profile data received:', JSON.stringify(userProfile, null, 2));
+        
+        // Extract profile data - handle both nested and flat structures
+        const profileData = userProfile.profile || userProfile;
+        const userData = userProfile.user || userProfile;
+        
+        console.log('Extracted profile data:', JSON.stringify(profileData, null, 2));
+        console.log('Extracted user data:', JSON.stringify(userData, null, 2));
+        
+        // Build the auto-fill object
+        const autoFillData = {
+          first_name: profileData.first_name || userData.first_name || '',
+          last_name: profileData.last_name || userData.last_name || '',
+          email: userData.email || userProfile.email || profileData.email || '',
+          mobile_number: profileData.phone || userData.phone || '',
+          current_address: profileData.business_address || profileData.address || userData.address || '',
+          occupation: profileData.occupation || profileData.business_type || '',
+          id_number: profileData.id_number || profileData.national_id || userData.id_number || '',
+          emergency_contact_name: profileData.emergency_contact_name || profileData.contact_person || '',
+          emergency_contact_number: profileData.emergency_contact_number || '',
+          purpose_of_stay: profileData.purpose_of_stay || ''
+        };
+        
+        console.log('Auto-fill data being set:', JSON.stringify(autoFillData, null, 2));
+        
+        // Set the personal details state
+        setPersonalDetails(autoFillData);
+        
+        // Count how many fields were auto-filled
+        const filledFields = Object.values(autoFillData).filter(value => value && value.trim() !== '').length;
+        
+        if (filledFields > 0) {
+          setSnackbar({
+            open: true,
+            message: `Profile information auto-filled (${filledFields} fields). Please review and update as needed.`,
+            severity: 'info'
+          });
+        }
+      } else {
+        console.log('No user profile data available for auto-fill');
+      }
         
         setSnackbar({
           open: true,
           message: 'Profile information auto-filled. Please review and update as needed.',
           severity: 'info'
         });
-      }
+      
     } catch (error) {
       console.error('Error loading data:', error);
       setError('Failed to load property details. Please try again.');
