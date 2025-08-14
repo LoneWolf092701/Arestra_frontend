@@ -57,7 +57,7 @@ const unitOptions = [
 const availableAmenities = [
   'Swimming Pool', 'Recreation Room', 'Bed Linens', 'Hot Water', 'Air Conditioning',
   'Kitchen', 'Washing Machine', 'WiFi', 'TV', 'Parking', 'Security', 'Garden',
-  'Balcony', 'Furnished', 'Fridge', 'Cleaner', 'Lift', 'Other'
+  'Balcony', 'Furnished', 'Fridge', 'Cleaner', 'Lift'
 ];
 
 const RequiredFieldLabel = ({ children, required = false }) => (
@@ -136,7 +136,7 @@ const AddPropertyDetails = () => {
         Kitchen: 0,
         Balcony: 0,
         'Living Area': 0,
-        Other: 0
+        // Other: 0
       },
       roommates: [],
       rules: [],
@@ -309,55 +309,85 @@ const AddPropertyDetails = () => {
           </Card>
 
           <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
-            <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
-              Amenities
-            </Typography>
-            <Grid container spacing={1} sx={{ mb: 3 }}>
-              {availableAmenities.map((amenity) => (
-                <Grid item key={amenity}>
-                  <Chip
-                    label={amenity}
-                    variant={selectedAmenities.includes(amenity) ? "filled" : "outlined"}
-                    color={selectedAmenities.includes(amenity) ? "primary" : "default"}
-                    onClick={() => handleAmenityToggle(amenity)}
-                    sx={{ 
-                      m: 0.5, 
-                      cursor: 'pointer',
-                      backgroundColor: selectedAmenities.includes(amenity) ? theme.primary : 'transparent',
-                      color: selectedAmenities.includes(amenity) ? 'white' : 'inherit',
-                      '&:hover': {
-                        backgroundColor: selectedAmenities.includes(amenity) ? theme.secondary : `${theme.primary}20`
-                      }
-                    }}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-            
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 2 }}>
-              <TextField
-                value={customAmenity}
-                onChange={(e) => setCustomAmenity(e.target.value)}
-                placeholder="Add custom amenity"
-                size="small"
-                sx={{ flexGrow: 1 }}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addCustomAmenity();
-                  }
-                }}
-              />
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={addCustomAmenity}
-                disabled={!customAmenity.trim()}
-              >
-                Add Custom Amenity
-              </Button>
-            </Box>
-          </Card>
+  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+    Amenities
+  </Typography>
+  
+  {/* Display all amenities (predefined + custom) */}
+  <Grid container spacing={1} sx={{ mb: 3 }}>
+    {/* Display predefined amenities */}
+    {availableAmenities.map((amenity) => (
+      <Grid item key={amenity}>
+        <Chip
+          label={amenity}
+          variant={selectedAmenities.includes(amenity) ? "filled" : "outlined"}
+          color={selectedAmenities.includes(amenity) ? "primary" : "default"}
+          onClick={() => handleAmenityToggle(amenity)}
+          sx={{ 
+            m: 0.5, 
+            cursor: 'pointer',
+            backgroundColor: selectedAmenities.includes(amenity) ? theme.primary : 'transparent',
+            color: selectedAmenities.includes(amenity) ? 'white' : 'inherit',
+            '&:hover': {
+              backgroundColor: selectedAmenities.includes(amenity) ? theme.secondary : `${theme.primary}20`
+            }
+          }}
+        />
+      </Grid>
+    ))}
+    
+    {/* Display custom amenities */}
+    {selectedAmenities
+      .filter(amenity => !availableAmenities.includes(amenity))
+      .map((customAmenity) => (
+        <Grid item key={customAmenity}>
+          <Chip
+            label={customAmenity}
+            variant="filled"
+            color="primary"
+            onClick={() => handleAmenityToggle(customAmenity)}
+            onDelete={() => {
+              setSelectedAmenities(prev => prev.filter(item => item !== customAmenity));
+            }}
+            sx={{ 
+              m: 0.5, 
+              cursor: 'pointer',
+              backgroundColor: theme.primary,
+              color: 'white',
+              '&:hover': {
+                backgroundColor: theme.secondary
+              }
+            }}
+          />
+        </Grid>
+      ))}
+  </Grid>
+  
+  {/* Custom amenity input */}
+  <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mt: 2 }}>
+    <TextField
+      value={customAmenity}
+      onChange={(e) => setCustomAmenity(e.target.value)}
+      placeholder="Add custom amenity"
+      size="small"
+      sx={{ flexGrow: 1 }}
+      onKeyPress={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addCustomAmenity();
+        }
+      }}
+    />
+    <Button
+      variant="outlined"
+      startIcon={<AddIcon />}
+      onClick={addCustomAmenity}
+      disabled={!customAmenity.trim()}
+    >
+      Add Custom Amenity
+    </Button>
+  </Box>
+</Card>
 
           <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
