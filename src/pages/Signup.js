@@ -1,55 +1,53 @@
-import React, { useState, useContext } from 'react';
-import { 
-  Container, 
-  Typography, 
-  TextField, 
-  Button, 
-  Box, 
-  Tabs, 
-  Tab, 
-  Card, 
-  CardContent,
+import React, { useState } from 'react';
+import {
+  Container,
+  Typography,
+  TextField,
+  Button,
+  Box,
+  Tabs,
+  Tab,
   Alert,
-  CircularProgress
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Grid,
+  Divider
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
-import { registerUser } from '../api';
-import { ThemeContext } from '../contexts/ThemeContext';
-import PersonIcon from '@mui/icons-material/Person';
-import HomeIcon from '@mui/icons-material/Home';
+import { registerUser } from '../api/authApi';
+import { useTheme } from '../contexts/ThemeContext';
 
-const TabPanel = ({ children, value, index, ...other }) => {
+function TabPanel({ children, value, index, ...other }) {
   return (
     <div
       role="tabpanel"
       hidden={value !== index}
-      id={`signup-tabpanel-${index}`}
-      aria-labelledby={`signup-tab-${index}`}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
       {...other}
     >
-      {value === index && (
-        <Box sx={{ p: 3 }}>
-          {children}
-        </Box>
-      )}
+      {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
     </div>
   );
-};
+}
 
-const a11yProps = (index) => {
+function a11yProps(index) {
   return {
-    id: `signup-tab-${index}`,
-    'aria-controls': `signup-tabpanel-${index}`,
+    id: `simple-tab-${index}`,
+    'aria-controls': `simple-tabpanel-${index}`,
   };
-};
+}
 
 const Signup = () => {
+  const navigate = useNavigate();
+  const { theme } = useTheme();
   const [activeTab, setActiveTab] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const navigate = useNavigate();
-  const { theme } = useContext(ThemeContext);
 
   const [tenantForm, setTenantForm] = useState({
     username: '',
@@ -58,7 +56,10 @@ const Signup = () => {
     confirmPassword: '',
     firstName: '',
     lastName: '',
-    phone: ''
+    phone: '',
+    gender: '',
+    birthdate: '',
+    nationality: ''
   });
 
   const [ownerForm, setOwnerForm] = useState({
@@ -66,10 +67,32 @@ const Signup = () => {
     email: '',
     password: '',
     confirmPassword: '',
+    firstName: '',
+    lastName: '',
+    phone: '',
+    gender: '',
+    birthdate: '',
+    nationality: '',
     businessName: '',
     contactPerson: '',
+    businessType: '',
+    businessRegistration: '',
+    businessAddress: ''
+  });
+
+  const [adminForm, setAdminForm] = useState({
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    firstName: '',
+    lastName: '',
     phone: '',
-    address: ''
+    gender: '',
+    birthdate: '',
+    nationality: '',
+    department: '',
+    adminLevel: ''
   });
 
   const handleTabChange = (event, newValue) => {
@@ -83,7 +106,6 @@ const Signup = () => {
       ...prev,
       [field]: event.target.value
     }));
-    setError('');
   };
 
   const handleOwnerChange = (field) => (event) => {
@@ -91,15 +113,28 @@ const Signup = () => {
       ...prev,
       [field]: event.target.value
     }));
-    setError('');
+  };
+
+  const handleAdminChange = (field) => (event) => {
+    setAdminForm(prev => ({
+      ...prev,
+      [field]: event.target.value
+    }));
   };
 
   const validateForm = () => {
-    const currentForm = activeTab === 0 ? tenantForm : ownerForm;
+    let currentForm, requiredFields;
     
-    const requiredFields = activeTab === 0 
-      ? ['username', 'email', 'password', 'confirmPassword', 'firstName', 'lastName']
-      : ['username', 'email', 'password', 'confirmPassword', 'businessName', 'contactPerson'];
+    if (activeTab === 0) {
+      currentForm = tenantForm;
+      requiredFields = ['username', 'email', 'password', 'confirmPassword', 'firstName', 'lastName'];
+    } else if (activeTab === 1) {
+      currentForm = ownerForm;
+      requiredFields = ['username', 'email', 'password', 'confirmPassword', 'firstName', 'lastName', 'businessName', 'contactPerson'];
+    } else {
+      currentForm = adminForm;
+      requiredFields = ['username', 'email', 'password', 'confirmPassword', 'firstName', 'lastName', 'department'];
+    }
     
     for (const field of requiredFields) {
       if (!currentForm[field] || currentForm[field].trim() === '') {
@@ -138,24 +173,56 @@ const Signup = () => {
     setError('');
 
     try {
-      const currentForm = activeTab === 0 ? tenantForm : ownerForm;
-      const userRole = activeTab === 0 ? 'user' : 'propertyowner';
+      let currentForm, userRole, profileData;
+      
+      if (activeTab === 0) {
+        currentForm = tenantForm;
+        userRole = 'user';
+        profileData = {
+          first_name: currentForm.firstName,
+          last_name: currentForm.lastName,
+          phone: currentForm.phone,
+          gender: currentForm.gender,
+          birthdate: currentForm.birthdate,
+          nationality: currentForm.nationality
+        };
+      } else if (activeTab === 1) {
+        currentForm = ownerForm;
+        userRole = 'propertyowner';
+        profileData = {
+          first_name: currentForm.firstName,
+          last_name: currentForm.lastName,
+          phone: currentForm.phone,
+          gender: currentForm.gender,
+          birthdate: currentForm.birthdate,
+          nationality: currentForm.nationality,
+          business_name: currentForm.businessName,
+          contact_person: currentForm.contactPerson,
+          business_type: currentForm.businessType,
+          business_registration: currentForm.businessRegistration,
+          business_address: currentForm.businessAddress
+        };
+      } else {
+        currentForm = adminForm;
+        userRole = 'admin';
+        profileData = {
+          first_name: currentForm.firstName,
+          last_name: currentForm.lastName,
+          phone: currentForm.phone,
+          gender: currentForm.gender,
+          birthdate: currentForm.birthdate,
+          nationality: currentForm.nationality,
+          department: currentForm.department,
+          admin_level: currentForm.adminLevel
+        };
+      }
       
       const userData = {
         username: currentForm.username,
         email: currentForm.email,
         password: currentForm.password,
         role: userRole,
-        profile: activeTab === 0 ? {
-          first_name: currentForm.firstName,
-          last_name: currentForm.lastName,
-          phone: currentForm.phone
-        } : {
-          business_name: currentForm.businessName,
-          contact_person: currentForm.contactPerson,
-          phone: currentForm.phone,
-          business_address: currentForm.address
-        }
+        profile: profileData
       };
 
       const response = await registerUser(userData);
@@ -177,85 +244,108 @@ const Signup = () => {
   };
 
   return (
-    <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Card sx={{ 
-        boxShadow: 4, 
-        borderRadius: 3,
-        background: theme.cardBackground || '#ffffff'
-      }}>
-        <CardContent sx={{ p: 0 }}>
-          <Box sx={{ textAlign: 'center', py: 3, px: 3 }}>
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', color: theme.primary }}>
-              Create Your Account
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Join StayWise and start your journey
-            </Typography>
-          </Box>
+    <Container 
+      maxWidth="sm" 
+      sx={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center',
+        py: 4
+      }}
+    >
+      <Box 
+        sx={{ 
+          width: '100%',
+          backgroundColor: theme.cardBackground,
+          borderRadius: 4,
+          boxShadow: theme.boxShadow,
+          border: `1px solid ${theme.borderColor}`,
+          overflow: 'hidden'
+        }}
+      >
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', color: theme.textPrimary, mb: 1 }}>
+            Join StayWise.lk
+          </Typography>
+          <Typography variant="body1" sx={{ color: theme.textSecondary, mb: 3 }}>
+            Create your account to get started
+          </Typography>
+        </Box>
 
-          {error && (
-            <Alert severity="error" sx={{ mx: 3, mb: 2 }}>
-              {error}
-            </Alert>
-          )}
+        {error && (
+          <Alert severity="error" sx={{ m: 3 }}>
+            {error}
+          </Alert>
+        )}
 
-          {success && (
-            <Alert severity="success" sx={{ mx: 3, mb: 2 }}>
-              {success}
-            </Alert>
-          )}
+        {success && (
+          <Alert severity="success" sx={{ m: 3 }}>
+            {success}
+          </Alert>
+        )}
 
+        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs 
             value={activeTab} 
             onChange={handleTabChange} 
-            sx={{ 
-              borderBottom: 1, 
-              borderColor: 'divider',
+            variant="fullWidth"
+            sx={{
               '& .MuiTab-root': {
-                textTransform: 'none',
-                fontSize: '1rem',
-                fontWeight: 600,
+                color: theme.textSecondary,
+                '&.Mui-selected': {
+                  color: theme.primary,
+                }
               }
             }}
           >
             <Tab 
-              icon={<PersonIcon />} 
-              label="I'm looking for a place" 
+              label="User/Tenant" 
               {...a11yProps(0)}
               sx={{ flex: 1 }}
             />
             <Tab 
-              icon={<HomeIcon />} 
-              label="I want to list my property" 
+              label="Property Owner" 
               {...a11yProps(1)}
               sx={{ flex: 1 }}
             />
+            <Tab 
+              label="Admin" 
+              {...a11yProps(2)}
+              sx={{ flex: 1 }}
+            />
           </Tabs>
+        </Box>
 
-          <TabPanel value={activeTab} index={0}>
-            <Box component="form" onSubmit={handleSubmit}>
-              <TextField
-                label="Username"
-                variant="outlined"
-                fullWidth
-                required
-                margin="normal"
-                value={tenantForm.username}
-                onChange={handleTenantChange('username')}
-              />
-              
-              <TextField
-                label="Email Address"
-                variant="outlined"
-                type="email"
-                fullWidth
-                required
-                margin="normal"
-                value={tenantForm.email}
-                onChange={handleTenantChange('email')}
-              />
-              
-              <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+        <TabPanel value={activeTab} index={0}>
+          <Box component="form" onSubmit={handleSubmit}>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Personal Information
+            </Typography>
+            
+            <TextField
+              label="Username"
+              variant="outlined"
+              fullWidth
+              required
+              margin="normal"
+              value={tenantForm.username}
+              onChange={handleTenantChange('username')}
+            />
+            
+            <TextField
+              label="Email Address"
+              variant="outlined"
+              type="email"
+              fullWidth
+              required
+              margin="normal"
+              value={tenantForm.email}
+              onChange={handleTenantChange('email')}
+            />
+            
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
                 <TextField
                   label="First Name"
                   variant="outlined"
@@ -264,7 +354,9 @@ const Signup = () => {
                   value={tenantForm.firstName}
                   onChange={handleTenantChange('firstName')}
                 />
-                
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
                 <TextField
                   label="Last Name"
                   variant="outlined"
@@ -273,196 +365,556 @@ const Signup = () => {
                   value={tenantForm.lastName}
                   onChange={handleTenantChange('lastName')}
                 />
-              </Box>
-              
-              <TextField
-                label="Phone Number"
-                variant="outlined"
-                fullWidth
-                margin="normal"
-                value={tenantForm.phone}
-                onChange={handleTenantChange('phone')}
-                helperText="Optional - helps property owners contact you"
-              />
-              
-              <TextField
-                label="Password"
-                variant="outlined"
-                type="password"
-                fullWidth
-                required
-                margin="normal"
-                value={tenantForm.password}
-                onChange={handleTenantChange('password')}
-                helperText="Minimum 6 characters"
-              />
-              
-              <TextField
-                label="Confirm Password"
-                variant="outlined"
-                type="password"
-                fullWidth
-                required
-                margin="normal"
-                value={tenantForm.confirmPassword}
-                onChange={handleTenantChange('confirmPassword')}
-              />
-              
-              <Button 
-                type="submit" 
-                variant="contained" 
-                fullWidth
-                disabled={isLoading}
-                sx={{ 
-                  mt: 3, 
-                  mb: 2, 
-                  backgroundColor: theme.primary,
-                  '&:hover': {
-                    backgroundColor: theme.secondary
-                  },
-                  height: 48
-                }}
-              >
-                {isLoading ? (
-                  <CircularProgress size={24} color="inherit" />
-                ) : (
-                  'Create Tenant Account'
-                )}
-              </Button>
-            </Box>
-          </TabPanel>
+              </Grid>
+            </Grid>
+            
+            <TextField
+              label="Phone Number"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              value={tenantForm.phone}
+              onChange={handleTenantChange('phone')}
+              helperText="Optional - helps property owners contact you"
+            />
 
-          <TabPanel value={activeTab} index={1}>
-            <Box component="form" onSubmit={handleSubmit}>
-              <TextField
-                label="Username"
-                variant="outlined"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.username}
-                onChange={handleOwnerChange('username')}
-              />
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Gender</InputLabel>
+                  <Select
+                    value={tenantForm.gender}
+                    label="Gender"
+                    onChange={handleTenantChange('gender')}
+                  >
+                    <MenuItem value="">Select Gender</MenuItem>
+                    <MenuItem value="male">Male</MenuItem>
+                    <MenuItem value="female">Female</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                    <MenuItem value="prefer_not_to_say">Prefer not to say</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
               
-              <TextField
-                label="Email Address"
-                variant="outlined"
-                type="email"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.email}
-                onChange={handleOwnerChange('email')}
-              />
-              
-              <TextField
-                label="Business Name"
-                variant="outlined"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.businessName}
-                onChange={handleOwnerChange('businessName')}
-                helperText="Name of your property business or company"
-              />
-              
-              <TextField
-                label="Contact Person"
-                variant="outlined"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.contactPerson}
-                onChange={handleOwnerChange('contactPerson')}
-                helperText="Primary contact person name"
-              />
-              
-              <TextField
-                label="Phone Number"
-                variant="outlined"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.phone}
-                onChange={handleOwnerChange('phone')}
-                helperText="Business contact number"
-              />
-              
-              <TextField
-                label="Business Address"
-                variant="outlined"
-                fullWidth
-                margin="normal"
-                value={ownerForm.address}
-                onChange={handleOwnerChange('address')}
-                helperText="Optional - your main business address"
-              />
-              
-              <TextField
-                label="Password"
-                variant="outlined"
-                type="password"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.password}
-                onChange={handleOwnerChange('password')}
-                helperText="Minimum 6 characters"
-              />
-              
-              <TextField
-                label="Confirm Password"
-                variant="outlined"
-                type="password"
-                fullWidth
-                required
-                margin="normal"
-                value={ownerForm.confirmPassword}
-                onChange={handleOwnerChange('confirmPassword')}
-              />
-              
-              <Button 
-                type="submit" 
-                variant="contained" 
-                fullWidth
-                disabled={isLoading}
-                sx={{ 
-                  mt: 3, 
-                  mb: 2, 
-                  backgroundColor: theme.primary,
-                  '&:hover': {
-                    backgroundColor: theme.secondary
-                  },
-                  height: 48
-                }}
-              >
-                {isLoading ? (
-                  <CircularProgress size={24} color="inherit" />
-                ) : (
-                  'Create Property Owner Account'
-                )}
-              </Button>
-            </Box>
-          </TabPanel>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Birth Date"
+                  type="date"
+                  fullWidth
+                  value={tenantForm.birthdate}
+                  onChange={handleTenantChange('birthdate')}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+              </Grid>
+            </Grid>
 
-          <Box sx={{ textAlign: 'center', mt: 2 }}>
-            <Typography variant="body2" sx={{ color: theme.text }}>
-              Already have an account?{' '}
-              <Button
-                variant="text"
-                onClick={() => navigate('/login')}
-                sx={{ 
-                  textTransform: 'none',
-                  color: theme.primary,
-                  fontWeight: 'bold'
-                }}
-              >
-                Log In
-              </Button>
+            <TextField
+              label="Nationality"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              value={tenantForm.nationality}
+              onChange={handleTenantChange('nationality')}
+              helperText="Optional - e.g., Sri Lankan"
+            />
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Account Security
             </Typography>
+            
+            <TextField
+              label="Password"
+              variant="outlined"
+              type="password"
+              fullWidth
+              required
+              margin="normal"
+              value={tenantForm.password}
+              onChange={handleTenantChange('password')}
+              helperText="Minimum 6 characters"
+            />
+            
+            <TextField
+              label="Confirm Password"
+              variant="outlined"
+              type="password"
+              fullWidth
+              required
+              margin="normal"
+              value={tenantForm.confirmPassword}
+              onChange={handleTenantChange('confirmPassword')}
+            />
+            
+            <Button 
+              type="submit" 
+              variant="contained" 
+              fullWidth
+              disabled={isLoading}
+              sx={{ 
+                mt: 3, 
+                mb: 2, 
+                backgroundColor: theme.primary,
+                '&:hover': {
+                  backgroundColor: theme.secondary
+                },
+                height: 48
+              }}
+            >
+              {isLoading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                'Create Tenant Account'
+              )}
+            </Button>
           </Box>
-        </CardContent>
-      </Card>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={1}>
+          <Box component="form" onSubmit={handleSubmit}>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Account Information
+            </Typography>
+            
+            <TextField
+              label="Username"
+              variant="outlined"
+              fullWidth
+              required
+              margin="normal"
+              value={ownerForm.username}
+              onChange={handleOwnerChange('username')}
+            />
+            
+            <TextField
+              label="Email Address"
+              variant="outlined"
+              type="email"
+              fullWidth
+              required
+              margin="normal"
+              value={ownerForm.email}
+              onChange={handleOwnerChange('email')}
+            />
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Personal Information
+            </Typography>
+
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="First Name"
+                  variant="outlined"
+                  fullWidth
+                  required
+                  value={ownerForm.firstName}
+                  onChange={handleOwnerChange('firstName')}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Last Name"
+                  variant="outlined"
+                  fullWidth
+                  required
+                  value={ownerForm.lastName}
+                  onChange={handleOwnerChange('lastName')}
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              label="Phone Number"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              value={ownerForm.phone}
+              onChange={handleOwnerChange('phone')}
+              helperText="Optional - Business contact number"
+            />
+
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Gender</InputLabel>
+                  <Select
+                    value={ownerForm.gender}
+                    label="Gender"
+                    onChange={handleOwnerChange('gender')}
+                  >
+                    <MenuItem value="">Select Gender</MenuItem>
+                    <MenuItem value="male">Male</MenuItem>
+                    <MenuItem value="female">Female</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                    <MenuItem value="prefer_not_to_say">Prefer not to say</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Birth Date"
+                  type="date"
+                  fullWidth
+                  value={ownerForm.birthdate}
+                  onChange={handleOwnerChange('birthdate')}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              label="Nationality"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              value={ownerForm.nationality}
+              onChange={handleOwnerChange('nationality')}
+              helperText="Optional - e.g., Sri Lankan"
+            />
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Business Information
+            </Typography>
+            
+            <TextField
+              label="Business Name"
+              variant="outlined"
+              fullWidth
+              required
+              margin="normal"
+              value={ownerForm.businessName}
+              onChange={handleOwnerChange('businessName')}
+              helperText="Name of your property business or company"
+            />
+            
+            <TextField
+              label="Contact Person"
+              variant="outlined"
+              fullWidth
+              required
+              margin="normal"
+              value={ownerForm.contactPerson}
+              onChange={handleOwnerChange('contactPerson')}
+              helperText="Primary contact person name"
+            />
+            
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Business Type"
+                  variant="outlined"
+                  fullWidth
+                  value={ownerForm.businessType}
+                  onChange={handleOwnerChange('businessType')}
+                  helperText="e.g., Real Estate"
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Business Registration"
+                  variant="outlined"
+                  fullWidth
+                  value={ownerForm.businessRegistration}
+                  onChange={handleOwnerChange('businessRegistration')}
+                  helperText="Registration number (optional)"
+                />
+              </Grid>
+            </Grid>
+            
+            <TextField
+              label="Business Address"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              multiline
+              rows={2}
+              value={ownerForm.businessAddress}
+              onChange={handleOwnerChange('businessAddress')}
+              helperText="Optional - your main business address"
+            />
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Account Security
+            </Typography>
+            
+            <TextField
+              label="Password"
+              variant="outlined"
+              type="password"
+              fullWidth
+              required
+              margin="normal"
+              value={ownerForm.password}
+              onChange={handleOwnerChange('password')}
+              helperText="Minimum 6 characters"
+            />
+            
+            <TextField
+              label="Confirm Password"
+              variant="outlined"
+              type="password"
+              fullWidth
+              required
+              margin="normal"
+              value={ownerForm.confirmPassword}
+              onChange={handleOwnerChange('confirmPassword')}
+            />
+            
+            <Button 
+              type="submit" 
+              variant="contained" 
+              fullWidth
+              disabled={isLoading}
+              sx={{ 
+                mt: 3, 
+                mb: 2, 
+                backgroundColor: theme.primary,
+                '&:hover': {
+                  backgroundColor: theme.secondary
+                },
+                height: 48
+              }}
+            >
+              {isLoading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                'Create Property Owner Account'
+              )}
+            </Button>
+          </Box>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={2}>
+          <Box component="form" onSubmit={handleSubmit}>
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Account Information
+            </Typography>
+            
+            <TextField
+              label="Username"
+              variant="outlined"
+              fullWidth
+              required
+              margin="normal"
+              value={adminForm.username}
+              onChange={handleAdminChange('username')}
+            />
+            
+            <TextField
+              label="Email Address"
+              variant="outlined"
+              type="email"
+              fullWidth
+              required
+              margin="normal"
+              value={adminForm.email}
+              onChange={handleAdminChange('email')}
+            />
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Personal Information
+            </Typography>
+
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="First Name"
+                  variant="outlined"
+                  fullWidth
+                  required
+                  value={adminForm.firstName}
+                  onChange={handleAdminChange('firstName')}
+                />
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Last Name"
+                  variant="outlined"
+                  fullWidth
+                  required
+                  value={adminForm.lastName}
+                  onChange={handleAdminChange('lastName')}
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              label="Phone Number"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              value={adminForm.phone}
+              onChange={handleAdminChange('phone')}
+              helperText="Optional - Contact number"
+            />
+
+            <Grid container spacing={2} sx={{ mt: 1 }}>
+              <Grid item xs={12} sm={6}>
+                <FormControl fullWidth>
+                  <InputLabel>Gender</InputLabel>
+                  <Select
+                    value={adminForm.gender}
+                    label="Gender"
+                    onChange={handleAdminChange('gender')}
+                  >
+                    <MenuItem value="">Select Gender</MenuItem>
+                    <MenuItem value="male">Male</MenuItem>
+                    <MenuItem value="female">Female</MenuItem>
+                    <MenuItem value="other">Other</MenuItem>
+                    <MenuItem value="prefer_not_to_say">Prefer not to say</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  label="Birth Date"
+                  type="date"
+                  fullWidth
+                  value={adminForm.birthdate}
+                  onChange={handleAdminChange('birthdate')}
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+              </Grid>
+            </Grid>
+
+            <TextField
+              label="Nationality"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              value={adminForm.nationality}
+              onChange={handleAdminChange('nationality')}
+              helperText="Optional - e.g., Sri Lankan"
+            />
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Admin Information
+            </Typography>
+            
+            <TextField
+              label="Department"
+              variant="outlined"
+              fullWidth
+              required
+              margin="normal"
+              value={adminForm.department}
+              onChange={handleAdminChange('department')}
+              helperText="e.g., IT, HR, Operations"
+            />
+            
+            <FormControl fullWidth margin="normal">
+              <InputLabel>Admin Level</InputLabel>
+              <Select
+                value={adminForm.adminLevel}
+                label="Admin Level"
+                onChange={handleAdminChange('adminLevel')}
+              >
+                <MenuItem value="">Select Level</MenuItem>
+                <MenuItem value="junior">Junior</MenuItem>
+                <MenuItem value="senior">Senior</MenuItem>
+                <MenuItem value="manager">Manager</MenuItem>
+                <MenuItem value="director">Director</MenuItem>
+              </Select>
+            </FormControl>
+
+            <Divider sx={{ my: 3 }} />
+
+            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+              Account Security
+            </Typography>
+            
+            <TextField
+              label="Password"
+              variant="outlined"
+              type="password"
+              fullWidth
+              required
+              margin="normal"
+              value={adminForm.password}
+              onChange={handleAdminChange('password')}
+              helperText="Minimum 6 characters"
+            />
+            
+            <TextField
+              label="Confirm Password"
+              variant="outlined"
+              type="password"
+              fullWidth
+              required
+              margin="normal"
+              value={adminForm.confirmPassword}
+              onChange={handleAdminChange('confirmPassword')}
+            />
+            
+            <Button 
+              type="submit" 
+              variant="contained" 
+              fullWidth
+              disabled={isLoading}
+              sx={{ 
+                mt: 3, 
+                mb: 2, 
+                backgroundColor: theme.primary,
+                '&:hover': {
+                  backgroundColor: theme.secondary
+                },
+                height: 48
+              }}
+            >
+              {isLoading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                'Create Admin Account'
+              )}
+            </Button>
+          </Box>
+        </TabPanel>
+
+        <Box sx={{ textAlign: 'center', mt: 2, pb: 4 }}>
+          <Typography variant="body2" sx={{ color: theme.text }}>
+            Already have an account?{' '}
+            <Button 
+              variant="text" 
+              onClick={() => navigate('/login')}
+              sx={{ 
+                color: theme.primary,
+                textTransform: 'none',
+                p: 0,
+                minWidth: 'auto',
+                '&:hover': {
+                  backgroundColor: 'transparent',
+                  color: theme.secondary
+                }
+              }}
+            >
+              Sign in here
+            </Button>
+          </Typography>
+        </Box>
+      </Box>
     </Container>
   );
 };

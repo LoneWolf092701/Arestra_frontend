@@ -6,106 +6,49 @@ import {
   Grid,
   Card,
   CardContent,
-  CardActions,
   CardMedia,
-  Button,
-  TextField,
+  CardActions,
   Box,
+  Button,
   Chip,
+  CircularProgress,
+  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
+  TextField,
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  Paper,
+  Divider,
+  IconButton,
+  Skeleton
 } from '@mui/material';
 import {
-  Visibility as VisibilityIcon,
-  RemoveCircle as RemoveCircleIcon,
-  Search as SearchIcon,
+  Visibility as ViewIcon,
+  Delete as DeleteIcon,
   FilterList as FilterListIcon,
-  LocationOn as LocationOnIcon,
-  Bed as BedIcon,
-  Bathtub as BathtubIcon,
-  Star as StarIcon,
-  ViewInAr as ViewsIcon
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  LocationOn as LocationIcon,
+  AttachMoney as PriceIcon,
+  CheckCircle as ApprovedIcon,
+  Pending as PendingIcon,
+  Cancel as RejectedIcon,
+  Person as PersonIcon
 } from '@mui/icons-material';
-
 import { getAllPropertiesAdmin, deletePropertyAdmin } from '../../api/adminAPI';
+import Pagination from '../../components/common/Pagination';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import Room from '../../assets/images/Room.jpg';
 
-const safeParse = (jsonString, fallback = []) => {
-  try {
-    if (typeof jsonString === 'string') {
-      return JSON.parse(jsonString);
-    }
-    return Array.isArray(jsonString) ? jsonString : fallback;
-  } catch (error) {
-    console.warn('Error parsing JSON:', error);
-    return fallback;
-  }
-};
-
-const RemovePropertyDialog = ({ open, onClose, property, onConfirm }) => {
-  const [reason, setReason] = useState('');
-
-  const handleConfirm = () => {
-    if (reason.trim() && property) {
-      onConfirm(property.id, reason.trim());
-      setReason('');
-      onClose();
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Remove Property</DialogTitle>
-      <DialogContent>
-        <Typography variant="body1" sx={{ mb: 2 }}>
-          Are you sure you want to remove this property? This action cannot be undone.
-        </Typography>
-        {property && (
-          <Box sx={{ mb: 2, p: 2, backgroundColor: 'grey.100', borderRadius: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-              {property.property_type} - {property.unit_type}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {property.address}
-            </Typography>
-          </Box>
-        )}
-        <TextField
-          fullWidth
-          multiline
-          rows={3}
-          label="Reason for removal"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          placeholder="Please provide a reason for removing this property..."
-          required
-        />
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-        <Button 
-          onClick={handleConfirm} 
-          color="error" 
-          variant="contained"
-          disabled={!reason.trim()}
-        >
-          Remove Property
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
-};
-
 const AdminAllProperties = () => {
+  const navigate = useNavigate();
+  
   const [properties, setProperties] = useState([]);
-  const [filteredProperties, setFilteredProperties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [propertyTypeFilter, setPropertyTypeFilter] = useState('');
@@ -116,62 +59,97 @@ const AdminAllProperties = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [stats, setStats] = useState({});
   
-  const navigate = useNavigate();
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
+  const [paginationData, setPaginationData] = useState({
+    total: 0,
+    totalPages: 0,
+    page: 1,
+    limit: 12,
+    hasNext: false,
+    hasPrevious: false
+  });
 
-  const uniquePropertyTypes = React.useMemo(() => {
-    if (!Array.isArray(properties)) return [];
-    const types = properties.map(property => property.property_type).filter(Boolean);
-    return [...new Set(types)].sort();
-  }, [properties]);
+  const safeJsonParse = (str, fallback = null) => {
+    if (!str) return fallback;
+    if (typeof str === 'object') return str;
+    if (typeof str !== 'string') return fallback;
+    
+    try {
+      const parsed = JSON.parse(str);
+      return parsed !== null ? parsed : fallback;
+    } catch (error) {
+      console.warn('JSON parse error:', error);
+      return fallback;
+    }
+  };
 
-  useEffect(() => {
-    fetchAllProperties();
-  }, []);
+  const extractPaginationData = (response) => {
+    if (response?.pagination) {
+      return {
+        total: response.pagination.total_items || response.pagination.total || 0,
+        totalPages: response.pagination.total_pages || response.pagination.totalPages || 0,
+        page: response.pagination.current_page || response.pagination.page || 1,
+        limit: response.pagination.items_per_page || response.pagination.limit || 12,
+        hasNext: response.pagination.has_next || response.pagination.hasNext || false,
+        hasPrevious: response.pagination.has_prev || response.pagination.hasPrevious || false
+      };
+    }
+    
+    const properties = response?.properties || [];
+    return {
+      total: properties.length,
+      totalPages: 1,
+      page: 1,
+      limit: 12,
+      hasNext: false,
+      hasPrevious: false
+    };
+  };
 
-  useEffect(() => {
-    if (!Array.isArray(properties)) {
-      setFilteredProperties([]);
-      return;
+  const getImageUrl = (images) => {
+    const parsedImages = safeJsonParse(images, []);
+    
+    if (!Array.isArray(parsedImages) || parsedImages.length === 0) {
+      return Room;
     }
 
-    let filtered = [...properties];
-
-    if (searchTerm) {
-      filtered = filtered.filter(property =>
-        property.property_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        property.unit_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        property.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        property.owner_info?.username?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+    const firstImage = parsedImages[0];
+    
+    if (typeof firstImage === 'string' && firstImage.trim()) {
+      return firstImage.trim();
     }
-
-    if (propertyTypeFilter) {
-      filtered = filtered.filter(property => property.property_type === propertyTypeFilter);
+    
+    if (typeof firstImage === 'object' && firstImage !== null && firstImage.url) {
+      if (typeof firstImage.url === 'string' && firstImage.url.trim()) {
+        return firstImage.url.trim();
+      }
     }
+    
+    return Room;
+  };
 
-    if (approvalStatusFilter && approvalStatusFilter !== 'all') {
-      filtered = filtered.filter(property => property.approval_status === approvalStatusFilter);
-    }
-
-    setFilteredProperties(filtered);
-  }, [properties, searchTerm, propertyTypeFilter, approvalStatusFilter]);
-
-  const fetchAllProperties = async () => {
+  const fetchAllProperties = async (page = 1) => {
     setLoading(true);
     try {
       const response = await getAllPropertiesAdmin({
-        page: 1,
-        limit: 100,
+        page: page,
+        limit: itemsPerPage,
         status: 'all',
-        approval_status: 'all'
+        approval_status: approvalStatusFilter !== 'all' ? approvalStatusFilter : '',
+        search: searchTerm.trim(),
+        sort_by: 'created_at',
+        sort_order: 'DESC'
       });
       
-      // Ensure we extract the properties array from the response
       const propertiesData = response?.properties || [];
       const statsData = response?.stats || {};
+      const pagination = extractPaginationData(response);
       
       setProperties(Array.isArray(propertiesData) ? propertiesData : []);
       setStats(statsData);
+      setPaginationData(pagination);
+      setCurrentPage(page);
     } catch (error) {
       console.error('Error fetching properties:', error);
       setSnackbarMessage('Error fetching properties');
@@ -182,14 +160,59 @@ const AdminAllProperties = () => {
     }
   };
 
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchAllProperties(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+    fetchAllProperties(1);
+  };
+
+  const handleSearch = () => {
+    setCurrentPage(1);
+    fetchAllProperties(1);
+  };
+
+  const handleFilterChange = () => {
+    setCurrentPage(1);
+    fetchAllProperties(1);
+  };
+
+  useEffect(() => {
+    fetchAllProperties(currentPage);
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchTerm !== '') {
+        handleSearch();
+      }
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    handleFilterChange();
+  }, [approvalStatusFilter]);
+
   const handleRemoveProperty = async (propertyId, reason) => {
     try {
       await deletePropertyAdmin(propertyId, reason);
       setSnackbarMessage('Property removed successfully');
       setSnackbarOpen(true);
       
-      // Remove from local state
-      setProperties(prev => Array.isArray(prev) ? prev.filter(p => p.id !== propertyId) : []);
+      if (properties.length === 1 && currentPage > 1) {
+        const newPage = currentPage - 1;
+        setCurrentPage(newPage);
+        fetchAllProperties(newPage);
+      } else {
+        fetchAllProperties(currentPage);
+      }
     } catch (error) {
       console.error('Error removing property:', error);
       setSnackbarMessage('Error removing property');
@@ -215,6 +238,43 @@ const AdminAllProperties = () => {
     }
   };
 
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'approved': return <ApprovedIcon />;
+      case 'pending': return <PendingIcon />;
+      case 'rejected': return <RejectedIcon />;
+      default: return null;
+    }
+  };
+
+  const formatPrice = (price) => {
+    return `LKR ${parseInt(price || 0).toLocaleString()}`;
+  };
+
+  if (loading && currentPage === 1) {
+    return (
+      <Container sx={{ mt: 4 }}>
+        <Typography variant="h4" gutterBottom>
+          All Properties Management
+        </Typography>
+        <Grid container spacing={3}>
+          {[1, 2, 3, 4].map((item) => (
+            <Grid item xs={12} sm={6} md={4} lg={3} key={item}>
+              <Card>
+                <Skeleton variant="rectangular" height={200} />
+                <CardContent>
+                  <Skeleton variant="text" height={30} />
+                  <Skeleton variant="text" height={20} />
+                  <Skeleton variant="text" height={20} width="60%" />
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+      </Container>
+    );
+  }
+
   return (
     <Container sx={{ mt: 4 }}>
       <Typography variant="h4" gutterBottom>
@@ -225,216 +285,202 @@ const AdminAllProperties = () => {
         Manage all properties in the system. You can view details, approve/reject, and remove properties.
       </Typography>
 
-      {/* Stats Summary */}
       {stats && Object.keys(stats).length > 0 && (
-        <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={6} sm={3}>
-            <Card sx={{ textAlign: 'center', p: 2 }}>
-              <Typography variant="h4" color="primary">{stats.total || 0}</Typography>
-              <Typography variant="body2">Total</Typography>
-            </Card>
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            Property Statistics
+          </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={6} md={3}>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography variant="h4" color="primary">
+                  {stats.total || 0}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Total Properties
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography variant="h4" color="warning.main">
+                  {stats.pending || 0}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Pending Approval
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography variant="h4" color="success.main">
+                  {stats.approved || 0}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Approved
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Box sx={{ textAlign: 'center' }}>
+                <Typography variant="h4" color="error.main">
+                  {stats.rejected || 0}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Rejected
+                </Typography>
+              </Box>
+            </Grid>
           </Grid>
-          <Grid item xs={6} sm={3}>
-            <Card sx={{ textAlign: 'center', p: 2 }}>
-              <Typography variant="h4" color="warning.main">{stats.pending || 0}</Typography>
-              <Typography variant="body2">Pending</Typography>
-            </Card>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Card sx={{ textAlign: 'center', p: 2 }}>
-              <Typography variant="h4" color="success.main">{stats.approved || 0}</Typography>
-              <Typography variant="body2">Approved</Typography>
-            </Card>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Card sx={{ textAlign: 'center', p: 2 }}>
-              <Typography variant="h4" color="error.main">{stats.rejected || 0}</Typography>
-              <Typography variant="body2">Rejected</Typography>
-            </Card>
-          </Grid>
-        </Grid>
+        </Paper>
       )}
 
-      {/* Filters */}
-      <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-        <TextField
-          label="Search properties"
-          variant="outlined"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Search by type, location, address, or owner..."
-          InputProps={{
-            startAdornment: <SearchIcon sx={{ mr: 1, color: 'action.active' }} />
-          }}
-          sx={{ flexGrow: 1, minWidth: 250 }}
-        />
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center' }}>
+          <FilterListIcon sx={{ mr: 1 }} />
+          Filters
+        </Typography>
+        
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={4}>
+            <TextField
+              fullWidth
+              label="Search Properties"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search by address, type, or owner"
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />
+              }}
+            />
+          </Grid>
+          
+          <Grid item xs={12} md={3}>
+            <FormControl fullWidth>
+              <InputLabel>Approval Status</InputLabel>
+              <Select
+                value={approvalStatusFilter}
+                onChange={(e) => setApprovalStatusFilter(e.target.value)}
+                label="Approval Status"
+              >
+                <MenuItem value="all">All Status</MenuItem>
+                <MenuItem value="pending">Pending</MenuItem>
+                <MenuItem value="approved">Approved</MenuItem>
+                <MenuItem value="rejected">Rejected</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+          
+          <Grid item xs={12} md={3}>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={() => fetchAllProperties(currentPage)}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+          </Grid>
+        </Grid>
+      </Paper>
 
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel>Property Type</InputLabel>
-          <Select
-            value={propertyTypeFilter}
-            onChange={(e) => setPropertyTypeFilter(e.target.value)}
-            label="Property Type"
-          >
-            <MenuItem value="">All Types</MenuItem>
-            {uniquePropertyTypes.map(type => (
-              <MenuItem key={type} value={type}>{type}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel>Status</InputLabel>
-          <Select
-            value={approvalStatusFilter}
-            onChange={(e) => setApprovalStatusFilter(e.target.value)}
-            label="Status"
-          >
-            <MenuItem value="all">All Status</MenuItem>
-            <MenuItem value="pending">Pending</MenuItem>
-            <MenuItem value="approved">Approved</MenuItem>
-            <MenuItem value="rejected">Rejected</MenuItem>
-          </Select>
-        </FormControl>
-
-        {(searchTerm || propertyTypeFilter || approvalStatusFilter !== 'all') && (
-          <Button 
-            variant="outlined" 
-            onClick={() => {
-              setSearchTerm('');
-              setPropertyTypeFilter('');
-              setApprovalStatusFilter('all');
-            }}
-          >
-            Clear Filters
-          </Button>
-        )}
+      <Box sx={{ mb: 2 }}>
+        <Typography variant="h6">
+          Showing {paginationData.total} Properties
+        </Typography>
       </Box>
 
-      <Typography variant="h6" sx={{ mb: 3 }}>
-        {Array.isArray(filteredProperties) ? filteredProperties.length : 0} Properties
-        {(searchTerm || propertyTypeFilter || approvalStatusFilter !== 'all') && 
-          ` (filtered from ${Array.isArray(properties) ? properties.length : 0} total)`}
-      </Typography>
-
-      {loading ? (
-        <Typography variant="body1" sx={{ textAlign: 'center', mt: 4 }}>
-          Loading properties...
-        </Typography>
-      ) : !Array.isArray(filteredProperties) || filteredProperties.length === 0 ? (
-        <Box sx={{ textAlign: 'center', mt: 6 }}>
-          <Typography variant="h6" color="text.secondary">
-            {!Array.isArray(properties) || properties.length === 0 ? 'No properties found' : 'No properties match your filters'}
+      {properties.length === 0 && !loading ? (
+        <Box sx={{ textAlign: 'center', py: 8 }}>
+          <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+            No properties found
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            {!Array.isArray(properties) || properties.length === 0 
-              ? 'Properties will appear here when they are created' 
-              : 'Try adjusting your search or filter criteria'}
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            No properties match your current filters.
           </Typography>
         </Box>
       ) : (
-        <Grid container spacing={3}>
-          {filteredProperties.map((property) => {
-            const amenities = safeParse(property.amenities);
-            const facilities = safeParse(property.facilities);
-            const images = safeParse(property.images);
-            const primaryImage = images && images.length > 0 ? 
-              (typeof images[0] === 'string' ? images[0] : images[0]?.url || Room) : Room;
-
-            return (
-              <Grid item xs={12} sm={6} md={4} key={property.id}>
-                <Card sx={{ 
-                  height: '100%', 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  transition: 'transform 0.2s ease-in-out',
-                  '&:hover': {
-                    transform: 'translateY(-4px)',
-                    boxShadow: 3
-                  }
-                }}>
+        <>
+          <Grid container spacing={3}>
+            {properties.map((property) => (
+              <Grid item xs={12} sm={6} md={4} lg={3} key={property.id}>
+                <Card
+                  sx={{
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 6,
+                    },
+                  }}
+                >
                   <CardMedia
                     component="img"
-                    height="180"
-                    image={primaryImage}
-                    alt={property.property_type}
-                    sx={{ objectFit: 'cover' }}
+                    height="200"
+                    image={getImageUrl(property.images)}
+                    alt={`${property.property_type} - ${property.unit_type}`}
+                    sx={{
+                      objectFit: 'cover',
+                      backgroundColor: 'grey.200'
+                    }}
                   />
                   
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                      <Typography variant="h6" component="h3">
+                  <CardContent sx={{ flexGrow: 1, p: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                      <Typography variant="h6" component="h3" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
                         {property.property_type}
                       </Typography>
-                      <Chip 
-                        label={property.approval_status || 'Unknown'} 
+                      <Chip
+                        icon={getStatusIcon(property.approval_status)}
+                        label={property.approval_status?.charAt(0).toUpperCase() + property.approval_status?.slice(1)}
                         color={getStatusColor(property.approval_status)}
-                        size="small" 
+                        size="small"
                       />
                     </Box>
-
-                    <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+                    
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       {property.unit_type}
                     </Typography>
-
+                    
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                      <LocationOnIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-                      <Typography variant="body2" color="text.secondary" noWrap>
-                        {property.address}
+                      <PersonIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                        Owner: {property.owner_info?.username || 'Unknown'}
                       </Typography>
                     </Box>
-
-                    <Typography variant="h6" color="primary" sx={{ mb: 2 }}>
-                      LKR {parseInt(property.price || 0).toLocaleString()}
-                    </Typography>
-
-                    {property.owner_info && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                        Owner: {property.owner_info.username}
+                    
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                      <LocationIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                        {property.address?.length > 40 ? `${property.address.substring(0, 40)}...` : property.address}
                       </Typography>
-                    )}
-
-                    <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
-                      <Box display="flex" alignItems="center">
-                        <BedIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                        <Typography variant="body2">
-                          {property.bedrooms || 0}
-                        </Typography>
-                      </Box>
-                      <Box display="flex" alignItems="center">
-                        <BathtubIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                        <Typography variant="body2">
-                          {property.bathrooms || 0}
-                        </Typography>
-                      </Box>
-                      <Box display="flex" alignItems="center">
-                        <ViewsIcon sx={{ fontSize: 16, mr: 0.5 }} />
-                        <Typography variant="body2">
-                          {property.views_count || 0}
-                        </Typography>
-                      </Box>
                     </Box>
-
-                    <Box display="flex" alignItems="center">
-                      <Typography variant="body2">
-                        {amenities?.length || 0} amenities
+                    
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                      <PriceIcon sx={{ fontSize: 16, color: 'primary.main', mr: 0.5 }} />
+                      <Typography variant="h6" sx={{ color: 'primary.main', fontWeight: 'bold', fontSize: '1rem' }}>
+                        {formatPrice(property.price)} / month
                       </Typography>
                     </Box>
                   </CardContent>
                   
-                  <CardActions>
-                    <Button 
-                      size="small" 
-                      color="primary" 
-                      startIcon={<VisibilityIcon />}
+                  <CardActions sx={{ p: 2, pt: 0 }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      startIcon={<ViewIcon />}
                       onClick={() => handleViewProperty(property.id)}
+                      sx={{ mr: 1 }}
                     >
-                      View
+                      View Details
                     </Button>
-                    <Button 
-                      size="small" 
-                      color="error" 
-                      startIcon={<RemoveCircleIcon />}
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="error"
+                      startIcon={<DeleteIcon />}
                       onClick={() => handleRemoveClick(property)}
                     >
                       Remove
@@ -442,22 +488,80 @@ const AdminAllProperties = () => {
                   </CardActions>
                 </Card>
               </Grid>
-            );
-          })}
-        </Grid>
+            ))}
+          </Grid>
+
+          <Pagination
+            currentPage={paginationData.page}
+            totalPages={paginationData.totalPages}
+            totalItems={paginationData.total}
+            itemsPerPage={itemsPerPage}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+            disabled={loading}
+            itemsPerPageOptions={[12, 24, 36]}
+            showInfo={true}
+            showFirstLast={true}
+          />
+        </>
       )}
 
-      <RemovePropertyDialog
+      <Dialog
         open={removeDialogOpen}
         onClose={() => setRemoveDialogOpen(false)}
-        property={selectedProperty}
-        onConfirm={handleRemoveProperty}
-      />
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Remove Property</DialogTitle>
+        <DialogContent>
+          {selectedProperty && (
+            <Box>
+              <Typography variant="body1" gutterBottom>
+                Are you sure you want to remove this property from the system?
+              </Typography>
+              
+              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+                <Typography variant="subtitle2">
+                  {selectedProperty.property_type} - {selectedProperty.unit_type}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {selectedProperty.address}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Owner: {selectedProperty.owner_info?.username}
+                </Typography>
+              </Box>
+              
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                This action cannot be undone. The property will be permanently removed from the system.
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRemoveDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={() => {
+              if (selectedProperty) {
+                handleRemoveProperty(selectedProperty.id, 'Removed by admin');
+                setRemoveDialogOpen(false);
+                setSelectedProperty(null);
+              }
+            }}
+            color="error"
+            variant="contained"
+          >
+            Remove Property
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <AppSnackbar
         open={snackbarOpen}
         message={snackbarMessage}
-        autoHideDuration={4000}
+        severity="info"
         onClose={() => setSnackbarOpen(false)}
       />
     </Container>

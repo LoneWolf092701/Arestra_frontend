@@ -23,7 +23,8 @@ export const calculateBookingPricing = ({
   monthlyRent,
   checkInDate,
   checkOutDate,
-  serviceFee = 300
+  serviceFee = 300,
+  advancePercentage = 30
 }) => {
   const duration = calculateBookingDuration(checkInDate, checkOutDate);
   
@@ -34,6 +35,8 @@ export const calculateBookingPricing = ({
       serviceFee,
       subtotal: 0,
       total: serviceFee,
+      advanceAmount: 0,
+      remainingAmount: serviceFee,
       breakdown: {
         fullMonths: 0,
         partialMonthCharge: 0,
@@ -42,6 +45,7 @@ export const calculateBookingPricing = ({
       }
     };
   }
+  
   
   const totalDays = duration.totalDays;
   let totalCharge = 0;
@@ -97,6 +101,8 @@ export const calculateBookingPricing = ({
   
   const subtotal = totalCharge;
   const total = subtotal + serviceFee;
+  const advanceAmount = (subtotal * advancePercentage) / 100;
+  const remainingAmount = total - advanceAmount;
   
   return {
     duration,
@@ -104,6 +110,9 @@ export const calculateBookingPricing = ({
     serviceFee,
     subtotal,
     total,
+    advanceAmount,
+    remainingAmount,
+    advancePercentage,
     breakdown: {
       fullMonths,
       partialMonthCharge,

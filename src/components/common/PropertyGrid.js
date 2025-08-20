@@ -1,112 +1,64 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Grid,
   Card,
   CardMedia,
   CardContent,
   Typography,
-  Button,
   Box,
-  IconButton,
   Chip,
-  Rating,
-  Alert,
-  CircularProgress,
+  IconButton,
+  Button,
   Container,
-  Tooltip
+  CircularProgress
 } from '@mui/material';
 import {
-  Edit as EditIcon,
-  Visibility as VisibilityIcon,
-  BookOnline as BookingIcon,
   LocationOn as LocationIcon,
+  AttachMoney as PriceIcon,
   Bed as BedIcon,
   Bathtub as BathtubIcon,
-  AttachMoney as PriceIcon,
-  Favorite as FavoriteIcon,
-  FavoriteBorder as FavoriteBorderIcon,
-  Home as HomeIcon
+  Visibility as ViewIcon,
+  Edit as EditIcon,
+  Home as HomeIcon,
+  FavoriteBorder as FavoriteIcon,
+  Share as ShareIcon
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
-import { getMyProperties } from '../../api/propertyApi';
+import { getUserRole } from '../../utils/auth';
 import Room from '../../assets/images/Room.jpg';
 
 const PropertyGrid = ({ 
   properties = [], 
   loading = false,
-  showActions = true,
+  isLoading = false,
+  myProperties = false,
   showMyProperties = false,
-  variant = 'standard',
   onViewProperty,
   onEditProperty,
-  showSummary = false,
-  emptyStateMessage = 'No properties found',
-  emptyStateSubtitle = '',
-  limit
+  limit,
+  variant = 'default',
+  emptyStateMessage = 'No properties available',
+  emptyStateSubtitle
 }) => {
   const navigate = useNavigate();
   const { theme, isDark } = useTheme();
-  const userRole = localStorage.getItem('userRole');
-  const [myProperties, setMyProperties] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const userRole = getUserRole();
   const [imageErrors, setImageErrors] = useState(new Set());
 
-  useEffect(() => {
-    if (showMyProperties) {
-      fetchMyProperties();
-    }
-  }, [showMyProperties]);
-
-  const fetchMyProperties = async () => {
-    try {
-      setIsLoading(true);
-      const response = await getMyProperties();
-      if (response && response.properties) {
-        setMyProperties(response.properties);
-      }
-    } catch (error) {
-      console.error('Error fetching my properties:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const normalizeProperties = (props) => {
-    if (!Array.isArray(props)) {
-      console.warn('Properties is not an array:', props);
-      return [];
-    }
+  const safeJsonParse = (str, fallback = null) => {
+    if (!str) return fallback;
+    if (typeof str === 'object') return str;
+    if (typeof str !== 'string') return fallback;
     
-    return props.map(property => ({
-      id: property.id,
-      property_type: property.property_type,
-      unit_type: property.unit_type,
-      address: property.address,
-      price: property.price,
-      amenities: property.amenities,
-      facilities: property.facilities,
-      images: property.images,
-      description: property.description,
-      available_from: property.available_from,
-      available_to: property.available_to,
-      bedrooms: property.bedrooms,
-      bathrooms: property.bathrooms,
-      views_count: property.views_count || 0,
-      approval_status: property.approval_status,
-      is_active: property.is_active,
-      created_at: property.created_at,
-      user_id: property.user_id
-    }));
+    try {
+      const parsed = JSON.parse(str);
+      return parsed !== null ? parsed : fallback;
+    } catch (error) {
+      return fallback;
+    }
   };
 
-  const displayProperties = showMyProperties ? 
-    normalizeProperties(myProperties) : 
-    normalizeProperties(properties);
-
-  const limitedProperties = limit ? displayProperties.slice(0, limit) : displayProperties;
-
-  // Enhanced image URL resolver to handle API response format
   const getImageUrl = (images, propertyId) => {
     const imageKey = `property_${propertyId}`;
     
@@ -114,33 +66,18 @@ const PropertyGrid = ({
       return Room;
     }
 
-    // Handle different image data structures from API
-    let imageArray = [];
+    const parsedImages = safeJsonParse(images, []);
     
-    if (Array.isArray(images)) {
-      imageArray = images;
-    } else if (typeof images === 'string') {
-      try {
-        imageArray = JSON.parse(images);
-      } catch {
-        return Room;
-      }
-    } else {
-      return Room;
-    }
-    
-    if (!Array.isArray(imageArray) || imageArray.length === 0) {
+    if (!Array.isArray(parsedImages) || parsedImages.length === 0) {
       return Room;
     }
 
-    const firstImage = imageArray[0];
+    const firstImage = parsedImages[0];
     
-    // Handle string URLs
     if (typeof firstImage === 'string' && firstImage.trim()) {
       return firstImage.trim();
     }
     
-    // Handle object with URL property (API format)
     if (typeof firstImage === 'object' && firstImage?.url && typeof firstImage.url === 'string') {
       return firstImage.url.trim();
     }
@@ -148,20 +85,9 @@ const PropertyGrid = ({
     return Room;
   };
 
-  // Handle image loading errors
   const handleImageError = (propertyId) => {
     const imageKey = `property_${propertyId}`;
     setImageErrors(prev => new Set([...prev, imageKey]));
-  };
-
-  const safeJsonParse = (str) => {
-    if (!str) return null;
-    if (typeof str === 'object') return str;
-    try {
-      return JSON.parse(str);
-    } catch {
-      return null;
-    }
   };
 
   const formatPrice = (price) => {
@@ -174,12 +100,39 @@ const PropertyGrid = ({
     return address.length > 60 ? `${address.substring(0, 60)}...` : address;
   };
 
-  const handleView = (propertyId) => {
+  const normalizeProperties = (props) => {
+    if (!Array.isArray(props)) return [];
+    
+    return props.map(property => ({
+      ...property,
+      amenities: safeJsonParse(property.amenities, []),
+      facilities: safeJsonParse(property.facilities, {}),
+      images: safeJsonParse(property.images, [])
+    }));
+  };
+
+  const deduplicateProperties = (props) => {
+    if (!Array.isArray(props)) return [];
+    
+    const seen = new Set();
+    return props.filter(property => {
+      if (!property?.id || seen.has(property.id)) {
+        return false;
+      }
+      seen.add(property.id);
+      return true;
+    });
+  };
+
+  const handleView = (property) => {
     if (onViewProperty) {
-      onViewProperty(propertyId);
+      onViewProperty(property);
     } else {
-      // Always navigate to view-property page for better UX
-      navigate(`/view-property/${propertyId}`);
+      if (userRole === 'propertyowner' && myProperties) {
+        navigate(`/view-property/${property.id}`);
+      } else {
+        navigate(`/property/${property.id}`);
+      }
     }
   };
 
@@ -195,6 +148,13 @@ const PropertyGrid = ({
     navigate(`/user-booking/${propertyId}`);
   };
 
+  const displayProperties = myProperties ? 
+    normalizeProperties(properties) : 
+    normalizeProperties(properties);
+
+  const deduplicatedProperties = deduplicateProperties(displayProperties);
+  const limitedProperties = limit ? deduplicatedProperties.slice(0, limit) : deduplicatedProperties;
+
   if (loading || isLoading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
@@ -206,7 +166,7 @@ const PropertyGrid = ({
     );
   }
 
-  if (!displayProperties || displayProperties.length === 0) {
+  if (!limitedProperties || limitedProperties.length === 0) {
     return (
       <Box sx={{ 
         textAlign: 'center', 
@@ -214,88 +174,199 @@ const PropertyGrid = ({
         backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
         borderRadius: 3,
         border: `2px dashed ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+        minHeight: 200,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center'
       }}>
-        <HomeIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
-        <Typography variant="h5" sx={{ color: 'text.secondary', mb: 1, fontWeight: 500 }}>
+        <HomeIcon sx={{ 
+          fontSize: 80, 
+          color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
+          mb: 2 
+        }} />
+        <Typography 
+          variant="h6" 
+          sx={{ 
+            color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(0,0,0,0.7)',
+            mb: 1,
+            fontWeight: 600
+          }}
+        >
           {emptyStateMessage}
         </Typography>
         {emptyStateSubtitle && (
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+              maxWidth: 400
+            }}
+          >
             {emptyStateSubtitle}
           </Typography>
-        )}
-        {showMyProperties && userRole === 'propertyowner' && (
-          <Button 
-            variant="contained" 
-            color="primary"
-            onClick={() => navigate('/add-property')}
-            sx={{ mt: 2 }}
-          >
-            Add Your First Property
-          </Button>
         )}
       </Box>
     );
   }
 
   return (
-    <Box>
+    <Box sx={{ flexGrow: 1 }}>
       <Grid container spacing={3}>
-        {limitedProperties.map((property) => {
-          const amenities = safeJsonParse(property.amenities);
-          const facilities = safeJsonParse(property.facilities);
-          
-          const primaryImage = getImageUrl(property.images, property.id);
-          const bedroomCount = facilities?.Bedroom || facilities?.Bedrooms || property.bedrooms || 0;
-          const bathroomCount = facilities?.Bathroom || facilities?.Bathrooms || property.bathrooms || 0;
+        {limitedProperties.map((property, index) => {
+          if (!property || !property.id) {
+            return null;
+          }
+
+          const amenities = safeJsonParse(property.amenities, []);
+          const displayAmenities = Array.isArray(amenities) ? amenities.slice(0, 3) : [];
 
           return (
-            <Grid item xs={12} sm={6} md={4} lg={variant === 'compact' ? 2 : 3} key={property.id}>
-              <Card
+            <Grid item xs={12} sm={6} md={4} lg={3} key={`${property.id}-${index}`}>
+              <Card 
                 sx={{
                   height: '100%',
                   display: 'flex',
                   flexDirection: 'column',
-                  borderRadius: 3,
-                  boxShadow: `0 4px 20px ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.15)'}`,
-                  transition: 'all 0.3s ease',
                   cursor: 'pointer',
+                  transition: 'all 0.3s ease',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.cardBackground,
+                  borderRadius: 3,
+                  overflow: 'hidden',
+                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
                   '&:hover': {
                     transform: 'translateY(-8px)',
-                    boxShadow: `0 8px 30px ${isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.25)'}`,
-                  },
-                  border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+                    boxShadow: isDark 
+                      ? '0 12px 40px rgba(255,255,255,0.1)' 
+                      : '0 12px 40px rgba(0,0,0,0.15)',
+                    '& .property-image': {
+                      transform: 'scale(1.05)',
+                    }
+                  }
                 }}
-                onClick={() => handleView(property.id)}
+                onClick={() => handleView(property)}
               >
-                <CardMedia
-                  component="img"
-                  height="200"
-                  image={primaryImage}
-                  alt={`${property.property_type} - ${property.unit_type}`}
-                  onError={() => handleImageError(property.id)}
-                  sx={{ 
-                    objectFit: 'cover',
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'
-                  }}
-                />
+                <Box sx={{ position: 'relative', overflow: 'hidden' }}>
+                  <CardMedia
+                    component="img"
+                    height="200"
+                    image={getImageUrl(property.images, property.id)}
+                    alt={`${property.property_type} - ${property.unit_type}`}
+                    className="property-image"
+                    onError={() => handleImageError(property.id)}
+                    sx={{
+                      transition: 'transform 0.3s ease',
+                      objectFit: 'cover'
+                    }}
+                  />
+                  
+                  <Box sx={{ 
+                    position: 'absolute',
+                    top: 12,
+                    left: 12,
+                    zIndex: 2
+                  }}>
+                    <Chip
+                      label={property.unit_type || 'Room'}
+                      size="small"
+                      sx={{
+                        backgroundColor: theme.primary,
+                        color: 'white',
+                        fontWeight: 600,
+                        fontSize: '0.75rem'
+                      }}
+                    />
+                  </Box>
+
+                  <Box sx={{ 
+                    position: 'absolute',
+                    top: 12,
+                    right: 12,
+                    zIndex: 2,
+                    backgroundColor: isDark ? 
+                      'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)',
+                    borderRadius: 2,
+                    padding: '4px 8px',
+                    backdropFilter: 'blur(8px)',
+                    border: `1px solid ${isDark ? 
+                      'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`
+                  }}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <IconButton 
+                        size="small" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleView(property);
+                        }}
+                        sx={{ 
+                          color: theme.primary,
+                          '&:hover': { backgroundColor: theme.primary + '20' }
+                        }}
+                      >
+                        <ViewIcon fontSize="small" />
+                      </IconButton>
+                      
+                      {userRole === 'propertyowner' && myProperties && (
+                        <IconButton 
+                          size="small" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(property.id);
+                          }}
+                          sx={{ 
+                            color: theme.secondary,
+                            '&:hover': { backgroundColor: theme.secondary + '20' }
+                          }}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      )}
+
+                      {userRole === 'user' && !myProperties && (
+                        <>
+                          <IconButton 
+                            size="small"
+                            sx={{ 
+                              color: theme.textSecondary,
+                              '&:hover': { color: theme.primary }
+                            }}
+                          >
+                            <FavoriteIcon fontSize="small" />
+                          </IconButton>
+                          <IconButton 
+                            size="small"
+                            sx={{ 
+                              color: theme.textSecondary,
+                              '&:hover': { color: theme.primary }
+                            }}
+                          >
+                            <ShareIcon fontSize="small" />
+                          </IconButton>
+                        </>
+                      )}
+                    </Box>
+                  </Box>
+                </Box>
 
                 <CardContent sx={{ 
                   flexGrow: 1, 
                   display: 'flex', 
                   flexDirection: 'column',
-                  p: 2.5,
-                  backgroundColor: theme.surfaceBackground,
+                  p: 2.5
                 }}>
                   <Typography 
                     variant="h6" 
                     component="h3" 
-                    gutterBottom 
                     sx={{ 
-                      fontWeight: 600,
-                      color: theme.textPrimary,
                       fontSize: '1.1rem',
-                      lineHeight: 1.3
+                      fontWeight: 700,
+                      color: isDark ? 'white' : theme.textPrimary,
+                      mb: 1,
+                      lineHeight: 1.3,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden'
                     }}
                   >
                     {property.property_type} - {property.unit_type}
@@ -303,22 +374,22 @@ const PropertyGrid = ({
 
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 2 }}>
                     <LocationIcon sx={{ 
-                      fontSize: 18, 
+                      fontSize: 16, 
                       color: theme.textSecondary, 
-                      mr: 0.5, 
-                      mt: 0.1,
-                      flexShrink: 0 
+                      mr: 0.5,
+                      mt: 0.2,
+                      flexShrink: 0
                     }} />
                     <Typography 
                       variant="body2" 
-                      color="text.secondary"
                       sx={{ 
+                        color: theme.textSecondary,
+                        fontSize: '0.875rem',
                         lineHeight: 1.4,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
                       }}
                     >
                       {getTruncatedAddress(property.address)}
@@ -326,90 +397,149 @@ const PropertyGrid = ({
                   </Box>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                    <PriceIcon sx={{ fontSize: 18, color: theme.primary, mr: 0.5 }} />
+                    <PriceIcon sx={{ 
+                      fontSize: 18, 
+                      color: theme.primary, 
+                      mr: 0.5 
+                    }} />
                     <Typography 
                       variant="h6" 
                       sx={{ 
-                        fontWeight: 700, 
                         color: theme.primary,
-                        fontSize: '1.25rem'
+                        fontWeight: 700,
+                        fontSize: '1.1rem'
                       }}
                     >
                       {formatPrice(property.price)}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        color: theme.textSecondary,
+                        ml: 0.5,
+                        fontSize: '0.85rem'
+                      }}
+                    >
                       /month
                     </Typography>
                   </Box>
 
-                  <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <BedIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-                      <Typography variant="caption" color="text.secondary">
-                        {bedroomCount} Bed
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      <BathtubIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-                      <Typography variant="caption" color="text.secondary">
-                        {bathroomCount} Bath
-                      </Typography>
-                    </Box>
-                  </Box>
-
-                  {showActions && (
-                    <Box sx={{ 
-                      display: 'flex', 
-                      gap: 1, 
-                      mt: 'auto',
-                      pt: 1,
-                      borderTop: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`
-                    }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<VisibilityIcon />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleView(property.id);
-                        }}
-                        sx={{ flex: 1 }}
-                      >
-                        View
-                      </Button>
-                      
-                      {showMyProperties && userRole === 'propertyowner' && (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<EditIcon />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEdit(property.id);
-                          }}
-                          sx={{ flex: 1 }}
-                        >
-                          Edit
-                        </Button>
+                  {(property.bedrooms || property.bathrooms) && (
+                    <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                      {property.bedrooms && (
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <BedIcon sx={{ 
+                            fontSize: 16, 
+                            color: theme.textSecondary, 
+                            mr: 0.5 
+                          }} />
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: theme.textSecondary,
+                              fontSize: '0.8rem'
+                            }}
+                          >
+                            {property.bedrooms} bed{property.bedrooms > 1 ? 's' : ''}
+                          </Typography>
+                        </Box>
                       )}
-                      
-                      {!showMyProperties && userRole === 'user' && (
-                        <Button
-                          size="small"
-                          variant="contained"
-                          startIcon={<BookingIcon />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleBook(property.id);
-                          }}
-                          color="primary"
-                          sx={{ flex: 1 }}
-                        >
-                          Book
-                        </Button>
+                      {property.bathrooms && (
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                          <BathtubIcon sx={{ 
+                            fontSize: 16, 
+                            color: theme.textSecondary, 
+                            mr: 0.5 
+                          }} />
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: theme.textSecondary,
+                              fontSize: '0.8rem'
+                            }}
+                          >
+                            {property.bathrooms} bath{property.bathrooms > 1 ? 's' : ''}
+                          </Typography>
+                        </Box>
                       )}
                     </Box>
                   )}
+
+                  {displayAmenities.length > 0 && (
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexWrap: 'wrap', 
+                      gap: 0.5, 
+                      mb: 2,
+                      mt: 'auto'
+                    }}>
+                      {displayAmenities.map((amenity, amenityIndex) => (
+                        <Chip
+                          key={amenityIndex}
+                          label={amenity}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            fontSize: '0.7rem',
+                            height: 24,
+                            borderColor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
+                            color: isDark ? 'rgba(255,255,255,0.8)' : theme.textSecondary,
+                            '&:hover': {
+                              borderColor: theme.primary,
+                              color: theme.primary
+                            }
+                          }}
+                        />
+                      ))}
+                      {amenities.length > 3 && (
+                        <Chip
+                          label={`+${amenities.length - 3} more`}
+                          size="small"
+                          variant="outlined"
+                          sx={{
+                            fontSize: '0.7rem',
+                            height: 24,
+                            borderColor: theme.primary,
+                            color: theme.primary
+                          }}
+                        />
+                      )}
+                    </Box>
+                  )}
+
+                  <Box sx={{ 
+                    mt: 'auto',
+                    pt: 1,
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    {userRole === 'user' && !myProperties && (
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleBook(property.id);
+                        }}
+                        sx={{
+                          backgroundColor: theme.primary,
+                          color: 'white',
+                          px: 2,
+                          py: 0.5,
+                          borderRadius: 2,
+                          textTransform: 'none',
+                          fontWeight: 600,
+                          fontSize: '0.8rem',
+                          '&:hover': {
+                            backgroundColor: theme.secondary,
+                          },
+                        }}
+                      >
+                        Book Now
+                      </Button>
+                    )}
+                  </Box>
                 </CardContent>
               </Card>
             </Grid>

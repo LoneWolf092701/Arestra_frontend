@@ -58,15 +58,22 @@ export const removeFromFavorites = async (propertyId) => {
 /**
  * Check if property is favorited by current user
  * @param {number} propertyId - The property ID to check
- * @returns {Promise<boolean>} Whether the property is favorited
+ * @returns {Promise} Full API response with status code handling
  */
 export const checkFavoriteStatus = async (propertyId) => {
   try {
     const response = await apiClient.get(`/user-interactions/favorite/${propertyId}`);
-    return response.data.is_favorited;
+    // Return full response for 304 handling
+    if (response.status === 304 || response.status === 200) {
+      return {
+        status: response.status,
+        data: response.data || { is_favorited: false, isFavorite: false }
+      };
+    }
+    return response.data || { is_favorited: false, isFavorite: false };
   } catch (error) {
     console.error('Error checking favorite status:', error);
-    return false;
+    return { is_favorited: false, isFavorite: false };
   }
 };
 
@@ -80,7 +87,7 @@ export const submitPropertyRating = async (propertyId, ratingData) => {
   try {
     const response = await apiClient.post('/user-interactions/rating', {
       property_id: propertyId,
-      rating_score: ratingData.rating_score,
+      rating_score: ratingData.rating || ratingData.rating_score,
       rating_comment: ratingData.rating_comment || null
     });
     return response.data;
@@ -93,12 +100,19 @@ export const submitPropertyRating = async (propertyId, ratingData) => {
 /**
  * Get user's rating for a specific property
  * @param {number} propertyId - The property ID
- * @returns {Promise} User's rating data or null if not rated
+ * @returns {Promise} Full API response with status code handling
  */
 export const getUserPropertyRating = async (propertyId) => {
   try {
     const response = await apiClient.get(`/user-interactions/rating/${propertyId}`);
-    return response.data;
+    // Return full response for 304 handling
+    if (response.status === 304 || response.status === 200) {
+      return {
+        status: response.status,
+        data: response.data || { has_rated: false, rating: null }
+      };
+    }
+    return response.data || { has_rated: false, rating: null };
   } catch (error) {
     console.error('Error fetching user rating:', error);
     return { has_rated: false, rating: null };
@@ -108,12 +122,35 @@ export const getUserPropertyRating = async (propertyId) => {
 /**
  * Get overall property rating information
  * @param {number} propertyId - The property ID
- * @returns {Promise} Property rating statistics
+ * @returns {Promise} Full API response with status code handling
  */
 export const getPropertyRating = async (propertyId) => {
   try {
     const response = await apiClient.get(`/user-interactions/property-rating/${propertyId}`);
-    return response.data;
+    // Return full response for 304 handling
+    if (response.status === 304 || response.status === 200) {
+      return {
+        status: response.status,
+        data: response.data || { 
+          property_id: propertyId,
+          total_ratings: 0,
+          average_rating: 0,
+          rating_distribution: {},
+          recent_ratings: [],
+          user_rating: null,
+          has_rated: false
+        }
+      };
+    }
+    return response.data || { 
+      property_id: propertyId,
+      total_ratings: 0,
+      average_rating: 0,
+      rating_distribution: {},
+      recent_ratings: [],
+      user_rating: null,
+      has_rated: false
+    };
   } catch (error) {
     console.error('Error fetching property rating:', error);
     throw new Error(error.response?.data?.message || 'Failed to fetch property rating');
@@ -136,12 +173,32 @@ export const getPropertyStatistics = async (propertyId) => {
 };
 
 /**
- * Submit a complaint about a property
+ * Submit a report about a property
  * @param {number} propertyId - The property ID
- * @param {Object} complaintData - Complaint data containing category and description
+ * @param {Object} reportData - Report data containing reason and description
  * @returns {Promise} API response
  */
-export const submitReport = async (propertyId, complaintData) => {
+export const submitReport = async (propertyId, reportData) => {
+  try {
+    const response = await apiClient.post('/user-interactions/complaint', {
+      property_id: propertyId,
+      category: reportData.reason,
+      description: reportData.description
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error submitting report:', error);
+    throw new Error(error.response?.data?.message || 'Failed to submit report');
+  }
+};
+
+/**
+ * Submit a complaint about a property
+ * @param {number} propertyId - The property ID
+ * @param {Object} complaintData - Complaint data
+ * @returns {Promise} API response
+ */
+export const submitComplaint = async (propertyId, complaintData) => {
   try {
     const response = await apiClient.post('/user-interactions/complaint', {
       property_id: propertyId,
@@ -156,19 +213,9 @@ export const submitReport = async (propertyId, complaintData) => {
 };
 
 /**
- * Submit a property complaint (alias for submitReport)
- * @param {number} propertyId - The property ID
- * @param {Object} complaintData - Complaint data
- * @returns {Promise} API response
- */
-export const submitComplaint = async (propertyId, complaintData) => {
-  return submitReport(propertyId, complaintData);
-};
-
-/**
  * Get user's favorite properties
- * @param {Object} options - Pagination options (page, limit)
- * @returns {Promise} User's favorite properties with pagination
+ * @param {Object} options - Query options (page, limit)
+ * @returns {Promise} User's favorite properties
  */
 export const getUserFavorites = async (options = {}) => {
   try {
@@ -182,9 +229,9 @@ export const getUserFavorites = async (options = {}) => {
 };
 
 /**
- * Get user's favorite properties (alias for getUserFavorites)
- * @param {Object} options - Pagination options
- * @returns {Promise} Favorite properties
+ * Get user's favourite properties (alias for getUserFavorites)
+ * @param {Object} options - Query options (page, limit)
+ * @returns {Promise} User's favourite properties
  */
 export const getFavouriteProperties = async (options = {}) => {
   return getUserFavorites(options);

@@ -41,6 +41,7 @@ import PendingIcon from '@mui/icons-material/Pending';
 import { getAllPublicProperties } from '../../api/propertyApi';
 import { getPropertyRating, checkFavoriteStatus, recordPropertyView } from '../../api/userInteractionApi';
 import PropertyGrid from '../../components/common/PropertyGrid';
+import Pagination from '../../components/common/Pagination';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -51,24 +52,30 @@ const UserAllProperties = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
-  const [totalResults, setTotalResults] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page')) || 1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
+  const [paginationData, setPaginationData] = useState({
+    total: 0,
+    totalPages: 0,
+    page: 1,
+    limit: 12,
+    hasNext: false,
+    hasPrevious: false
+  });
 
   const [filters, setFilters] = useState({
-    property_type: '',
-    unit_type: '',
-    min_price: '',
-    max_price: '',
-    bedrooms: '',
-    bathrooms: '',
-    amenities: [],
-    facilities: [],
-    location: '',
-    available_from: '',
-    available_to: '',
-    sort: 'created_at_desc'
+    property_type: searchParams.get('property_type') || '',
+    unit_type: searchParams.get('unit_type') || '',
+    min_price: searchParams.get('min_price') || '',
+    max_price: searchParams.get('max_price') || '',
+    bedrooms: searchParams.get('bedrooms') || '',
+    bathrooms: searchParams.get('bathrooms') || '',
+    amenities: searchParams.get('amenities')?.split(',').filter(Boolean) || [],
+    facilities: searchParams.get('facilities')?.split(',').filter(Boolean) || [],
+    location: searchParams.get('location') || '',
+    available_from: searchParams.get('available_from') || '',
+    available_to: searchParams.get('available_to') || '',
+    sort: searchParams.get('sort') || 'created_at_desc'
   });
 
   const [activeFiltersCount, setActiveFiltersCount] = useState(0);
@@ -104,46 +111,55 @@ const UserAllProperties = () => {
     { value: 'relevance', label: 'Most Relevant' }
   ];
 
-  // Extract and process response data
+  const extractPaginationData = (response) => {
+    if (response?.pagination) {
+      return {
+        total: response.pagination.total || 0,
+        totalPages: response.pagination.totalPages || 0,
+        page: response.pagination.page || 1,
+        limit: response.pagination.limit || 12,
+        hasNext: response.pagination.hasNext || false,
+        hasPrevious: response.pagination.hasPrevious || false
+      };
+    }
+    
+    const properties = response?.properties || [];
+    return {
+      total: properties.length,
+      totalPages: 1,
+      page: 1,
+      limit: 12,
+      hasNext: false,
+      hasPrevious: false
+    };
+  };
+
   const extractProperties = (response) => {
     console.log('Raw API response:', response);
     
-    // Handle different response structures
     let propertyData = [];
-    let totalCount = 0;
     
     if (response) {
-      // Try different property array keys
       propertyData = response.results || 
                    response.properties || 
                    response.data || 
                    (Array.isArray(response) ? response : []);
-      
-      // Try different total count keys
-      totalCount = response.search_metadata?.total_results || 
-                  response.pagination?.total || 
-                  response.total_count || 
-                  response.total ||
-                  (Array.isArray(propertyData) ? propertyData.length : 0);
     }
     
-    // Ensure we have an array
     const properties = Array.isArray(propertyData) ? propertyData : [];
     
     console.log('Extracted properties:', {
       count: properties.length,
-      total: totalCount,
       firstProperty: properties[0] || null
     });
     
-    return { properties, totalCount };
+    return properties;
   };
 
-  // Build search parameters
-  const buildSearchParams = (resetPage = false) => {
+  const buildSearchParams = (page = currentPage) => {
     const params = {
-      page: resetPage ? 1 : currentPage,
-      limit: 12,
+      page: page,
+      limit: itemsPerPage,
       ...filters
     };
 
@@ -159,7 +175,6 @@ const UserAllProperties = () => {
       params.facilities = filters.facilities.join(',');
     }
 
-    // Clean up empty parameters
     Object.keys(params).forEach(key => {
       if (params[key] === '' || params[key] === null || params[key] === undefined) {
         delete params[key];
@@ -169,134 +184,77 @@ const UserAllProperties = () => {
     return params;
   };
 
-  // Fetch properties function
-  const fetchProperties = async (resetResults = false) => {
-    try {
-      if (resetResults) {
-        setLoading(true);
-        setCurrentPage(1);
-        setProperties([]);
-        setError('');
-      } else {
-        setLoadingMore(true);
+  const updateURLParams = useCallback((page = currentPage) => {
+    const params = new URLSearchParams();
+    
+    if (searchQuery.trim()) params.set('search', searchQuery.trim());
+    if (page > 1) params.set('page', page.toString());
+    
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value && value !== '') {
+        if (Array.isArray(value) && value.length > 0) {
+          params.set(key, value.join(','));
+        } else if (!Array.isArray(value)) {
+          params.set(key, value);
+        }
       }
+    });
 
-      const params = buildSearchParams(resetResults);
+    setSearchParams(params);
+  }, [searchQuery, filters, currentPage, setSearchParams]);
+
+  const fetchProperties = async (page = 1) => {
+    try {
+      setLoading(true);
+      setError('');
+
+      const params = buildSearchParams(page);
       console.log('Fetching properties with params:', params);
       
       const response = await getAllPublicProperties(params);
-      const { properties: propertyData, totalCount } = extractProperties(response);
+      const propertyData = extractProperties(response);
+      const pagination = extractPaginationData(response);
 
-      if (resetResults) {
-        setProperties(propertyData);
-        console.log('Set properties (reset):', propertyData.length);
-      } else {
-        setProperties(prev => {
-          const newProperties = [...prev, ...propertyData];
-          console.log('Added properties (append):', propertyData.length, 'Total:', newProperties.length);
-          return newProperties;
-        });
-      }
-
-      setTotalResults(totalCount);
-      setHasMore(propertyData.length === 12);
+      setProperties(propertyData);
+      setPaginationData(pagination);
+      setCurrentPage(page);
+      
+      updateURLParams(page);
 
     } catch (error) {
       console.error('Error fetching properties:', error);
       setError(error.message || 'Failed to load properties. Please try again.');
-      if (resetResults) {
-        setProperties([]);
-      }
+      setProperties([]);
     } finally {
       setLoading(false);
-      setLoadingMore(false);
     }
   };
 
-  // Load data on component mount and when filters change
-  useEffect(() => {
-    const searchTerm = searchParams.get('search');
-    if (searchTerm !== searchQuery) {
-      setSearchQuery(searchTerm || '');
-    }
-    console.log('Initial load triggered');
-    fetchProperties(true);
-  }, [searchParams]);
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchProperties(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-  useEffect(() => {
-    countActiveFilters();
-  }, [filters]);
+  const handleItemsPerPageChange = (newItemsPerPage) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+    fetchProperties(1);
+  };
 
-  // Debug logging for properties state
-  useEffect(() => {
-    console.log('Properties state updated:', {
-      count: properties.length,
-      loading,
-      error,
-      totalResults,
-      hasMore
+  const handleSearch = useCallback(() => {
+    setCurrentPage(1);
+    fetchProperties(1);
+  }, [searchQuery, filters]);
+
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => {
+      const newFilters = { ...prev, [key]: value };
+      return newFilters;
     });
-  }, [properties, loading, error, totalResults, hasMore]);
-
-  // Count active filters
-  const countActiveFilters = () => {
-    let count = 0;
-    if (filters.property_type) count++;
-    if (filters.unit_type) count++;
-    if (filters.min_price) count++;
-    if (filters.max_price) count++;
-    if (filters.bedrooms) count++;
-    if (filters.bathrooms) count++;
-    if (filters.amenities.length > 0) count++;
-    if (filters.facilities.length > 0) count++;
-    if (filters.location) count++;
-    if (filters.available_from) count++;
-    if (filters.available_to) count++;
-    setActiveFiltersCount(count);
-  };
-
-  // Handle search
-  const handleSearch = (event) => {
-    event.preventDefault();
-    console.log('Search triggered:', searchQuery);
-    
-    const newSearchParams = new URLSearchParams(searchParams);
-    
-    if (searchQuery.trim()) {
-      newSearchParams.set('search', searchQuery.trim());
-    } else {
-      newSearchParams.delete('search');
-    }
-    
-    setSearchParams(newSearchParams);
-  };
-
-  // Filter handlers
-  const handleFilterChange = (filterName, value) => {
-    console.log('Filter changed:', filterName, value);
-    setFilters(prev => ({
-      ...prev,
-      [filterName]: value
-    }));
-  };
-
-  const handleArrayFilterToggle = (filterName, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [filterName]: prev[filterName].includes(value)
-        ? prev[filterName].filter(item => item !== value)
-        : [...prev[filterName], value]
-    }));
-  };
-
-  const applyFilters = () => {
-    console.log('Applying filters:', filters);
-    setFilterDrawerOpen(false);
-    fetchProperties(true);
   };
 
   const clearAllFilters = () => {
-    console.log('Clearing all filters');
     setFilters({
       property_type: '',
       unit_type: '',
@@ -312,335 +270,120 @@ const UserAllProperties = () => {
       sort: 'created_at_desc'
     });
     setSearchQuery('');
-    setSearchParams(new URLSearchParams());
-    fetchProperties(true);
+    setCurrentPage(1);
   };
 
-  // Load more properties
-  const loadMoreProperties = () => {
-    if (!loadingMore && hasMore && properties.length > 0) {
-      const nextPage = currentPage + 1;
-      setCurrentPage(nextPage);
-      
-      const params = buildSearchParams(false);
-      params.page = nextPage;
-      
-      console.log('Loading more properties, page:', nextPage);
-      fetchProperties(false);
-    }
-  };
-
-  // Handle property view
-  const handlePropertyView = async (propertyId) => {
+  const handlePropertyView = async (property) => {
     try {
-      await recordPropertyView(propertyId);
+      await recordPropertyView(property.id, {
+        source: 'search_results',
+        duration: null
+      });
     } catch (error) {
       console.error('Error recording property view:', error);
     }
-    navigate(`/user-property-view/${propertyId}`);
+    navigate(`/user-property-view/${property.id}`);
   };
 
-  // Render filter drawer
-  const renderFilterDrawer = () => (
-    <Drawer
-      anchor="right"
-      open={filterDrawerOpen}
-      onClose={() => setFilterDrawerOpen(false)}
-      PaperProps={{
-        sx: { width: { xs: '100%', sm: 400 }, p: 0 }
-      }}
-    >
-      <Box sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Filter Properties
-          </Typography>
-          <IconButton onClick={() => setFilterDrawerOpen(false)}>
-            <CloseIcon />
-          </IconButton>
-        </Box>
+  const countActiveFilters = useMemo(() => {
+    let count = 0;
+    Object.entries(filters).forEach(([key, value]) => {
+      if (key === 'sort') return;
+      if (Array.isArray(value) && value.length > 0) count++;
+      else if (value && value !== '') count++;
+    });
+    if (searchQuery.trim()) count++;
+    return count;
+  }, [filters, searchQuery]);
 
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Property Type</Typography>
-          <FormControl fullWidth size="small">
-            <Select
-              value={filters.property_type}
-              onChange={(e) => handleFilterChange('property_type', e.target.value)}
-              displayEmpty
-            >
-              <MenuItem value="">All Types</MenuItem>
-              {propertyTypes.map(type => (
-                <MenuItem key={type} value={type}>{type}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
+  useEffect(() => {
+    setActiveFiltersCount(countActiveFilters);
+  }, [countActiveFilters]);
 
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Unit Type</Typography>
-          <FormControl fullWidth size="small">
-            <Select
-              value={filters.unit_type}
-              onChange={(e) => handleFilterChange('unit_type', e.target.value)}
-              displayEmpty
-            >
-              <MenuItem value="">All Unit Types</MenuItem>
-              {unitTypes.map(type => (
-                <MenuItem key={type} value={type}>{type}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
+  useEffect(() => {
+    fetchProperties(currentPage);
+  }, []);
 
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Price Range (LKR)</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <TextField
-                size="small"
-                label="Min"
-                type="number"
-                value={filters.min_price}
-                onChange={(e) => handleFilterChange('min_price', e.target.value)}
-                fullWidth
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                size="small"
-                label="Max"
-                type="number"
-                value={filters.max_price}
-                onChange={(e) => handleFilterChange('max_price', e.target.value)}
-                fullWidth
-              />
-            </Grid>
-          </Grid>
-        </Box>
+  const toggleAmenity = (amenity) => {
+    setFilters(prev => ({
+      ...prev,
+      amenities: prev.amenities.includes(amenity)
+        ? prev.amenities.filter(a => a !== amenity)
+        : [...prev.amenities, amenity]
+    }));
+  };
 
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Bedrooms</Typography>
-          <FormControl fullWidth size="small">
-            <Select
-              value={filters.bedrooms}
-              onChange={(e) => handleFilterChange('bedrooms', e.target.value)}
-              displayEmpty
-            >
-              <MenuItem value="">Any</MenuItem>
-              <MenuItem value="1">1+</MenuItem>
-              <MenuItem value="2">2+</MenuItem>
-              <MenuItem value="3">3+</MenuItem>
-              <MenuItem value="4">4+</MenuItem>
-              <MenuItem value="5">5+</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Bathrooms</Typography>
-          <FormControl fullWidth size="small">
-            <Select
-              value={filters.bathrooms}
-              onChange={(e) => handleFilterChange('bathrooms', e.target.value)}
-              displayEmpty
-            >
-              <MenuItem value="">Any</MenuItem>
-              <MenuItem value="1">1+</MenuItem>
-              <MenuItem value="2">2+</MenuItem>
-              <MenuItem value="3">3+</MenuItem>
-              <MenuItem value="4">4+</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Location</Typography>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Enter location"
-            value={filters.location}
-            onChange={(e) => handleFilterChange('location', e.target.value)}
-          />
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Amenities</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {commonAmenities.map(amenity => (
-              <Chip
-                key={amenity}
-                label={amenity}
-                clickable
-                color={filters.amenities.includes(amenity) ? 'primary' : 'default'}
-                onClick={() => handleArrayFilterToggle('amenities', amenity)}
-                size="small"
-              />
-            ))}
-          </Box>
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Facilities</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {commonFacilities.map(facility => (
-              <Chip
-                key={facility}
-                label={facility}
-                clickable
-                color={filters.facilities.includes(facility) ? 'primary' : 'default'}
-                onClick={() => handleArrayFilterToggle('facilities', facility)}
-                size="small"
-              />
-            ))}
-          </Box>
-        </Box>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" gutterBottom>Availability</Typography>
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <TextField
-                size="small"
-                label="Available From"
-                type="date"
-                value={filters.available_from}
-                onChange={(e) => handleFilterChange('available_from', e.target.value)}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                size="small"
-                label="Available To"
-                type="date"
-                value={filters.available_to}
-                onChange={(e) => handleFilterChange('available_to', e.target.value)}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-            </Grid>
-          </Grid>
-        </Box>
-
-        <Divider sx={{ my: 3 }} />
-
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            variant="outlined"
-            onClick={clearAllFilters}
-            fullWidth
-          >
-            Clear All
-          </Button>
-          <Button
-            variant="contained"
-            onClick={applyFilters}
-            fullWidth
-            sx={{ backgroundColor: theme.primary }}
-          >
-            Apply Filters
-          </Button>
-        </Box>
-      </Box>
-    </Drawer>
-  );
-
-  if (loading) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
-        <CircularProgress size={60} />
-        <Typography variant="h6" sx={{ mt: 2 }}>
-          Loading properties...
-        </Typography>
-      </Container>
-    );
-  }
+  const toggleFacility = (facility) => {
+    setFilters(prev => ({
+      ...prev,
+      facilities: prev.facilities.includes(facility)
+        ? prev.facilities.filter(f => f !== facility)
+        : [...prev.facilities, facility]
+    }));
+  };
 
   return (
-    <Box sx={{ backgroundColor: isDark ? theme.background : '#fafafa', minHeight: '100vh' }}>
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Typography
-          variant="h4"
-          sx={{
-            fontWeight: 700,
-            color: theme.textPrimary,
-            mb: 1,
-            textAlign: 'center',
-          }}
-        >
-          Find Your Perfect Stay
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, mb: 1, color: theme.textPrimary }}>
+          Find Your Perfect Property
+        </Typography>
+        <Typography variant="body1" sx={{ color: theme.textSecondary, mb: 3 }}>
+          Discover amazing properties that match your needs
         </Typography>
 
-        <Typography
-          variant="body1"
-          sx={{
-            color: theme.textSecondary,
-            mb: 4,
-            textAlign: 'center',
-            maxWidth: 600,
-            mx: 'auto',
-          }}
-        >
-          Discover thousands of verified properties across Sri Lanka
-        </Typography>
+        <Paper sx={{ p: 3, mb: 3, bgcolor: theme.cardBackground, borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+            <TextField
+              fullWidth
+              placeholder="Search properties by location, type, or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: theme.textSecondary }} />
+                  </InputAdornment>
+                ),
+                sx: { bgcolor: theme.inputBackground }
+              }}
+              sx={{ flex: 1, minWidth: 300 }}
+            />
 
-        {/* Search and Filter Section */}
-        <Paper sx={{ p: 3, mb: 4, borderRadius: 3 }}>
-          <form onSubmit={handleSearch}>
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <TextField
-                fullWidth
-                placeholder="Search by location, property type, or keywords..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon sx={{ color: theme.textSecondary }} />
-                    </InputAdornment>
-                  ),
-                }}
-              />
+            <Button
+              variant="contained"
+              onClick={handleSearch}
+              disabled={loading}
+              sx={{
+                bgcolor: theme.primary,
+                '&:hover': { bgcolor: theme.primaryDark },
+                minWidth: 120
+              }}
+            >
+              Search
+            </Button>
 
-              <Button
-                type="submit"
-                variant="contained"
+            <Badge badgeContent={activeFiltersCount} color="primary">
+              <IconButton
+                onClick={() => setFilterDrawerOpen(true)}
                 sx={{
-                  minWidth: 120,
-                  backgroundColor: theme.primary,
-                  '&:hover': { backgroundColor: theme.secondary },
+                  bgcolor: theme.cardBackground,
+                  border: `1px solid ${theme.borderColor}`,
+                  '&:hover': { bgcolor: theme.hoverBackground }
                 }}
               >
-                Search
-              </Button>
+                <FilterListIcon />
+              </IconButton>
+            </Badge>
 
-              <Badge badgeContent={activeFiltersCount} color="error">
-                <Button
-                  variant="outlined"
-                  startIcon={<FilterListIcon />}
-                  onClick={() => setFilterDrawerOpen(true)}
-                  sx={{
-                    minWidth: 100,
-                    borderColor: theme.primary,
-                    color: theme.primary,
-                  }}
-                >
-                  Filters
-                </Button>
-              </Badge>
-            </Box>
-          </form>
-
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
             <FormControl size="small" sx={{ minWidth: 150 }}>
               <InputLabel>Sort By</InputLabel>
               <Select
                 value={filters.sort}
                 onChange={(e) => {
                   handleFilterChange('sort', e.target.value);
-                  fetchProperties(true);
+                  fetchProperties(1);
                 }}
                 label="Sort By"
               >
@@ -665,33 +408,30 @@ const UserAllProperties = () => {
           </Box>
         </Paper>
 
-        {/* Error Alert */}
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
-            <Button onClick={() => fetchProperties(true)} sx={{ ml: 2 }}>
+            <Button onClick={() => fetchProperties(currentPage)} sx={{ ml: 2 }}>
               Retry
             </Button>
           </Alert>
         )}
 
-        {/* Results Summary */}
         <Box sx={{ mb: 3 }}>
           <Typography variant="h6" sx={{ color: theme.textPrimary }}>
-            {totalResults > 0 
-              ? `${totalResults} ${totalResults === 1 ? 'Property' : 'Properties'} Found` 
+            {paginationData.total > 0 
+              ? `${paginationData.total} ${paginationData.total === 1 ? 'Property' : 'Properties'} Found` 
               : 'No Properties Found'
             }
           </Typography>
         </Box>
 
-        {/* Property Grid or Empty State */}
         {properties && properties.length > 0 ? (
           <>
             <PropertyGrid 
               properties={properties}
               onViewProperty={handlePropertyView}
-              loading={false}
+              loading={loading}
               showActions={true}
               showMyProperties={false}
               variant="public"
@@ -699,53 +439,181 @@ const UserAllProperties = () => {
               emptyStateSubtitle="Try adjusting your search criteria"
             />
 
-            {hasMore && (
-              <Box sx={{ textAlign: 'center', mt: 4 }}>
-                <Button
-                  variant="outlined"
-                  onClick={loadMoreProperties}
-                  disabled={loadingMore}
-                  size="large"
-                  sx={{
-                    minWidth: 200,
-                    borderColor: theme.primary,
-                    color: theme.primary,
-                  }}
-                >
-                  {loadingMore ? (
-                    <>
-                      <CircularProgress size={20} sx={{ mr: 1 }} />
-                      Loading...
-                    </>
-                  ) : 'Load More Properties'}
-                </Button>
-              </Box>
-            )}
+            <Pagination
+              currentPage={paginationData.page}
+              totalPages={paginationData.totalPages}
+              totalItems={paginationData.total}
+              itemsPerPage={itemsPerPage}
+              onPageChange={handlePageChange}
+              onItemsPerPageChange={handleItemsPerPageChange}
+              disabled={loading}
+              itemsPerPageOptions={[12, 24, 36]}
+              showInfo={true}
+              showFirstLast={true}
+            />
           </>
         ) : (
           !loading && (
             <Box sx={{ textAlign: 'center', py: 8 }}>
               <Typography variant="h6" sx={{ color: theme.textSecondary, mb: 2 }}>
-                No properties found matching your criteria
+                No properties found
               </Typography>
-              <Typography variant="body2" sx={{ color: theme.textSecondary, mb: 3 }}>
-                Try adjusting your search terms or filters to see more results
+              <Typography variant="body1" sx={{ color: theme.textSecondary, mb: 3 }}>
+                Try adjusting your search criteria or browse all properties
               </Typography>
               <Button
                 variant="contained"
                 onClick={clearAllFilters}
-                sx={{ backgroundColor: theme.primary }}
+                sx={{
+                  bgcolor: theme.primary,
+                  '&:hover': { bgcolor: theme.primaryDark }
+                }}
               >
-                Clear Filters & Show All
+                Clear All Filters
               </Button>
             </Box>
           )
         )}
 
-        {/* Filter Drawer */}
-        {renderFilterDrawer()}
-      </Container>
-    </Box>
+        {loading && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+            <CircularProgress size={60} />
+          </Box>
+        )}
+      </Box>
+
+      <Drawer
+        anchor="right"
+        open={filterDrawerOpen}
+        onClose={() => setFilterDrawerOpen(false)}
+        PaperProps={{
+          sx: { width: { xs: '100%', sm: 400 }, p: 3 }
+        }}
+      >
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Filters
+          </Typography>
+          <IconButton onClick={() => setFilterDrawerOpen(false)}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <FormControl fullWidth>
+            <InputLabel>Property Type</InputLabel>
+            <Select
+              value={filters.property_type}
+              onChange={(e) => handleFilterChange('property_type', e.target.value)}
+              label="Property Type"
+            >
+              <MenuItem value="">All Types</MenuItem>
+              {propertyTypes.map(type => (
+                <MenuItem key={type} value={type}>{type}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl fullWidth>
+            <InputLabel>Unit Type</InputLabel>
+            <Select
+              value={filters.unit_type}
+              onChange={(e) => handleFilterChange('unit_type', e.target.value)}
+              label="Unit Type"
+            >
+              <MenuItem value="">All Units</MenuItem>
+              {unitTypes.map(type => (
+                <MenuItem key={type} value={type}>{type}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Price Range (LKR)
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Min Price"
+                type="number"
+                value={filters.min_price}
+                onChange={(e) => handleFilterChange('min_price', e.target.value)}
+                fullWidth
+              />
+              <TextField
+                label="Max Price"
+                type="number"
+                value={filters.max_price}
+                onChange={(e) => handleFilterChange('max_price', e.target.value)}
+                fullWidth
+              />
+            </Box>
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Amenities
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {commonAmenities.map(amenity => (
+                <Chip
+                  key={amenity}
+                  label={amenity}
+                  onClick={() => toggleAmenity(amenity)}
+                  color={filters.amenities.includes(amenity) ? 'primary' : 'default'}
+                  variant={filters.amenities.includes(amenity) ? 'filled' : 'outlined'}
+                  size="small"
+                />
+              ))}
+            </Box>
+          </Box>
+
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Facilities
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {commonFacilities.map(facility => (
+                <Chip
+                  key={facility}
+                  label={facility}
+                  onClick={() => toggleFacility(facility)}
+                  color={filters.facilities.includes(facility) ? 'primary' : 'default'}
+                  variant={filters.facilities.includes(facility) ? 'filled' : 'outlined'}
+                  size="small"
+                />
+              ))}
+            </Box>
+          </Box>
+
+          <Divider />
+
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <Button
+              variant="outlined"
+              onClick={clearAllFilters}
+              fullWidth
+            >
+              Clear All
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() => {
+                setFilterDrawerOpen(false);
+                handleSearch();
+              }}
+              fullWidth
+              sx={{
+                bgcolor: theme.primary,
+                '&:hover': { bgcolor: theme.primaryDark }
+              }}
+            >
+              Apply Filters
+            </Button>
+          </Box>
+        </Box>
+      </Drawer>
+    </Container>
   );
 };
 

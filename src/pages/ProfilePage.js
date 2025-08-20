@@ -82,27 +82,33 @@ const ProfilePage = () => {
     setLoading(true);
     setError('');
     try {
-      const userData = await getUserProfile();
-      const formattedBirthdate = userData.birthdate ? 
-        new Date(userData.birthdate).toISOString().split('T')[0] : '';
+      const responseData = await getUserProfile();
+      
+      // Extract user and profile data from nested response
+      const userData = responseData.user || responseData;
+      const profileData = responseData.profile || responseData;
+      
+      // Format birthdate properly
+      const formattedBirthdate = profileData.birthdate ? 
+        new Date(profileData.birthdate).toISOString().split('T')[0] : '';
       
       setProfile({
         username: userData.username || '',
         email: userData.email || '',
-        phone: userData.phone || '',
-        first_name: userData.first_name || '',
-        last_name: userData.last_name || '',
-        gender: userData.gender || '',
+        phone: profileData.phone || '',
+        first_name: profileData.first_name || '',
+        last_name: profileData.last_name || '',
+        gender: profileData.gender || '',
         birthdate: formattedBirthdate,
-        nationality: userData.nationality || '',
-        business_name: userData.business_name || '',
-        contact_person: userData.contact_person || '',
-        business_type: userData.business_type || '',
-        business_registration: userData.business_registration || '',
-        business_address: userData.business_address || '',
-        department: userData.department || '',
-        admin_level: userData.admin_level || '',
-        profile_image: userData.profile_image || ''
+        nationality: profileData.nationality || '',
+        business_name: profileData.business_name || '',
+        contact_person: profileData.contact_person || '',
+        business_type: profileData.business_type || '',
+        business_registration: profileData.business_registration || '',
+        business_address: profileData.business_address || '',
+        department: profileData.department || '',
+        admin_level: profileData.admin_level || '',
+        profile_image: profileData.profile_image || ''
       });
     } catch (err) {
       console.error('Error fetching profile:', err);
@@ -122,23 +128,23 @@ const ProfilePage = () => {
         }
         break;
       case 'phone':
-        if (value && !/^\+?[\d\s-()]{10,}$/.test(value)) {
+        if (value && !/^\+?[1-9]\d{1,14}$/.test(value.replace(/\s/g, ''))) {
           errors.phone = 'Please enter a valid phone number';
         }
         break;
-      case 'birthdate':
-        if (value) {
-          const date = new Date(value);
-          const today = new Date();
-          const age = today.getFullYear() - date.getFullYear();
-          if (age < 13 || age > 120) {
-            errors.birthdate = 'Age must be between 13 and 120 years';
-          }
+      case 'username':
+        if (value && value.length < 3) {
+          errors.username = 'Username must be at least 3 characters long';
         }
         break;
-      case 'business_registration':
-        if (userRole === 'propertyowner' && value && value.length < 5) {
-          errors.business_registration = 'Business registration must be at least 5 characters';
+      case 'first_name':
+        if (value && value.length < 2) {
+          errors.first_name = 'First name must be at least 2 characters long';
+        }
+        break;
+      case 'last_name':
+        if (value && value.length < 2) {
+          errors.last_name = 'Last name must be at least 2 characters long';
         }
         break;
       default:
@@ -153,7 +159,7 @@ const ProfilePage = () => {
       ...prev,
       [field]: value
     }));
-
+    
     const fieldError = validateField(field, value);
     setFieldErrors(prev => ({
       ...prev,
@@ -162,66 +168,54 @@ const ProfilePage = () => {
     }));
   };
 
-  const handleSaveProfile = async () => {
-    setSaving(true);
-    setError('');
+  const handleSave = async () => {
+    const errors = {};
     
+    Object.keys(profile).forEach(field => {
+      const fieldError = validateField(field, profile[field]);
+      if (fieldError[field]) {
+        errors[field] = fieldError[field];
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+
+    setSaving(true);
     try {
-      const allErrors = {};
-      Object.keys(profile).forEach(field => {
-        const fieldError = validateField(field, profile[field]);
-        Object.assign(allErrors, fieldError);
-      });
-
-      if (Object.keys(allErrors).length > 0) {
-        setFieldErrors(allErrors);
-        throw new Error('Please fix the validation errors');
-      }
-
-      const profilePayload = { ...profile };
-      
-      if (profilePayload.birthdate && profilePayload.birthdate.trim() === '') {
-        profilePayload.birthdate = null;
-      }
-
-      await updateUserProfile(profilePayload);
-      
+      await updateUserProfile(profile);
       setIsEditing(false);
       setSnackbarMessage('Profile updated successfully!');
       setSnackbarOpen(true);
       setFieldErrors({});
-      
     } catch (err) {
-      console.error('Error updating profile:', err);
       setError(err.message || 'Failed to update profile');
     } finally {
       setSaving(false);
     }
   };
 
-  const handlePasswordChange = async () => {
-    if (!passwordData.currentPassword || !passwordData.newPassword) {
-      setError('Please fill in all password fields');
-      return;
-    }
+  const handleCancel = () => {
+    setIsEditing(false);
+    setFieldErrors({});
+    fetchUserProfile();
+  };
 
+  const handlePasswordChange = async () => {
     if (passwordData.newPassword !== passwordData.confirmPassword) {
       setError('New passwords do not match');
       return;
     }
 
-    if (passwordData.newPassword.length < 8) {
-      setError('New password must be at least 8 characters long');
+    if (passwordData.newPassword.length < 6) {
+      setError('New password must be at least 6 characters long');
       return;
     }
 
     try {
-      await changePasswordProfile({
-        currentPassword: passwordData.currentPassword,
-        newPassword: passwordData.newPassword,
-        confirmPassword: passwordData.confirmPassword
-      });
-
+      await changePasswordProfile(passwordData);
       setPasswordDialogOpen(false);
       setPasswordData({
         currentPassword: '',
@@ -230,92 +224,81 @@ const ProfilePage = () => {
       });
       setSnackbarMessage('Password changed successfully!');
       setSnackbarOpen(true);
-      setError('');
     } catch (err) {
-      console.error('Error changing password:', err);
       setError(err.message || 'Failed to change password');
     }
   };
 
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setFieldErrors({});
-    setError('');
-    fetchUserProfile();
-  };
-
-  const getRoleIcon = (role) => {
-    switch (role) {
-      case 'user':
-        return <PersonIcon />;
-      case 'propertyowner':
-        return <BusinessIcon />;
+  const getRoleIcon = () => {
+    switch (userRole) {
       case 'admin':
         return <AdminPanelSettingsIcon />;
+      case 'propertyowner':
+        return <BusinessIcon />;
       default:
         return <PersonIcon />;
     }
   };
 
-  const getRoleColor = (role) => {
-    switch (role) {
-      case 'user':
-        return 'primary';
-      case 'propertyowner':
-        return 'success';
+  const getRoleColor = () => {
+    switch (userRole) {
       case 'admin':
         return 'error';
+      case 'propertyowner':
+        return 'warning';
       default:
-        return 'default';
+        return 'primary';
     }
   };
 
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ py: 4 }}>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
-          <CircularProgress />
-        </Box>
+      <Container maxWidth="md" sx={{ py: 4, textAlign: 'center' }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ mt: 2 }}>
+          Loading profile...
+        </Typography>
       </Container>
     );
   }
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Card sx={{ backgroundColor: theme.cardBackground, borderRadius: 3 }}>
-        <CardContent sx={{ p: 4 }}>
+      <Card sx={{ mb: 4 }}>
+        <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
             <Avatar
               sx={{
                 width: 80,
                 height: 80,
-                bgcolor: theme.primary,
                 mr: 3,
+                bgcolor: theme.primary,
                 fontSize: '2rem'
               }}
-              src={profile.profile_image}
+              src={profile.profile_image || undefined}
             >
-              {profile.first_name ? profile.first_name[0] : profile.username[0] || 'U'}
+              {profile.first_name ? profile.first_name.charAt(0).toUpperCase() : 
+               profile.username ? profile.username.charAt(0).toUpperCase() : 'U'}
             </Avatar>
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="h4" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
-                {profile.first_name || profile.last_name 
-                  ? `${profile.first_name} ${profile.last_name}`.trim()
-                  : profile.username}
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+                {profile.first_name && profile.last_name 
+                  ? `${profile.first_name} ${profile.last_name}`
+                  : profile.username || 'User'
+                }
               </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                <Chip
-                  icon={getRoleIcon(userRole)}
-                  label={userRole?.charAt(0).toUpperCase() + userRole?.slice(1) || 'User'}
-                  color={getRoleColor(userRole)}
-                  size="small"
-                />
-              </Box>
+              <Chip
+                icon={getRoleIcon()}
+                label={userRole?.charAt(0).toUpperCase() + userRole?.slice(1) || 'User'}
+                color={getRoleColor()}
+                variant="outlined"
+                sx={{ mb: 1 }}
+              />
             </Box>
             <Box>
               {!isEditing ? (
                 <Button
-                  variant="outlined"
+                  variant="contained"
                   startIcon={<EditIcon />}
                   onClick={() => setIsEditing(true)}
                   sx={{ mr: 1 }}
@@ -323,21 +306,20 @@ const ProfilePage = () => {
                   Edit Profile
                 </Button>
               ) : (
-                <Box sx={{ display: 'flex', gap: 1 }}>
+                <Box>
                   <Button
                     variant="contained"
                     startIcon={<SaveIcon />}
-                    onClick={handleSaveProfile}
+                    onClick={handleSave}
                     disabled={saving}
-                    sx={{ backgroundColor: theme.primary }}
+                    sx={{ mr: 1 }}
                   >
                     {saving ? 'Saving...' : 'Save'}
                   </Button>
                   <Button
                     variant="outlined"
                     startIcon={<CancelIcon />}
-                    onClick={handleCancelEdit}
-                    disabled={saving}
+                    onClick={handleCancel}
                   >
                     Cancel
                   </Button>
@@ -360,9 +342,9 @@ const ProfilePage = () => {
             </Alert>
           )}
 
-          <Divider sx={{ my: 3 }} />
+          <Divider sx={{ mb: 3 }} />
 
-          <Typography variant="h6" sx={{ mb: 3, color: theme.textPrimary }}>
+          <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
             Personal Information
           </Typography>
 
@@ -455,7 +437,9 @@ const ProfilePage = () => {
                 disabled={!isEditing}
                 error={!!fieldErrors.birthdate}
                 helperText={fieldErrors.birthdate}
-                InputLabelProps={{ shrink: true }}
+                InputLabelProps={{
+                  shrink: true,
+                }}
               />
             </Grid>
 
@@ -470,16 +454,56 @@ const ProfilePage = () => {
                 helperText={fieldErrors.nationality}
               />
             </Grid>
-          </Grid>
 
-          {userRole === 'propertyowner' && (
-            <>
-              <Divider sx={{ my: 4 }} />
-              <Typography variant="h6" sx={{ mb: 3, color: theme.textPrimary }}>
-                Business Information
-              </Typography>
+            {userRole === 'admin' && (
+              <>
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
+                    Admin Information
+                  </Typography>
+                </Grid>
 
-              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Department"
+                    value={profile.department}
+                    onChange={(e) => handleInputChange('department', e.target.value)}
+                    disabled={!isEditing}
+                    error={!!fieldErrors.department}
+                    helperText={fieldErrors.department}
+                  />
+                </Grid>
+
+                <Grid item xs={12} sm={6}>
+                  <FormControl fullWidth disabled={!isEditing}>
+                    <InputLabel>Admin Level</InputLabel>
+                    <Select
+                      value={profile.admin_level}
+                      label="Admin Level"
+                      onChange={(e) => handleInputChange('admin_level', e.target.value)}
+                    >
+                      <MenuItem value="">Select Level</MenuItem>
+                      <MenuItem value="junior">Junior</MenuItem>
+                      <MenuItem value="senior">Senior</MenuItem>
+                      <MenuItem value="manager">Manager</MenuItem>
+                      <MenuItem value="director">Director</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </>
+            )}
+
+            {userRole === 'propertyowner' && (
+              <>
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
+                    Business Information
+                  </Typography>
+                </Grid>
+
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
@@ -505,20 +529,15 @@ const ProfilePage = () => {
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth disabled={!isEditing}>
-                    <InputLabel>Business Type</InputLabel>
-                    <Select
-                      value={profile.business_type}
-                      label="Business Type"
-                      onChange={(e) => handleInputChange('business_type', e.target.value)}
-                    >
-                      <MenuItem value="">Select Business Type</MenuItem>
-                      <MenuItem value="individual">Individual</MenuItem>
-                      <MenuItem value="company">Company</MenuItem>
-                      <MenuItem value="partnership">Partnership</MenuItem>
-                      <MenuItem value="corporation">Corporation</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <TextField
+                    fullWidth
+                    label="Business Type"
+                    value={profile.business_type}
+                    onChange={(e) => handleInputChange('business_type', e.target.value)}
+                    disabled={!isEditing}
+                    error={!!fieldErrors.business_type}
+                    helperText={fieldErrors.business_type}
+                  />
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
@@ -537,27 +556,27 @@ const ProfilePage = () => {
                   <TextField
                     fullWidth
                     label="Business Address"
+                    multiline
+                    rows={3}
                     value={profile.business_address}
                     onChange={(e) => handleInputChange('business_address', e.target.value)}
                     disabled={!isEditing}
-                    multiline
-                    rows={3}
                     error={!!fieldErrors.business_address}
                     helperText={fieldErrors.business_address}
                   />
                 </Grid>
-              </Grid>
-            </>
-          )}
+              </>
+            )}
 
-          {userRole === 'admin' && (
-            <>
-              <Divider sx={{ my: 4 }} />
-              <Typography variant="h6" sx={{ mb: 3, color: theme.textPrimary }}>
-                Administrative Information
-              </Typography>
+            {userRole === 'admin' && (
+              <>
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>
+                    Admin Information
+                  </Typography>
+                </Grid>
 
-              <Grid container spacing={3}>
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
@@ -571,27 +590,28 @@ const ProfilePage = () => {
                 </Grid>
 
                 <Grid item xs={12} sm={6}>
-                  <FormControl fullWidth disabled={!isEditing}>
-                    <InputLabel>Admin Level</InputLabel>
-                    <Select
-                      value={profile.admin_level}
-                      label="Admin Level"
-                      onChange={(e) => handleInputChange('admin_level', e.target.value)}
-                    >
-                      <MenuItem value="">Select Admin Level</MenuItem>
-                      <MenuItem value="junior">Junior Admin</MenuItem>
-                      <MenuItem value="senior">Senior Admin</MenuItem>
-                      <MenuItem value="super">Super Admin</MenuItem>
-                    </Select>
-                  </FormControl>
+                  <TextField
+                    fullWidth
+                    label="Admin Level"
+                    value={profile.admin_level}
+                    onChange={(e) => handleInputChange('admin_level', e.target.value)}
+                    disabled={!isEditing}
+                    error={!!fieldErrors.admin_level}
+                    helperText={fieldErrors.admin_level}
+                  />
                 </Grid>
-              </Grid>
-            </>
-          )}
+              </>
+            )}
+          </Grid>
         </CardContent>
       </Card>
 
-      <Dialog open={passwordDialogOpen} onClose={() => setPasswordDialogOpen(false)} maxWidth="sm" fullWidth>
+      <Dialog
+        open={passwordDialogOpen}
+        onClose={() => setPasswordDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
         <DialogTitle>Change Password</DialogTitle>
         <DialogContent>
           <TextField
@@ -600,7 +620,7 @@ const ProfilePage = () => {
             type="password"
             value={passwordData.currentPassword}
             onChange={(e) => setPasswordData(prev => ({ ...prev, currentPassword: e.target.value }))}
-            margin="dense"
+            margin="normal"
           />
           <TextField
             fullWidth
@@ -608,8 +628,7 @@ const ProfilePage = () => {
             type="password"
             value={passwordData.newPassword}
             onChange={(e) => setPasswordData(prev => ({ ...prev, newPassword: e.target.value }))}
-            margin="dense"
-            helperText="Password must be at least 8 characters long"
+            margin="normal"
           />
           <TextField
             fullWidth
@@ -617,16 +636,12 @@ const ProfilePage = () => {
             type="password"
             value={passwordData.confirmPassword}
             onChange={(e) => setPasswordData(prev => ({ ...prev, confirmPassword: e.target.value }))}
-            margin="dense"
+            margin="normal"
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setPasswordDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={handlePasswordChange} 
-            variant="contained"
-            sx={{ backgroundColor: theme.primary }}
-          >
+          <Button onClick={handlePasswordChange} variant="contained">
             Change Password
           </Button>
         </DialogActions>
@@ -635,7 +650,6 @@ const ProfilePage = () => {
       <AppSnackbar
         open={snackbarOpen}
         message={snackbarMessage}
-        severity="success"
         onClose={() => setSnackbarOpen(false)}
       />
     </Container>

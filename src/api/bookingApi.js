@@ -69,8 +69,10 @@ const processBookingData = (booking) => {
     check_out_date: booking.check_out_date ? new Date(booking.check_out_date).toISOString().split('T')[0] : null,
     created_at: booking.created_at ? new Date(booking.created_at) : null,
     updated_at: booking.updated_at ? new Date(booking.updated_at) : null,
-    total_amount: parseFloat(booking.total_amount) || 0,
-    advance_payment: parseFloat(booking.advance_payment) || 0
+    total_price: parseFloat(booking.total_price) || 0,
+    advance_amount: parseFloat(booking.advance_amount) || 0,
+    service_fee: parseFloat(booking.service_fee) || 0,
+    remaining_amount: (parseFloat(booking.total_price) || 0) - (parseFloat(booking.advance_amount) || 0)
   };
 };
 

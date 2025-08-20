@@ -32,7 +32,8 @@ import AdminPropertyView from './pages/AdminPages/AdminPropertyView';
 import ProfilePage from './pages/ProfilePage';
 
 const PrivateRoute = ({ element }) => {
-  return isAuthenticated() ? element : <Navigate to="/login" replace />;
+  return isAuthenticated() ?
+    element : <Navigate to="/login" replace />;
 };
 
 const PublicRoute = ({ element }) => {
@@ -139,6 +140,15 @@ const AppRoutes = () => {
             <RoleProtectedRoute 
               allowedRoles={['propertyowner']} 
               element={<MyProperties />} 
+            />
+          } 
+        />
+        <Route 
+          path="/view-property/:id" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['propertyowner']} 
+              element={<UserPropertyViewPage />} 
             />
           } 
         />

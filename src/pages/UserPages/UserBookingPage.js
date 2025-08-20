@@ -571,62 +571,79 @@ const UserBookingPage = () => {
 
         {/* Pricing Details */}
         {pricingBreakdown && (
-          <Card sx={{ 
-            backgroundColor: isDark ? theme.cardBackground : '#ffffff',
-            border: isDark ? `1px solid ${theme.border}` : 'none'
-          }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ 
-                mb: 2, 
-                fontWeight: 600,
-                color: isDark ? theme.textPrimary : 'inherit'
-              }}>
-                Price Details
-              </Typography>
-
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
-                  Rental for the first Month:
-                </Typography>
-                <Typography variant="body2" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Rs. {pricingBreakdown.subtotal.toLocaleString()}
-                </Typography>
-              </Box>
-
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
-                  One time service fee:
-                </Typography>
-                <Typography variant="body2" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Rs. {pricingBreakdown.serviceFee.toLocaleString()}
-                </Typography>
-              </Box>
-
-              <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
-
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="h6" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Sub Total
-                </Typography>
-                <Typography variant="h6" sx={{ 
-                  fontWeight: 600,
-                  color: theme.primary
-                }}>
-                  Rs. {pricingBreakdown.total.toLocaleString()}
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        )}
+  <Card sx={{ 
+    mb: 3, 
+    backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+    border: isDark ? `1px solid ${theme.border}` : 'none'
+  }}>
+    <CardContent>
+      <Typography variant="h6" sx={{ 
+        mb: 2, 
+        fontWeight: 600,
+        color: isDark ? theme.textPrimary : 'inherit'
+      }}>
+        Pricing Breakdown
+      </Typography>
+      
+      <Box sx={{ space: 1 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+          <Typography variant="body2">Rent ({pricingBreakdown.breakdown.description}):</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+            {formatCurrency(pricingBreakdown.subtotal)}
+          </Typography>
+        </Box>
+        
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+          <Typography variant="body2">Service Fee:</Typography>
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+            {formatCurrency(pricingBreakdown.serviceFee)}
+          </Typography>
+        </Box>
+        
+        <Divider sx={{ my: 1 }} />
+        
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="body1" sx={{ fontWeight: 600 }}>Total Amount:</Typography>
+          <Typography variant="body1" sx={{ fontWeight: 600, color: theme.primary }}>
+            {formatCurrency(pricingBreakdown.total)}
+          </Typography>
+        </Box>
+        
+        <Box sx={{ 
+          backgroundColor: isDark ? theme.surfaceBackground : '#f5f5f5',
+          borderRadius: 2,
+          p: 2,
+          mb: 1
+        }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+            Payment Structure:
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+            <Typography variant="body2">
+              Advance Payment ({pricingBreakdown.advancePercentage || 30}%):
+            </Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600, color: theme.primary }}>
+              {formatCurrency(pricingBreakdown.advanceAmount)}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+            <Typography variant="body2">Remaining Amount:</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              {formatCurrency(pricingBreakdown.remainingAmount)}
+            </Typography>
+          </Box>
+        </Box>
+        
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            You only need to pay the advance amount ({formatCurrency(pricingBreakdown.advanceAmount)}) 
+            to confirm your booking. The remaining amount will be paid upon check-in.
+          </Typography>
+        </Alert>
+      </Box>
+    </CardContent>
+  </Card>
+)}
       </Grid>
 
       {/* Right Side - Next Steps Section */}
