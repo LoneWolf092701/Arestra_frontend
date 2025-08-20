@@ -142,16 +142,22 @@ export const registerUser = async (userData) => {
       throw new Error('Please enter a valid email address');
     }
 
-    if (!['user', 'propertyowner'].includes(userData.role)) {
+    if (!['user', 'propertyowner', 'admin'].includes(userData.role)) {
       throw new Error('Invalid role selected');
     }
 
-    const response = await apiClient.post('/auth/register', {
+    const requestData = {
       username: userData.username.trim(),
       email: userData.email.toLowerCase().trim(),
       password: userData.password,
       role: userData.role
-    });
+    };
+
+    if (userData.profile && Object.keys(userData.profile).length > 0) {
+      requestData.profile = userData.profile;
+    }
+
+    const response = await apiClient.post('/auth/register', requestData);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -188,23 +194,20 @@ export const requestPasswordReset = async (email) => {
   }
 };
 
-export const resetPassword = async (token, newPassword) => {
+export const resetPassword = async (resetData) => {
   try {
-    if (!token) {
-      throw new Error('Reset token is required');
+    if (!resetData || !resetData.token || !resetData.password) {
+      throw new Error('Reset token and new password are required');
     }
 
-    if (!newPassword) {
-      throw new Error('New password is required');
-    }
-
-    if (newPassword.length < 6) {
+    if (resetData.password.length < 6) {
       throw new Error('Password must be at least 6 characters long');
     }
 
     const response = await apiClient.post('/auth/reset-password', {
-      token: token,
-      password: newPassword
+      token: resetData.token,
+      newPassword: resetData.password,
+      confirmPassword: resetData.confirmPassword || resetData.password
     });
     
     if (!response.data) {
@@ -223,7 +226,9 @@ export const verifyEmail = async (token) => {
       throw new Error('Verification token is required');
     }
 
-    const response = await apiClient.get(`/auth/verify-email?token=${encodeURIComponent(token)}`);
+    const response = await apiClient.post('/auth/verify-email', {
+      token
+    });
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -239,11 +244,6 @@ export const resendEmailVerification = async (email) => {
   try {
     if (!email) {
       throw new Error('Email address is required');
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      throw new Error('Please enter a valid email address');
     }
 
     const response = await apiClient.post('/auth/resend-verification', {
@@ -262,49 +262,42 @@ export const resendEmailVerification = async (email) => {
 
 export const validateToken = async () => {
   try {
-    const token = localStorage.getItem('token');
-    
-    if (!token) {
-      return { valid: false, user: null };
-    }
-
-    const response = await apiClient.get('/auth/validate');
+    const response = await apiClient.get('/auth/verify-token');
     
     if (!response.data) {
-      clearAuthData();
       return { valid: false, user: null };
     }
     
     return response.data;
   } catch (error) {
     console.error('Token validation error:', error);
-    clearAuthData();
     return { valid: false, user: null };
   }
 };
 
-export const changePasswordAuth = async (currentPassword, newPassword) => {
+export const changePasswordAuth = async (passwordData) => {
   try {
-    if (!currentPassword) {
-      throw new Error('Current password is required');
+    if (!passwordData || typeof passwordData !== 'object') {
+      throw new Error('Password data is required');
     }
 
-    if (!newPassword) {
-      throw new Error('New password is required');
+    const requiredFields = ['currentPassword', 'newPassword', 'confirmPassword'];
+    
+    for (const field of requiredFields) {
+      if (!passwordData[field]) {
+        throw new Error(`${field} is required`);
+      }
     }
 
-    if (newPassword.length < 6) {
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      throw new Error('New passwords do not match');
+    }
+
+    if (passwordData.newPassword.length < 6) {
       throw new Error('New password must be at least 6 characters long');
     }
 
-    if (currentPassword === newPassword) {
-      throw new Error('New password must be different from current password');
-    }
-
-    const response = await apiClient.post('/auth/change-password', {
-      currentPassword: currentPassword,
-      newPassword: newPassword
-    });
+    const response = await apiClient.post('/auth/change-password', passwordData);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -319,49 +312,70 @@ export const changePasswordAuth = async (currentPassword, newPassword) => {
 export const logoutUser = async () => {
   try {
     await apiClient.post('/auth/logout');
+    
+    clearAuthData();
+    
+    return { success: true, message: 'Logged out successfully' };
   } catch (error) {
     console.error('Logout error:', error);
-  } finally {
+    
     clearAuthData();
+    
+    return { success: true, message: 'Logged out successfully' };
   }
 };
 
 export const checkAuthStatus = async () => {
   try {
     const token = localStorage.getItem('token');
+    const userRole = localStorage.getItem('userRole');
+    const userId = localStorage.getItem('userId');
     const tokenExpiry = localStorage.getItem('tokenExpiry');
-    
-    if (!token) {
-      return { authenticated: false, user: null };
+
+    if (!token || !userRole || !userId) {
+      return {
+        authenticated: false,
+        user: null,
+        token: null,
+        expired: false
+      };
     }
-    
-    if (tokenExpiry && Date.now() > parseInt(tokenExpiry)) {
+
+    const isExpired = tokenExpiry && Date.now() > parseInt(tokenExpiry);
+    if (isExpired) {
       clearAuthData();
-      return { authenticated: false, user: null };
+      return {
+        authenticated: false,
+        user: null,
+        token: null,
+        expired: true
+      };
     }
-    
-    const validationResult = await validateToken();
-    
-    if (!validationResult.valid) {
-      clearAuthData();
-      return { authenticated: false, user: null };
-    }
-    
+
     return {
       authenticated: true,
-      user: validationResult.user,
-      token: token
+      user: {
+        id: parseInt(userId),
+        role: userRole
+      },
+      token: token,
+      expired: false
     };
   } catch (error) {
     console.error('Error checking auth status:', error);
     clearAuthData();
-    return { authenticated: false, user: null };
+    return {
+      authenticated: false,
+      user: null,
+      token: null,
+      expired: false
+    };
   }
 };
 
 export const getCurrentUserRole = () => {
   try {
-    return localStorage.getItem('userRole') || null;
+    return localStorage.getItem('userRole');
   } catch (error) {
     console.error('Error getting user role:', error);
     return null;

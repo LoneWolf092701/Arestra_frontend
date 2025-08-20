@@ -21,7 +21,10 @@ import {
   AccordionSummary,
   AccordionDetails,
   Chip,
-  Alert
+  Alert,
+  ImageList,
+  ImageListItem,
+  CircularProgress
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -34,7 +37,7 @@ import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getPropertyDetailsById, updateProperty } from '../api/propertyApi';
+import { getPropertyById, updateProperty } from '../api/propertyApi';
 import { ThemeContext } from '../contexts/ThemeContext';
 import ImageUpload from '../components/common/ImageUpload';
 import AppSnackbar from '../components/common/AppSnackbar';
@@ -54,12 +57,12 @@ const unitOptions = [
 
 const availableAmenities = [
   'WiFi', 'TV', 'Air Conditioning', 'Kitchen', 'Washing Machine', 'Parking',
-  'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished'
+  'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished', 'Recreation Room'
 ];
 
 const availableFacilities = [
   'Swimming Pool', 'Recreation Room', 'Bed Linens', 'Hot Water', 'Air Conditioning', 'Kitchen',
-  'Washing Machine', 'WiFi', 'TV', 'Parking', 'Security', 'Garden'
+  'Washing Machine', 'WiFi', 'TV', 'Parking', 'Security', 'Garden', 'Bedrooms', 'Bathrooms', 'Living Area', 'Balcony'
 ];
 
 const schema = yup.object().shape({
@@ -78,79 +81,173 @@ const RequiredFieldLabel = ({ children, required = false }) => (
   </Box>
 );
 
-const EditableSection = ({ title, isEditing, onEdit, onSave, onCancel, children, error }) => (
-  <Card sx={{ mb: 4, borderRadius: 3 }}>
-    <CardContent sx={{ p: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-          {title}
+const EditableSection = ({ title, isEditing, onEdit, onSave, onCancel, children, error }) => {
+  const { theme } = useContext(ThemeContext);
+  
+  return (
+    <Card sx={{ 
+      mb: 4, 
+      borderRadius: 3,
+      backgroundColor: theme.cardBackground,
+      border: `1px solid ${theme.border}`
+    }}>
+      <CardContent sx={{ p: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h6" sx={{ 
+            fontWeight: 600,
+            color: theme.textPrimary
+          }}>
+            {title}
+          </Typography>
+          {!isEditing ? (
+            <IconButton onClick={onEdit} color="primary">
+              <EditIcon />
+            </IconButton>
+          ) : (
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <IconButton onClick={onSave} color="primary">
+                <SaveIcon />
+              </IconButton>
+              <IconButton onClick={onCancel} color="secondary">
+                <CancelIcon />
+              </IconButton>
+            </Box>
+          )}
+        </Box>
+        
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+        
+        {children}
+      </CardContent>
+    </Card>
+  );
+};
+
+// Azurite Image Component with proper handling
+const AzuriteImage = ({ src, alt, style }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (src) {
+      setLoading(true);
+      setError(false);
+      
+      // Create image to test loading
+      const img = new Image();
+      img.onload = () => {
+        setLoading(false);
+        setError(false);
+      };
+      img.onerror = () => {
+        setLoading(false);
+        setError(true);
+      };
+      // Add timestamp to bypass cache if needed
+      img.src = src.includes('?') ? src : `${src}?t=${Date.now()}`;
+    }
+  }, [src]);
+
+  if (loading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: 200,
+        backgroundColor: '#f5f5f5',
+        ...style 
+      }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: 200,
+        backgroundColor: '#f5f5f5',
+        border: '1px dashed #ccc',
+        ...style 
+      }}>
+        <Typography variant="body2" color="textSecondary">
+          Image failed to load
         </Typography>
-        {!isEditing ? (
-          <IconButton onClick={onEdit} color="primary">
-            <EditIcon />
-          </IconButton>
-        ) : (
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <IconButton onClick={onSave} color="primary">
-              <SaveIcon />
-            </IconButton>
-            <IconButton onClick={onCancel} color="secondary">
-              <CancelIcon />
-            </IconButton>
-          </Box>
+        <Typography variant="caption" color="textSecondary" sx={{ mt: 1 }}>
+          {src}
+        </Typography>
+      </Box>
+    );
+  }
+
+  return (
+    <img 
+      src={src} 
+      alt={alt} 
+      style={{ 
+        width: '100%', 
+        height: 200, 
+        objectFit: 'cover',
+        ...style 
+      }}
+      onError={() => setError(true)}
+    />
+  );
+};
+
+const AmenityQuantitySelector = ({ amenity, quantity, onQuantityChange, onRemove, disabled }) => {
+  const { theme } = useContext(ThemeContext);
+  
+  return (
+    <Box sx={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'space-between',
+      p: 2,
+      border: `1px solid ${theme.border}`,
+      borderRadius: 2,
+      backgroundColor: disabled ? theme.surfaceBackground : 'transparent',
+      color: theme.textPrimary
+    }}>
+      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+        {amenity}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <IconButton 
+          size="small" 
+          onClick={() => onQuantityChange(Math.max(0, quantity - 1))}
+          disabled={disabled || quantity <= 0}
+        >
+          <RemoveIcon />
+        </IconButton>
+        <Typography variant="body1" sx={{ minWidth: '20px', textAlign: 'center' }}>
+          {quantity}
+        </Typography>
+        <IconButton 
+          size="small" 
+          onClick={() => onQuantityChange(quantity + 1)}
+          disabled={disabled}
+        >
+          <AddIcon />
+        </IconButton>
+        {!disabled && (
+          <Button size="small" color="error" onClick={onRemove}>
+            Remove
+          </Button>
         )}
       </Box>
-      
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-      
-      {children}
-    </CardContent>
-  </Card>
-);
-
-const AmenityQuantitySelector = ({ amenity, quantity, onQuantityChange, onRemove, disabled }) => (
-  <Box sx={{ 
-    display: 'flex', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    p: 2,
-    border: '1px solid #ccc',
-    borderRadius: 2,
-    backgroundColor: disabled ? '#f5f5f5' : 'transparent'
-  }}>
-    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-      {amenity}
-    </Typography>
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <IconButton 
-        size="small" 
-        onClick={() => onQuantityChange(Math.max(0, quantity - 1))}
-        disabled={disabled || quantity <= 0}
-      >
-        <RemoveIcon />
-      </IconButton>
-      <Typography variant="body1" sx={{ minWidth: '20px', textAlign: 'center' }}>
-        {quantity}
-      </Typography>
-      <IconButton 
-        size="small" 
-        onClick={() => onQuantityChange(quantity + 1)}
-        disabled={disabled}
-      >
-        <AddIcon />
-      </IconButton>
-      {!disabled && (
-        <Button size="small" color="error" onClick={onRemove}>
-          Remove
-        </Button>
-      )}
     </Box>
-  </Box>
-);
+  );
+};
 
 const UpdateProperty = () => {
   const { id } = useParams();
@@ -179,7 +276,8 @@ const UpdateProperty = () => {
       availableTo: null,
       roommates: [],
       rules: [],
-      billsInclusive: []
+      billsInclusive: [],
+      images: []
     }
   });
 
@@ -200,30 +298,23 @@ const UpdateProperty = () => {
 
   const amenitiesValue = watch('amenities') || {};
   const facilitiesValue = watch('facilities') || {};
+  const imagesValue = watch('images') || [];
 
-  // Load property data when component mounts
   useEffect(() => {
     const loadPropertyData = async () => {
       try {
         setLoading(true);
-        const propertyData = await getPropertyDetailsById(id);
+        const propertyData = await getPropertyById(id);
         
         if (propertyData) {
-          // Parse JSON fields safely
-          const amenities = typeof propertyData.amenities === 'string' ? 
-            JSON.parse(propertyData.amenities || '{}') : propertyData.amenities || {};
-          
-          const facilities = typeof propertyData.facilities === 'string' ? 
-            JSON.parse(propertyData.facilities || '{}') : propertyData.facilities || {};
-          
-          const rules = typeof propertyData.rules === 'string' ? 
-            JSON.parse(propertyData.rules || '[]') : propertyData.rules || [];
-          
-          const roommates = typeof propertyData.roommates === 'string' ? 
-            JSON.parse(propertyData.roommates || '[]') : propertyData.roommates || [];
-          
-          const billsInclusive = typeof propertyData.bills_inclusive === 'string' ? 
-            JSON.parse(propertyData.bills_inclusive || '[]') : propertyData.bills_inclusive || [];
+          // Parse JSON fields - handle both string and object formats
+          const amenities = propertyData.amenities || {};
+          const facilities = propertyData.facilities || {};
+          const rules = Array.isArray(propertyData.rules) ? propertyData.rules : 
+                       (propertyData.rules ? [propertyData.rules] : []);
+          const roommates = Array.isArray(propertyData.roommates) ? propertyData.roommates : [];
+          const billsInclusive = Array.isArray(propertyData.bills_inclusive) ? propertyData.bills_inclusive : [];
+          const images = Array.isArray(propertyData.images) ? propertyData.images : [];
 
           // Populate form with existing data
           reset({
@@ -239,7 +330,12 @@ const UpdateProperty = () => {
             availableTo: propertyData.available_to ? dayjs(propertyData.available_to) : null,
             roommates: roommates,
             rules: rules,
-            billsInclusive: billsInclusive
+            billsInclusive: billsInclusive,
+            images: images
+          });
+
+          console.log('Loaded property data:', {
+            amenities, facilities, images, rules, roommates, billsInclusive
           });
         }
       } catch (error) {
@@ -260,7 +356,6 @@ const UpdateProperty = () => {
     try {
       setLoading(true);
       
-      // Prepare data for API submission
       const updateData = {
         property_type: data.propertyType,
         unit_type: data.unitType,
@@ -276,7 +371,8 @@ const UpdateProperty = () => {
         roommates: data.roommates.filter(roommate => 
           roommate && (roommate.occupation || roommate.field)
         ),
-        bills_inclusive: data.billsInclusive.filter(bill => bill && bill.trim().length > 0)
+        bills_inclusive: data.billsInclusive.filter(bill => bill && bill.trim().length > 0),
+        images: data.images
       };
 
       await updateProperty(id, updateData);
@@ -308,73 +404,84 @@ const UpdateProperty = () => {
     setSnackbarOpen(false);
   };
 
-  const handleImageUpload = (uploadedFiles) => {
-    setValue('images', uploadedFiles);
+  const updateAmenityQuantity = (amenity, quantity) => {
+    const currentAmenities = { ...amenitiesValue };
+    if (quantity <= 0) {
+      delete currentAmenities[amenity];
+    } else {
+      currentAmenities[amenity] = quantity;
+    }
+    setValue('amenities', currentAmenities);
+  };
+
+  const removeAmenity = (amenity) => {
+    const currentAmenities = { ...amenitiesValue };
+    delete currentAmenities[amenity];
+    setValue('amenities', currentAmenities);
+  };
+
+  const addAmenity = () => {
+    if (selectedAmenityToAdd && !amenitiesValue[selectedAmenityToAdd]) {
+      updateAmenityQuantity(selectedAmenityToAdd, 1);
+      setSelectedAmenityToAdd('');
+    }
   };
 
   const updateFacilityCount = (facility, increment) => {
     const currentValue = facilitiesValue[facility] || 0;
     const newValue = increment ? currentValue + 1 : Math.max(0, currentValue - 1);
-    setValue(`facilities.${facility}`, newValue);
-  };
-
-  const updateAmenityQuantity = (amenity, newQuantity) => {
-    setValue(`amenities.${amenity}`, newQuantity);
-  };
-
-  const removeAmenity = (amenity) => {
-    const newAmenities = { ...amenitiesValue };
-    delete newAmenities[amenity];
-    setValue('amenities', newAmenities);
-  };
-
-  const addAmenity = () => {
-    if (selectedAmenityToAdd) {
-      setValue(`amenities.${selectedAmenityToAdd}`, 1);
-      setSelectedAmenityToAdd('');
+    
+    const currentFacilities = { ...facilitiesValue };
+    if (newValue <= 0) {
+      delete currentFacilities[facility];
+    } else {
+      currentFacilities[facility] = newValue;
     }
+    setValue('facilities', currentFacilities);
   };
 
   const addFacility = () => {
-    if (selectedFacilityToAdd) {
-      setValue(`facilities.${selectedFacilityToAdd}`, 1);
+    if (selectedFacilityToAdd && !facilitiesValue[selectedFacilityToAdd]) {
+      const currentFacilities = { ...facilitiesValue };
+      currentFacilities[selectedFacilityToAdd] = 1;
+      setValue('facilities', currentFacilities);
       setSelectedFacilityToAdd('');
     }
   };
 
-  const getAvailableAmenitiesForDropdown = () => {
-    return availableAmenities.filter(amenity => !amenitiesValue[amenity]);
-  };
-
-  const getAvailableFacilitiesForDropdown = () => {
-    return availableFacilities.filter(facility => !facilitiesValue[facility]);
-  };
-
   if (loading) {
     return (
-      <Container sx={{ mt: 4, textAlign: 'center' }}>
-        <Typography variant="h6">Loading property details...</Typography>
+      <Container sx={{ 
+        textAlign: 'center', 
+        py: 8,
+        backgroundColor: theme.background,
+        color: theme.textPrimary
+      }}>
+        <CircularProgress />
+        <Typography variant="h6" sx={{ mt: 2 }}>Loading property details...</Typography>
       </Container>
     );
   }
 
   return (
-    <Box sx={{ backgroundColor: theme.background, minHeight: '100vh', py: 4 }}>
+    <Box sx={{ 
+      backgroundColor: theme.background, 
+      minHeight: '100vh', 
+      py: 4,
+      color: theme.textPrimary
+    }}>
       <Container maxWidth="lg">
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 4 }}>
-          <IconButton 
-            onClick={handleBackToMyProperties}
-            sx={{ mr: 2, color: theme.primary }}
-          >
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h4" sx={{ color: theme.textPrimary, fontWeight: 700 }}>
-            Update Property Details
-          </Typography>
-        </Box>
+        <Typography variant="h4" sx={{ 
+          mb: 4, 
+          textAlign: 'center', 
+          fontWeight: 'bold',
+          color: theme.textPrimary
+        }}>
+          Update Property
+        </Typography>
 
         <Alert severity="info" sx={{ mb: 4 }}>
-          Click the edit icon on any section to modify that information. You can edit one section at a time.
+          You can edit one section at a time.
         </Alert>
 
         <form onSubmit={handleSubmit(onSubmit)}>
@@ -478,7 +585,7 @@ const UpdateProperty = () => {
             onCancel={handleCancelEdit}
             error={errors.amenities?.message}
           >
-            {Object.keys(amenitiesValue)?.length > 0 && (
+            {Object.keys(amenitiesValue).length > 0 && (
               <Grid container spacing={2} sx={{ mb: 3 }}>
                 {Object.entries(amenitiesValue).map(([amenity, quantity]) => (
                   <Grid item xs={12} sm={6} md={4} key={amenity}>
@@ -495,27 +602,21 @@ const UpdateProperty = () => {
             )}
 
             {editingSection === 'amenities' && (
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-                <FormControl sx={{ minWidth: 250 }}>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+                <FormControl sx={{ minWidth: 200 }}>
                   <InputLabel>Add Amenity</InputLabel>
                   <Select
                     value={selectedAmenityToAdd}
                     onChange={(e) => setSelectedAmenityToAdd(e.target.value)}
-                    label="Add Amenity"
                   >
-                    {getAvailableAmenitiesForDropdown().map((amenity) => (
+                    {availableAmenities.filter(amenity => !amenitiesValue[amenity]).map(amenity => (
                       <MenuItem key={amenity} value={amenity}>
                         {amenity}
                       </MenuItem>
                     ))}
                   </Select>
                 </FormControl>
-                <Button
-                  variant="outlined"
-                  startIcon={<AddIcon />}
-                  onClick={addAmenity}
-                  disabled={!selectedAmenityToAdd}
-                >
+                <Button variant="contained" onClick={addAmenity} disabled={!selectedAmenityToAdd}>
                   Add
                 </Button>
               </Box>
@@ -528,67 +629,147 @@ const UpdateProperty = () => {
             onEdit={() => setEditingSection('facilities')}
             onSave={() => setEditingSection('')}
             onCancel={handleCancelEdit}
+            error={errors.facilities?.message}
           >
-            <Grid container spacing={3}>
-              {['Bedrooms', 'Bathrooms', 'Kitchen', 'Balcony', 'Living Area', 'Other'].map((facility) => (
-                <Grid item xs={12} sm={6} md={4} key={facility}>
-                  <Box
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="space-between"
-                    p={2}
-                    border="1px solid #ccc"
-                    borderRadius={2}
-                    sx={{ backgroundColor: editingSection !== 'facilities' ? '#f5f5f5' : 'transparent' }}
-                  >
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {facility}
-                      {(facility === 'Bedrooms' || facility === 'Bathrooms') && 
-                        <Box component="span" sx={{ color: 'error.main', ml: 0.5 }}>*</Box>
-                      }
-                    </Typography>
-                    <Box display="flex" alignItems="center">
-                      <IconButton 
-                        onClick={() => updateFacilityCount(facility, false)} 
-                        disabled={editingSection !== 'facilities' || (facilitiesValue[facility] || 0) <= 0}
-                      >
-                        <RemoveIcon />
-                      </IconButton>
-                      <Typography variant="h6" sx={{ mx: 2, minWidth: '20px', textAlign: 'center' }}>
-                        {facilitiesValue[facility] || 0}
-                      </Typography>
-                      <IconButton 
-                        onClick={() => updateFacilityCount(facility, true)}
-                        disabled={editingSection !== 'facilities'}
-                      >
-                        <AddIcon />
-                      </IconButton>
-                    </Box>
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
-            
+            {Object.keys(facilitiesValue).length > 0 && (
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                {availableFacilities.map((facility) => {
+                  const count = facilitiesValue[facility];
+                  if (count === undefined) return null;
+                  
+                  return (
+                    <Grid item xs={12} sm={6} md={4} key={facility}>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between',
+                        p: 2,
+                        border: `1px solid ${theme.border}`,
+                        borderRadius: 2,
+                        backgroundColor: theme.cardBackground,
+                        color: theme.textPrimary
+                      }}>
+                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                          {facility}
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => updateFacilityCount(facility, false)}
+                            disabled={editingSection !== 'facilities' || count <= 0}
+                          >
+                            <RemoveIcon />
+                          </IconButton>
+                          <Typography variant="body1" sx={{ 
+                            minWidth: '30px', 
+                            textAlign: 'center',
+                            fontWeight: 600
+                          }}>
+                            {count}
+                          </Typography>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => updateFacilityCount(facility, true)}
+                            disabled={editingSection !== 'facilities'}
+                          >
+                            <AddIcon />
+                          </IconButton>
+                          {editingSection === 'facilities' && (
+                            <Button 
+                              size="small" 
+                              color="error" 
+                              onClick={() => {
+                                const currentFacilities = { ...facilitiesValue };
+                                delete currentFacilities[facility];
+                                setValue('facilities', currentFacilities);
+                              }}
+                            >
+                              Remove
+                            </Button>
+                          )}
+                        </Box>
+                      </Box>
+                    </Grid>
+                  );
+                })}
+              </Grid>
+            )}
+
             {editingSection === 'facilities' && (
-              <Box sx={{ mt: 3 }}>
-                <Alert severity="info">
-                  Bedrooms and Bathrooms are required. Set Bedrooms to 0 for studio apartments.
-                </Alert>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Add Facility</InputLabel>
+                  <Select
+                    value={selectedFacilityToAdd}
+                    onChange={(e) => setSelectedFacilityToAdd(e.target.value)}
+                  >
+                    {availableFacilities.filter(facility => facilitiesValue[facility] === undefined).map(facility => (
+                      <MenuItem key={facility} value={facility}>
+                        {facility}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button variant="contained" onClick={addFacility} disabled={!selectedFacilityToAdd}>
+                  Add
+                </Button>
               </Box>
             )}
           </EditableSection>
 
           <EditableSection
-            title="Availability"
+            title="Property Images"
+            isEditing={editingSection === 'images'}
+            onEdit={() => setEditingSection('images')}
+            onSave={() => setEditingSection('')}
+            onCancel={handleCancelEdit}
+          >
+            {imagesValue?.length > 0 ? (
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                {imagesValue.map((image, index) => (
+                  <Grid item xs={12} sm={6} md={4} key={index}>
+                    <Card>
+                      <AzuriteImage 
+                        src={image.url} 
+                        alt={image.originalname || `Property image ${index + 1}`}
+                      />
+                      <CardContent>
+                        <Typography variant="body2" color="textSecondary">
+                          {image.originalname || 'Property Image'}
+                        </Typography>
+                        <Typography variant="caption" color="textSecondary">
+                          Size: {Math.round(image.size / 1024)}KB
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+              </Grid>
+            ) : (
+              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                No images uploaded yet
+              </Typography>
+            )}
+
+            {editingSection === 'images' && (
+              <ImageUpload
+                onImagesUploaded={(images) => setValue('images', images)}
+                disabled={false}
+                maxImages={10}
+              />
+            )}
+          </EditableSection>
+
+          <EditableSection
+            title="Availability Period"
             isEditing={editingSection === 'availability'}
             onEdit={() => setEditingSection('availability')}
             onSave={() => setEditingSection('')}
             onCancel={handleCancelEdit}
-            error={errors.availableFrom?.message || errors.availableTo?.message}
           >
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <LocalizationProvider dateAdapter={AdapterDayjs}>
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
                   <Controller
                     name="availableFrom"
                     control={control}
@@ -598,44 +779,28 @@ const UpdateProperty = () => {
                         value={field.value}
                         onChange={field.onChange}
                         disabled={editingSection !== 'availability'}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            fullWidth
-                            error={!!errors.availableFrom}
-                            helperText={errors.availableFrom?.message}
-                          />
-                        )}
+                        renderInput={(params) => <TextField {...params} fullWidth />}
                       />
                     )}
                   />
-                </LocalizationProvider>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                </Grid>
+                <Grid item xs={12} sm={6}>
                   <Controller
                     name="availableTo"
                     control={control}
                     render={({ field }) => (
                       <DatePicker
-                        label="Available Until"
+                        label="Available To"
                         value={field.value}
                         onChange={field.onChange}
                         disabled={editingSection !== 'availability'}
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            fullWidth
-                            error={!!errors.availableTo}
-                            helperText={errors.availableTo?.message || "Leave empty for no end date"}
-                          />
-                        )}
+                        renderInput={(params) => <TextField {...params} fullWidth />}
                       />
                     )}
                   />
-                </LocalizationProvider>
+                </Grid>
               </Grid>
-            </Grid>
+            </LocalizationProvider>
           </EditableSection>
 
           <EditableSection
@@ -652,7 +817,6 @@ const UpdateProperty = () => {
               rows={4}
               label={<RequiredFieldLabel required>Contract Policy</RequiredFieldLabel>}
               variant="outlined"
-              placeholder="Enter contract terms, payment policy, lease duration, etc."
               disabled={editingSection !== 'contract'}
               {...register('contractPolicy')}
               error={!!errors.contractPolicy}
@@ -741,10 +905,7 @@ const UpdateProperty = () => {
                   helperText={errors.rules?.[index]?.message}
                 />
                 {editingSection === 'rules' && (
-                  <IconButton 
-                    onClick={() => removeRule(index)}
-                    color="error"
-                  >
+                  <IconButton onClick={() => removeRule(index)} color="error">
                     <RemoveIcon />
                   </IconButton>
                 )}
@@ -756,13 +917,13 @@ const UpdateProperty = () => {
                 startIcon={<AddIcon />}
                 variant="outlined"
               >
-                Add House Rule
+                Add Rule
               </Button>
             )}
           </EditableSection>
 
           <EditableSection
-            title="Bills Included (Optional)"
+            title="Bills Inclusive (Optional)"
             isEditing={editingSection === 'bills'}
             onEdit={() => setEditingSection('bills')}
             onSave={() => setEditingSection('')}
@@ -774,17 +935,13 @@ const UpdateProperty = () => {
                   fullWidth
                   label={`Bill ${index + 1}`}
                   variant="outlined"
-                  placeholder="e.g., Water, Electricity, Internet"
                   disabled={editingSection !== 'bills'}
                   {...register(`billsInclusive.${index}`)}
                   error={!!errors.billsInclusive?.[index]}
                   helperText={errors.billsInclusive?.[index]?.message}
                 />
                 {editingSection === 'bills' && (
-                  <IconButton 
-                    onClick={() => removeBill(index)}
-                    color="error"
-                  >
+                  <IconButton onClick={() => removeBill(index)} color="error">
                     <RemoveIcon />
                   </IconButton>
                 )}
@@ -796,26 +953,9 @@ const UpdateProperty = () => {
                 startIcon={<AddIcon />}
                 variant="outlined"
               >
-                Add Bills Included
+                Add Bill
               </Button>
             )}
-          </EditableSection>
-
-          <EditableSection
-            title="Property Images"
-            isEditing={editingSection === 'images'}
-            onEdit={() => setEditingSection('images')}
-            onSave={() => setEditingSection('')}
-            onCancel={handleCancelEdit}
-          >
-            <ImageUpload 
-              onUpload={handleImageUpload}
-              maxFiles={10}
-              disabled={editingSection !== 'images'}
-            />
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-              Upload high-quality images of your property to attract more tenants.
-            </Typography>
           </EditableSection>
 
           <Box sx={{ 

@@ -325,52 +325,68 @@ const PropertyOwnerBookings = () => {
   };
 
   const renderStatisticsCard = () => (
-    <Card sx={{ mb: 3 }}>
-      <CardContent>
-        <Typography variant="h6" gutterBottom>
-          Booking Statistics
-        </Typography>
-        {statistics ? (
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" color="text.secondary">
-                Total Bookings
-              </Typography>
-              <Typography variant="h5" color="primary">
-                {statistics.total_bookings}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" color="text.secondary">
-                Confirmed Bookings
-              </Typography>
-              <Typography variant="h5" color="success.main">
-                {statistics.confirmed_bookings}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" color="text.secondary">
-                Total Revenue
-              </Typography>
-              <Typography variant="h5" color="success.main">
-                {formatCurrency(statistics.total_revenue)}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" color="text.secondary">
-                Occupancy Rate
-              </Typography>
-              <Typography variant="h5">
-                {statistics.occupancy_rate}%
-              </Typography>
-            </Grid>
+  <Card sx={{ mb: 3 }}>
+    <CardContent>
+      <Typography variant="h6" gutterBottom>
+        Booking Statistics
+      </Typography>
+      {statistics ? (
+        <Grid container spacing={2}>
+          <Grid item xs={6} sm={3}>
+            <Typography variant="h4" color="primary">
+              {statistics.total_bookings || 0}
+            </Typography>
+            <Typography variant="body2">Total Bookings</Typography>
           </Grid>
-        ) : (
-          <CircularProgress />
-        )}
-      </CardContent>
-    </Card>
-  );
+          <Grid item xs={6} sm={3}>
+            <Typography variant="h4" color="success.main">
+              {formatCurrency(statistics.total_revenue || 0)}
+            </Typography>
+            <Typography variant="body2">Total Revenue</Typography>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <Typography variant="h4" color="info.main">
+              {formatCurrency(statistics.advance_collected || 0)}
+            </Typography>
+            <Typography variant="body2">Advance Collected</Typography>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <Typography variant="h4" color="warning.main">
+              {formatCurrency(statistics.pending_advance || 0)}
+            </Typography>
+            <Typography variant="body2">Pending Advance</Typography>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <Typography variant="h4" color="secondary.main">
+              {statistics.confirmed_bookings || 0}
+            </Typography>
+            <Typography variant="body2">Confirmed</Typography>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <Typography variant="h4" color="warning.main">
+              {statistics.pending_bookings || 0}
+            </Typography>
+            <Typography variant="body2">Pending</Typography>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <Typography variant="h4" color="info.main">
+              {formatCurrency(statistics.average_booking_value || 0)}
+            </Typography>
+            <Typography variant="body2">Avg Booking Value</Typography>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <Typography variant="h4" color="success.main">
+              {formatCurrency(statistics.average_advance || 0)}
+            </Typography>
+            <Typography variant="body2">Avg Advance</Typography>
+          </Grid>
+        </Grid>
+      ) : (
+        <Typography>Loading statistics...</Typography>
+      )}
+    </CardContent>
+  </Card>
+);
 
   const renderFilters = () => (
     <Card sx={{ mb: 3 }}>
@@ -464,29 +480,39 @@ const PropertyOwnerBookings = () => {
         </Box>
 
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="body2">
-              <PersonIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
-              <strong>Guest:</strong> {booking.first_name} {booking.last_name}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="body2">
-              <CalendarTodayIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
-              <strong>Dates:</strong> {formatDate(booking.check_in_date)} - {formatDate(booking.check_out_date)}
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="body2">
-              <strong>Duration:</strong> {booking.booking_days} days ({booking.booking_months} months)
-            </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="body2">
-              <strong>Amount:</strong> {formatCurrency(booking.total_price)}
-            </Typography>
-          </Grid>
-        </Grid>
+  <Grid item xs={12} sm={6} md={3}>
+    <Typography variant="body2">
+      <PersonIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+      <strong>Guest:</strong> {booking.first_name} {booking.last_name}
+    </Typography>
+  </Grid>
+  <Grid item xs={12} sm={6} md={3}>
+    <Typography variant="body2">
+      <CalendarTodayIcon sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
+      <strong>Dates:</strong> {formatDate(booking.check_in_date)} - {formatDate(booking.check_out_date)}
+    </Typography>
+  </Grid>
+  <Grid item xs={12} sm={6} md={3}>
+    <Typography variant="body2">
+      <strong>Duration:</strong> {booking.booking_days} days ({booking.booking_months} months)
+    </Typography>
+  </Grid>
+  <Grid item xs={12} sm={6} md={3}>
+    <Typography variant="body2">
+      <strong>Total:</strong> {formatCurrency(booking.total_price)}
+    </Typography>
+  </Grid>
+  <Grid item xs={12} sm={6} md={3}>
+    <Typography variant="body2">
+      <strong>Advance:</strong> {formatCurrency(booking.advance_amount)}
+    </Typography>
+  </Grid>
+  <Grid item xs={12} sm={6} md={3}>
+    <Typography variant="body2">
+      <strong>Remaining:</strong> {formatCurrency((booking.total_price || 0) - (booking.advance_amount || 0))}
+    </Typography>
+  </Grid>
+</Grid>
 
         <Accordion>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -731,14 +757,20 @@ const PropertyOwnerBookings = () => {
           {selectedBooking && (
             <Box sx={{ pt: 2 }}>
               <Typography variant="body1" gutterBottom>
-                <strong>Guest:</strong> {selectedBooking.first_name} {selectedBooking.last_name}
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>Dates:</strong> {formatDate(selectedBooking.check_in_date)} - {formatDate(selectedBooking.check_out_date)}
-              </Typography>
-              <Typography variant="body1" gutterBottom sx={{ mb: 3 }}>
-                <strong>Amount:</strong> {formatCurrency(selectedBooking.total_price)}
-              </Typography>
+  <strong>Guest:</strong> {selectedBooking.first_name} {selectedBooking.last_name}
+</Typography>
+<Typography variant="body1" gutterBottom>
+  <strong>Dates:</strong> {formatDate(selectedBooking.check_in_date)} - {formatDate(selectedBooking.check_out_date)}
+</Typography>
+<Typography variant="body1" gutterBottom>
+  <strong>Total Amount:</strong> {formatCurrency(selectedBooking.total_price)}
+</Typography>
+<Typography variant="body1" gutterBottom>
+  <strong>Advance Required:</strong> {formatCurrency(selectedBooking.advance_amount)}
+</Typography>
+<Typography variant="body1" gutterBottom sx={{ mb: 3 }}>
+  <strong>Remaining on Check-in:</strong> {formatCurrency((selectedBooking.total_price || 0) - (selectedBooking.advance_amount || 0))}
+</Typography>
               
               <FormControl fullWidth sx={{ mb: 3 }}>
                 <InputLabel>Response</InputLabel>
@@ -795,11 +827,23 @@ const PropertyOwnerBookings = () => {
           {selectedBooking && (
             <Box sx={{ pt: 2 }}>
               <Typography variant="body1" gutterBottom>
-                <strong>Booking:</strong> #{selectedBooking.id}
-              </Typography>
-              <Typography variant="body1" gutterBottom>
-                <strong>Amount:</strong> {formatCurrency(selectedBooking.total_price)}
-              </Typography>
+  <strong>Booking:</strong> #{selectedBooking.id}
+</Typography>
+<Typography variant="body1" gutterBottom>
+  <strong>Total Amount:</strong> {formatCurrency(selectedBooking.total_price)}
+</Typography>
+<Typography variant="body1" gutterBottom>
+  <strong>Advance Amount:</strong> {formatCurrency(selectedBooking.advance_amount)}
+</Typography>
+<Typography variant="body1" gutterBottom sx={{ mb: 3 }}>
+  <strong>Payment Status:</strong> {selectedBooking.status}
+</Typography>
+
+<Alert severity="info" sx={{ mb: 2 }}>
+  Guest needs to pay advance of {formatCurrency(selectedBooking.advance_amount)} to confirm booking.
+  Remaining {formatCurrency((selectedBooking.total_price || 0) - (selectedBooking.advance_amount || 0))} 
+  will be collected on check-in.
+</Alert>
               
               {selectedBooking.payment_proof_url && (
                 <Box sx={{ mb: 3 }}>

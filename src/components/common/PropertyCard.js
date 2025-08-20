@@ -54,6 +54,7 @@ const PropertyCard = ({
 
   const parseJsonField = (field) => {
     if (!field) return null;
+    if (typeof field === 'object') return field;
     if (typeof field === 'string') {
       try {
         return JSON.parse(field);
@@ -64,6 +65,26 @@ const PropertyCard = ({
     return field;
   };
 
+  const getImageUrl = (images) => {
+    const parsedImages = parseJsonField(images);
+    
+    if (!parsedImages || !Array.isArray(parsedImages) || parsedImages.length === 0) {
+      return '/api/placeholder/400/250';
+    }
+
+    const firstImage = parsedImages[0];
+    
+    if (typeof firstImage === 'string' && firstImage.trim()) {
+      return firstImage.trim();
+    }
+    
+    if (typeof firstImage === 'object' && firstImage?.url && typeof firstImage.url === 'string') {
+      return firstImage.url.trim();
+    }
+    
+    return '/api/placeholder/400/250';
+  };
+
   const amenities = parseJsonField(property.amenities);
   const facilities = parseJsonField(property.facilities);
   const rules = parseJsonField(property.rules);
@@ -71,9 +92,7 @@ const PropertyCard = ({
   const contractPolicy = property.contract_policy || property.contractPolicy;
   const images = parseJsonField(property.images);
 
-  const primaryImage = images && images.length > 0 ? 
-    (typeof images[0] === 'string' ? images[0] : images[0]?.url) : 
-    '/api/placeholder/400/250';
+  const primaryImage = getImageUrl(property.images);
 
   const getAmenitiesDisplay = () => {
     if (!amenities) return [];
@@ -146,295 +165,230 @@ const PropertyCard = ({
             </Typography>
           </Box>
 
-          <Typography variant="h6" color="primary" sx={{ mb: 2 }}>
-            LKR {property.price?.toLocaleString() || 'N/A'}/month
+          <Typography 
+            variant="h6" 
+            color="primary" 
+            sx={{ fontWeight: 'bold', mb: 1 }}
+          >
+            LKR {parseInt(property.price || 0).toLocaleString()} / month
           </Typography>
 
-          {Object.keys(displayFacilities).length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Facilities
+          <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <HomeIcon sx={{ fontSize: 16, mr: 0.5 }} />
+              <Typography variant="caption">
+                {displayFacilities.Bedroom || property.bedrooms || 0} Bed
               </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {Object.entries(displayFacilities).map(([facility, count]) => (
-                  <Chip
-                    key={facility}
-                    label={`${count} ${facility}`}
-                    size="small"
-                    variant="outlined"
-                    sx={{ fontSize: '0.75rem' }}
-                  />
-                ))}
-              </Box>
             </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <BathtubIcon sx={{ fontSize: 16, mr: 0.5 }} />
+              <Typography variant="caption">
+                {displayFacilities.Bathroom || property.bathrooms || 0} Bath
+              </Typography>
+            </Box>
+          </Box>
+
+          {property.approval_status && (
+            <Chip 
+              label={property.approval_status.toUpperCase()} 
+              color={
+                property.approval_status === 'approved' ? 'success' :
+                property.approval_status === 'pending' ? 'warning' : 'error'
+              }
+              size="small"
+              sx={{ mb: 1 }}
+            />
           )}
 
           {displayAmenities.length > 0 && (
-            <Box sx={{ mb: 2 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Amenities
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                {displayAmenities.slice(0, 3).map((amenity) => (
-                  <Chip
-                    key={amenity}
-                    label={amenity}
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                    sx={{ fontSize: '0.75rem' }}
-                  />
-                ))}
-                {displayAmenities.length > 3 && (
-                  <Chip
-                    label={`+${displayAmenities.length - 3} more`}
-                    size="small"
-                    variant="outlined"
-                    sx={{ fontSize: '0.75rem' }}
-                  />
-                )}
-              </Box>
-            </Box>
-          )}
-
-          {roommates && roommates.length > 0 && (
             <Box sx={{ mb: 1 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <PersonIcon fontSize="small" />
-                {roommates.length} Roommate{roommates.length > 1 ? 's' : ''}
+              <Typography variant="caption" color="text.secondary">
+                Amenities: {displayAmenities.slice(0, 3).join(', ')}
+                {displayAmenities.length > 3 && '...'}
               </Typography>
-            </Box>
-          )}
-
-          {contractPolicy && (
-            <Box sx={{ mb: 1 }}>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <PolicyIcon fontSize="small" />
-                Contract Policy Available
-              </Typography>
-            </Box>
-          )}
-
-          <Box sx={{ display: 'flex', alignItems: 'center', mt: 'auto', pt: 2 }}>
-            <CalendarIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-            <Typography variant="caption" color="text.secondary">
-              Available from {property.available_from ? 
-                new Date(property.available_from).toLocaleDateString() : 
-                'Immediately'
-              }
-            </Typography>
-          </Box>
-
-          {showActions && (
-            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-              <Button
-                variant="outlined"
-                size="small"
-                startIcon={<VisibilityIcon />}
-                onClick={handleDetailsOpen}
-                fullWidth
-              >
-                View Details
-              </Button>
-              {(userRole === 'propertyowner' || userRole === 'admin') && onEdit && (
-                <IconButton
-                  onClick={() => onEdit(property)}
-                  color="primary"
-                  size="small"
-                >
-                  <EditIcon />
-                </IconButton>
-              )}
-              {(userRole === 'propertyowner' || userRole === 'admin') && onDelete && (
-                <IconButton
-                  onClick={() => onDelete(property)}
-                  color="error"
-                  size="small"
-                >
-                  <DeleteIcon />
-                </IconButton>
-              )}
             </Box>
           )}
         </CardContent>
-      </Card>
 
-      {/* Property Details Dialog */}
-      <Dialog
-        open={detailsOpen}
-        onClose={handleDetailsClose}
-        maxWidth="md"
-        fullWidth
-        scroll="paper"
-      >
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6">
-            {property.property_type} - {property.unit_type}
-          </Typography>
-          <IconButton onClick={handleDetailsClose}>
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        
-        <DialogContent dividers>
-          {/* Property Images */}
-          {images && images.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <CardMedia
-                component="img"
-                height="300"
-                image={primaryImage}
-                alt={property.property_type}
-                sx={{ objectFit: 'cover', borderRadius: 1 }}
-              />
-            </Box>
-          )}
-
-          {/* Basic Information */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Property Type</Typography>
-              <Typography variant="body1" fontWeight="medium">{property.property_type}</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="body2" color="text.secondary">Unit Type</Typography>
-              <Typography variant="body1" fontWeight="medium">{property.unit_type}</Typography>
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="body2" color="text.secondary">Address</Typography>
-              <Typography variant="body1" fontWeight="medium">{property.address}</Typography>
-            </Grid>
-            <Grid item xs={12}>
-              <Typography variant="body2" color="text.secondary">Monthly Rent</Typography>
-              <Typography variant="h6" color="primary" fontWeight="bold">
-                LKR {property.price?.toLocaleString() || 'N/A'}
-              </Typography>
-            </Grid>
-            {property.description && (
-              <Grid item xs={12}>
-                <Typography variant="body2" color="text.secondary">Description</Typography>
-                <Typography variant="body1">{property.description}</Typography>
-              </Grid>
-            )}
-          </Grid>
-
-          <Divider sx={{ my: 2 }} />
-
-          {/* Facilities */}
-          {Object.keys(displayFacilities).length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <HomeIcon />
-                Facilities
-              </Typography>
-              <Grid container spacing={2}>
-                {Object.entries(displayFacilities).map(([facility, count]) => (
-                  <Grid item xs={6} sm={4} key={facility}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {facility.toLowerCase().includes('bathroom') && <BathtubIcon />}
-                      {facility.toLowerCase().includes('kitchen') && <KitchenIcon />}
-                      {facility.toLowerCase().includes('parking') && <ParkingIcon />}
-                      {!facility.toLowerCase().includes('bathroom') && 
-                       !facility.toLowerCase().includes('kitchen') && 
-                       !facility.toLowerCase().includes('parking') && <HomeIcon />}
-                      <Typography variant="body1">{count} {facility}</Typography>
-                    </Box>
-                  </Grid>
-                ))}
-              </Grid>
-            </Box>
-          )}
-
-          {/* Amenities */}
-          {displayAmenities.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Amenities
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {displayAmenities.map((amenity) => (
-                  <Chip
-                    key={amenity}
-                    label={amenity}
-                    color="primary"
-                    variant="outlined"
-                  />
-                ))}
+        {showActions && (
+          <Box sx={{ p: 2, pt: 0 }}>
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<InfoIcon />}
+                onClick={handleDetailsOpen}
+              >
+                Details
+              </Button>
+              
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                {onView && (
+                  <IconButton size="small" onClick={() => onView(property)} color="primary">
+                    <VisibilityIcon />
+                  </IconButton>
+                )}
+                {onEdit && (
+                  <IconButton size="small" onClick={() => onEdit(property)} color="info">
+                    <EditIcon />
+                  </IconButton>
+                )}
+                {onDelete && (
+                  <IconButton size="small" onClick={() => onDelete(property)} color="error">
+                    <DeleteIcon />
+                  </IconButton>
+                )}
               </Box>
             </Box>
-          )}
+          </Box>
+        )}
+      </Card>
 
-          {/* Roommates */}
-          {roommates && roommates.length > 0 && (
+      <Dialog open={detailsOpen} onClose={handleDetailsClose} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            Property Details
+            <IconButton onClick={handleDetailsClose}>
+              <CloseIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h5" gutterBottom>
+              {property.property_type} - {property.unit_type}
+            </Typography>
+            <Typography variant="body1" color="text.secondary" gutterBottom>
+              {property.address}
+            </Typography>
+            <Typography variant="h6" color="primary">
+              LKR {parseInt(property.price || 0).toLocaleString()} / month
+            </Typography>
+          </Box>
+
+          {property.description && (
             <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <PersonIcon />
-                Roommates ({roommates.length})
-              </Typography>
-              <Grid container spacing={2}>
-                {roommates.map((roommate, index) => (
-                  <Grid item xs={12} sm={6} key={index}>
-                    <Card variant="outlined" sx={{ p: 2 }}>
-                      <Typography variant="subtitle2" gutterBottom>Roommate {index + 1}</Typography>
-                      {roommate.occupation && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <WorkIcon fontSize="small" />
-                          <Typography variant="body2">{roommate.occupation}</Typography>
-                        </Box>
-                      )}
-                      {roommate.field && (
-                        <Typography variant="body2" color="text.secondary">
-                          Field: {roommate.field}
-                        </Typography>
-                      )}
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
+              <Typography variant="h6" gutterBottom>Description</Typography>
+              <Typography variant="body2">{property.description}</Typography>
             </Box>
           )}
 
-          {/* House Rules */}
-          {rules && rules.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <RuleIcon />
-                House Rules
-              </Typography>
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={6}>
+              <Typography variant="h6" gutterBottom>Property Details</Typography>
               <List dense>
-                {rules.map((rule, index) => (
-                  <ListItem key={index} sx={{ py: 0.5 }}>
-                    <ListItemIcon sx={{ minWidth: 32 }}>
-                      <InfoIcon sx={{ fontSize: 16, color: 'primary.main' }} />
-                    </ListItemIcon>
-                    <ListItemText 
-                      primary={
-                        <Typography variant="body2">{rule}</Typography>
-                      } 
-                    />
-                  </ListItem>
+                <ListItem>
+                  <ListItemIcon><HomeIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="Bedrooms" 
+                    secondary={displayFacilities.Bedroom || property.bedrooms || 0}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemIcon><BathtubIcon /></ListItemIcon>
+                  <ListItemText 
+                    primary="Bathrooms" 
+                    secondary={displayFacilities.Bathroom || property.bathrooms || 0}
+                  />
+                </ListItem>
+                {Object.entries(displayFacilities).map(([key, value]) => (
+                  key !== 'Bedroom' && key !== 'Bathroom' && (
+                    <ListItem key={key}>
+                      <ListItemIcon><HomeIcon /></ListItemIcon>
+                      <ListItemText primary={key} secondary={value} />
+                    </ListItem>
+                  )
                 ))}
               </List>
-            </Box>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              {displayAmenities.length > 0 && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="h6" gutterBottom>Amenities</Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {displayAmenities.map((amenity, index) => (
+                      <Chip key={index} label={amenity} size="small" variant="outlined" />
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Available From
+              </Typography>
+              <Typography variant="body1" fontWeight="medium" sx={{ mb: 2 }}>
+                {property.available_from ? 
+                  new Date(property.available_from).toLocaleDateString() : 
+                  'Immediately'
+                }
+              </Typography>
+
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Available Until
+              </Typography>
+              <Typography variant="body1" fontWeight="medium">
+                {property.available_to ? 
+                  new Date(property.available_to).toLocaleDateString() : 
+                  'No end date'
+                }
+              </Typography>
+            </Grid>
+          </Grid>
+
+          {rules && rules.length > 0 && (
+            <Accordion sx={{ mt: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6">House Rules</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  {rules.map((rule, index) => (
+                    <ListItem key={index}>
+                      <ListItemIcon><RuleIcon /></ListItemIcon>
+                      <ListItemText primary={rule} />
+                    </ListItem>
+                  ))}
+                </List>
+              </AccordionDetails>
+            </Accordion>
           )}
 
-          {/* Contract Policy */}
           {contractPolicy && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <PolicyIcon />
-                Contract Policy
-              </Typography>
-              <Typography variant="body1" sx={{ whiteSpace: 'pre-line' }}>
-                {contractPolicy}
-              </Typography>
-            </Box>
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6">Contract Policy</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2">{contractPolicy}</Typography>
+              </AccordionDetails>
+            </Accordion>
           )}
 
-          {/* Availability */}
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="h6" gutterBottom>Availability</Typography>
-            <Grid container spacing={2}>
+          {roommates && roommates.length > 0 && (
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6">Roommate Preferences</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <List dense>
+                  {roommates.map((roommate, index) => (
+                    <ListItem key={index}>
+                      <ListItemIcon><PersonIcon /></ListItemIcon>
+                      <ListItemText 
+                        primary={`${roommate.gender || 'Any'} - ${roommate.age_range || 'Any age'}`}
+                        secondary={roommate.preferences || ''}
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              </AccordionDetails>
+            </Accordion>
+          )}
+
+          {property.available_from && (
+            <Grid container spacing={2} sx={{ mt: 2 }}>
               <Grid item xs={12} sm={6}>
                 <Typography variant="body2" color="text.secondary">Available From</Typography>
                 <Typography variant="body1" fontWeight="medium">
@@ -454,7 +408,7 @@ const PropertyCard = ({
                 </Typography>
               </Grid>
             </Grid>
-          </Box>
+          )}
         </DialogContent>
 
         <DialogActions>

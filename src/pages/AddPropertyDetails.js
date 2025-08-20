@@ -144,6 +144,7 @@ const AddPropertyDetails = () => {
       availableFrom: null,
       availableTo: null,
       price: '',
+      advancePercentage: 30,
       billsInclusive: []
     }
   });
@@ -184,6 +185,7 @@ const AddPropertyDetails = () => {
       address: data.address,
       description: data.description,
       price: parseFloat(data.price),
+      advance_percentage: parseFloat(data.advancePercentage) || 30.00, 
       amenities: selectedAmenities.reduce((acc, amenity) => {
         acc[amenity] = 1;
         return acc;
@@ -582,6 +584,7 @@ const AddPropertyDetails = () => {
                       <DatePicker
                         label="Available From"
                         value={field.value}
+                        // minDate={dayjs()}   
                         onChange={field.onChange}
                         renderInput={(params) => (
                           <TextField
@@ -606,6 +609,7 @@ const AddPropertyDetails = () => {
                         label="Available To"
                         value={field.value}
                         onChange={field.onChange}
+                        minDate={dayjs()}
                         renderInput={(params) => (
                           <TextField
                             {...params}
@@ -636,6 +640,39 @@ const AddPropertyDetails = () => {
               helperText={errors.price?.message}
             />
           </Card>
+
+          <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
+  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+    Set Price Range*
+  </Typography>
+  <Grid container spacing={3}>
+    <Grid item xs={12} sm={6}>
+      <TextField
+        fullWidth
+        label="Monthly Rent (LKR)"
+        variant="outlined"
+        type="number"
+        {...register('price')}
+        error={!!errors.price}
+        helperText={errors.price?.message}
+      />
+    </Grid>
+    <Grid item xs={12} sm={6}>
+      <TextField
+        fullWidth
+        label="Advance Percentage (%)"
+        variant="outlined"
+        type="number"
+        inputProps={{ min: 10, max: 100, step: 5 }}
+        placeholder="30"
+        {...register('advancePercentage')}
+        error={!!errors.advancePercentage}
+        helperText={errors.advancePercentage?.message || "Default is 30% if not specified"}
+      />
+    </Grid>
+  </Grid>
+</Card>
+
 
           <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>

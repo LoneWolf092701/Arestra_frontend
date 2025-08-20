@@ -483,3 +483,34 @@ export const getSimilarProperties = async (propertyId, options = {}) => {
     return [];
   }
 };
+
+/**
+ * Get property by ID for owner (authenticated endpoint)
+ * This allows owners to access their own properties for editing/viewing
+ * @param {number|string} propertyId - The property ID
+ * @returns {Promise} Property data
+ */
+export const getPropertyById = async (propertyId) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/properties/${validatedId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return processPropertyData(response.data);
+  } catch (error) {
+    handleApiError(error, 'fetching property');
+  }
+};
+
+/**
+ * Get property details by ID for owner (alias for consistency)
+ * @param {number|string} propertyId - The property ID
+ * @returns {Promise} Property data
+ */
+export const getOwnerPropertyById = async (propertyId) => {
+  return getPropertyById(propertyId);
+};

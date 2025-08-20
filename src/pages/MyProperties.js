@@ -53,6 +53,7 @@ import {
 import dayjs from 'dayjs';
 import { getMyProperties, deleteProperty } from '../api/propertyApi';
 import { ThemeContext } from '../contexts/ThemeContext';
+import Pagination from '../components/common/Pagination';
 import AppSnackbar from '../components/common/AppSnackbar';
 import Room from '../assets/images/Room.jpg';
 
@@ -69,8 +70,18 @@ const MyProperties = () => {
   const [selectedProperty, setSelectedProperty] = useState(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
   const [imageErrors, setImageErrors] = useState(new Set());
+  
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(12);
+  const [paginationData, setPaginationData] = useState({
+    total: 0,
+    totalPages: 0,
+    page: 1,
+    limit: 12,
+    hasNext: false,
+    hasPrevious: false
+  });
 
-  // Robust JSON parser with comprehensive error handling
   const safeJsonParse = (str, fallback = null) => {
     if (!str) return fallback;
     if (typeof str === 'object') return str;
@@ -85,135 +96,137 @@ const MyProperties = () => {
     }
   };
 
-  // Comprehensive image URL resolver with multiple fallbacks
-  const getImageUrl = (images, propertyId) => {
-    console.log('=== getImageUrl Debug ===');
-    console.log('Raw images input:', images);
-    console.log('Property ID:', propertyId);
+  const extractPaginationData = (response) => {
+    if (response?.pagination) {
+      return {
+        total: response.pagination.total || 0,
+        totalPages: response.pagination.totalPages || 0,
+        page: response.pagination.page || 1,
+        limit: response.pagination.limit || 12,
+        hasNext: response.pagination.hasNext || false,
+        hasPrevious: response.pagination.hasPrevious || false
+      };
+    }
     
+    const properties = response?.properties || [];
+    return {
+      total: properties.length,
+      totalPages: 1,
+      page: 1,
+      limit: 12,
+      hasNext: false,
+      hasPrevious: false
+    };
+  };
+
+  const getImageUrl = (images, propertyId) => {
     const parsedImages = safeJsonParse(images, []);
-    console.log('Parsed images:', parsedImages);
-    console.log('Is array?', Array.isArray(parsedImages));
-    console.log('Array length:', parsedImages?.length);
     
     if (!Array.isArray(parsedImages) || parsedImages.length === 0) {
-      console.log('❌ No valid images array, using fallback');
       return Room;
     }
 
     const firstImage = parsedImages[0];
-    console.log('First image:', firstImage);
-    console.log('First image type:', typeof firstImage);
     
-    // Check if it's a direct string URL
     if (typeof firstImage === 'string' && firstImage.trim()) {
-      const url = firstImage.trim();
-      console.log('✅ Using string URL:', url);
-      return url;
+      return firstImage.trim();
     }
     
-    // Check if it's an object with url property
     if (typeof firstImage === 'object' && firstImage !== null && firstImage.url) {
-      console.log('Image object details:', firstImage);
-      console.log('URL property:', firstImage.url);
-      console.log('URL type:', typeof firstImage.url);
-      
       if (typeof firstImage.url === 'string' && firstImage.url.trim()) {
-        const url = firstImage.url.trim();
-        console.log('✅ Using object URL:', url);
-        return url;
+        return firstImage.url.trim();
       }
     }
     
-    console.log('❌ No valid image URL found, using fallback');
     return Room;
   };
 
-  // Handle image loading errors
   const handleImageError = (propertyId) => {
     const imageKey = `property_${propertyId}`;
     setImageErrors(prev => new Set([...prev, imageKey]));
   };
 
-  // Remove duplicate properties by ID
-  const deduplicateProperties = (props) => {
-    if (!Array.isArray(props)) return [];
-    
-    const seen = new Set();
-    return props.filter(property => {
-      if (!property?.id || seen.has(property.id)) {
-        return false;
+  const fetchProperties = async (page = 1) => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      const response = await getMyProperties({
+        page: page,
+        limit: itemsPerPage
+      });
+      
+      console.log('API Response:', response);
+      
+      if (response === undefined || response === null) {
+        console.warn('Response is undefined/null');
+        setProperties([]);
+        setPaginationData({
+          total: 0,
+          totalPages: 0,
+          page: 1,
+          limit: 12,
+          hasNext: false,
+          hasPrevious: false
+        });
+        return;
       }
-      seen.add(property.id);
-      return true;
-    });
+      
+      const rawProperties = response.properties || [];
+      const pagination = extractPaginationData(response);
+      
+      if (!Array.isArray(rawProperties)) {
+        console.warn('Properties is not an array:', rawProperties);
+        setProperties([]);
+        setPaginationData(pagination);
+        return;
+      }
+      
+      setProperties(rawProperties);
+      setPaginationData(pagination);
+      setCurrentPage(page);
+      
+    } catch (error) {
+      console.error('Error fetching properties:', error);
+      setError(error.message || 'Failed to load properties. Please try again.');
+      setProperties([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Fetch properties with comprehensive error handling
-  useEffect(() => {
-    const fetchProperties = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        
-        const response = await getMyProperties();
-        
-        if (!response) {
-          throw new Error('No response received from server');
-        }
-        
-        const rawProperties = response.properties || [];
-        
-        if (!Array.isArray(rawProperties)) {
-          console.warn('Properties is not an array:', rawProperties);
-          setProperties([]);
-          return;
-        }
-        
-        // Remove duplicates and validate data
-        const deduplicatedProperties = deduplicateProperties(rawProperties);
-        
-        console.log('Properties loaded:', {
-          total: deduplicatedProperties.length,
-          duplicatesRemoved: rawProperties.length - deduplicatedProperties.length,
-          properties: deduplicatedProperties.map(p => ({ id: p.id, type: p.property_type, unit: p.unit_type }))
-        });
-        
-        setProperties(deduplicatedProperties);
-        
-      } catch (error) {
-        console.error('Error fetching properties:', error);
-        setError(error.message || 'Failed to load properties. Please try again.');
-        setProperties([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const handlePageChange = (newPage) => {
+    setCurrentPage(newPage);
+    fetchProperties(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
-    fetchProperties();
+  const handleItemsPerPageChange = (newItemsPerPage) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+    fetchProperties(1);
+  };
+
+  useEffect(() => {
+    fetchProperties(currentPage);
   }, []);
 
-  const handleAddProperty = () => {
-    navigate('/add-property');
+  const handleView = (property) => {
+    navigate(`/view-property/${property.id}`);
   };
 
-  const handleEditProperty = (id) => {
-    navigate(`/update-property/${id}`);
+  const handleEdit = (property) => {
+    navigate(`/update-property/${property.id}`);
   };
 
-  const handleViewProperty = (property) => {
-    setSelectedProperty(property);
-    setViewDialogOpen(true);
-  };
-
-  const handleDeleteProperty = (property) => {
+  const handleDelete = (property) => {
     setPropertyToDelete(property);
     setDeleteDialogOpen(true);
   };
 
   const confirmDelete = async () => {
     if (!propertyToDelete) return;
-    
+
     try {
       await deleteProperty(propertyToDelete.id);
       setProperties(prev => prev.filter(p => p.id !== propertyToDelete.id));
@@ -222,6 +235,14 @@ const MyProperties = () => {
         message: 'Property deleted successfully',
         severity: 'success'
       });
+      
+      if (properties.length === 1 && currentPage > 1) {
+        const newPage = currentPage - 1;
+        setCurrentPage(newPage);
+        fetchProperties(newPage);
+      } else {
+        fetchProperties(currentPage);
+      }
     } catch (error) {
       console.error('Error deleting property:', error);
       setSnackbar({
@@ -233,6 +254,15 @@ const MyProperties = () => {
       setDeleteDialogOpen(false);
       setPropertyToDelete(null);
     }
+  };
+
+  const handleViewDetails = (property) => {
+    setSelectedProperty(property);
+    setViewDialogOpen(true);
+  };
+
+  const formatPrice = (price) => {
+    return `LKR ${parseInt(price || 0).toLocaleString()}`;
   };
 
   const getStatusColor = (status) => {
@@ -249,45 +279,57 @@ const MyProperties = () => {
       case 'approved': return <ApprovedIcon />;
       case 'pending': return <PendingIcon />;
       case 'rejected': return <RejectedIcon />;
-      default: return <PendingIcon />;
+      default: return null;
     }
   };
 
-  const formatPrice = (price) => {
-    if (!price || isNaN(price)) return 'Price not set';
-    return `LKR ${parseFloat(price).toLocaleString()}`;
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Not specified';
+    return dayjs(dateString).format('MMM DD, YYYY');
   };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'Not specified';
-    try {
-      return dayjs(dateStr).format('MMM DD, YYYY');
-    } catch {
-      return 'Invalid date';
+  const getDisplayAmenities = (amenities) => {
+    if (!amenities) return [];
+    
+    if (Array.isArray(amenities)) {
+      return amenities;
     }
+    
+    if (typeof amenities === 'object') {
+      return Object.keys(amenities).filter(key => amenities[key] > 0);
+    }
+    
+    return [];
   };
 
-  const getTruncatedAddress = (address, maxLength = 100) => {
-    if (!address || typeof address !== 'string') return 'Address not provided';
-    return address.length > maxLength ? `${address.substring(0, maxLength)}...` : address;
+  const getDisplayFacilities = (facilities) => {
+    if (!facilities || typeof facilities !== 'object') return {};
+    
+    const displayFacilities = {};
+    Object.entries(facilities).forEach(([key, value]) => {
+      if (value && parseInt(value) > 0) {
+        displayFacilities[key] = parseInt(value);
+      }
+    });
+    
+    return displayFacilities;
   };
 
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Typography variant="h4" sx={{ mb: 4, fontWeight: 700, color: theme.textPrimary }}>
+        <Typography variant="h4" sx={{ mb: 4, fontWeight: 'bold', color: theme.textPrimary }}>
           My Properties
         </Typography>
         <Grid container spacing={3}>
           {[1, 2, 3, 4].map((item) => (
             <Grid item xs={12} sm={6} md={4} lg={3} key={item}>
-              <Card sx={{ height: 400 }}>
+              <Card>
                 <Skeleton variant="rectangular" height={200} />
                 <CardContent>
-                  <Skeleton variant="text" height={30} sx={{ mb: 1 }} />
-                  <Skeleton variant="text" height={20} sx={{ mb: 2 }} />
-                  <Skeleton variant="text" height={20} sx={{ mb: 1 }} />
+                  <Skeleton variant="text" height={30} />
                   <Skeleton variant="text" height={20} />
+                  <Skeleton variant="text" height={20} width="60%" />
                 </CardContent>
               </Card>
             </Grid>
@@ -298,309 +340,282 @@ const MyProperties = () => {
   }
 
   return (
-    <Box sx={{ backgroundColor: theme.background, minHeight: '100vh', py: 4 }}>
-      <Container maxWidth="lg">
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-          <Typography variant="h4" sx={{ fontWeight: 700, color: theme.textPrimary }}>
-            My Properties ({properties.length})
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold', color: theme.textPrimary }}>
+          My Properties ({paginationData.total})
+        </Typography>
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={() => navigate('/add-property')}
+          sx={{
+            backgroundColor: theme.primary,
+            color: 'white',
+            '&:hover': { backgroundColor: theme.secondary }
+          }}
+        >
+          Add New Property
+        </Button>
+      </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {properties.length === 0 && !error ? (
+        <Box sx={{ textAlign: 'center', py: 8 }}>
+          <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+            No properties found
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+            Start building your property portfolio by adding your first property.
           </Typography>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={handleAddProperty}
+            onClick={() => navigate('/add-property')}
             sx={{
               backgroundColor: theme.primary,
-              '&:hover': {
-                backgroundColor: theme.secondary,
-              },
+              color: 'white',
+              '&:hover': { backgroundColor: theme.secondary }
             }}
           >
-            Add New Property
+            Add Your First Property
           </Button>
         </Box>
-
-        {error && (
-          <Alert severity="error" sx={{ mb: 4 }}>
-            {error}
-          </Alert>
-        )}
-
-        {properties.length === 0 && !loading && !error ? (
-          <Card sx={{ textAlign: 'center', py: 8 }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                No Properties Found
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                You haven't added any properties yet. Get started by adding your first property.
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={handleAddProperty}
-                sx={{ backgroundColor: theme.primary }}
-              >
-                Add Your First Property
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
+      ) : (
+        <>
           <Grid container spacing={3}>
             {properties.map((property) => {
-              const amenities = safeJsonParse(property.amenities, {});
-              const facilities = safeJsonParse(property.facilities, {});
-              const images = safeJsonParse(property.images, []);
-              const rules = safeJsonParse(property.rules, []);
-              const roommates = safeJsonParse(property.roommates, []);
-              const billsInclusive = safeJsonParse(property.bills_inclusive, []);
-
-              const primaryImageUrl = getImageUrl(property.images, property.id);
-              const bedroomCount = facilities?.Bedroom || facilities?.Bedrooms || property.bedrooms || 0;
-              const bathroomCount = facilities?.Bathroom || facilities?.Bathrooms || property.bathrooms || 0;
-
+              const imageKey = `property_${property.id}`;
+              const hasImageError = imageErrors.has(imageKey);
+              const imageUrl = hasImageError ? Room : getImageUrl(property.images, property.id);
+              
               return (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={`property-${property.id}`}>
+                <Grid item xs={12} sm={6} md={4} lg={3} key={property.id}>
                   <Card
                     sx={{
                       height: '100%',
                       display: 'flex',
                       flexDirection: 'column',
-                      borderRadius: 3,
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
                       transition: 'all 0.3s ease',
                       '&:hover': {
-                        transform: 'translateY(-8px)',
-                        boxShadow: '0 8px 30px rgba(0,0,0,0.15)',
+                        transform: 'translateY(-4px)',
+                        boxShadow: 6,
                       },
-                      border: `1px solid ${theme.borderColor || '#e0e0e0'}`,
                     }}
                   >
                     <CardMedia
                       component="img"
                       height="200"
-                      image={primaryImageUrl}
+                      image={imageUrl}
                       alt={`${property.property_type} - ${property.unit_type}`}
                       onError={() => handleImageError(property.id)}
-                      sx={{ 
+                      sx={{
                         objectFit: 'cover',
-                        backgroundColor: '#f5f5f5',
-                        '&:hover': {
-                          opacity: 0.9
-                        }
+                        backgroundColor: 'grey.200'
                       }}
                     />
                     
                     <CardContent sx={{ flexGrow: 1, p: 2 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '1.1rem' }}>
-                          {property.property_type || 'Unknown Type'}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                        <Typography variant="h6" component="h3" sx={{ fontWeight: 'bold', fontSize: '1rem' }}>
+                          {property.property_type}
                         </Typography>
                         <Chip
                           icon={getStatusIcon(property.approval_status)}
-                          label={property.approval_status || 'pending'}
+                          label={property.approval_status?.charAt(0).toUpperCase() + property.approval_status?.slice(1)}
                           color={getStatusColor(property.approval_status)}
                           size="small"
-                          sx={{ textTransform: 'capitalize' }}
                         />
                       </Box>
-
-                      <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                        {property.unit_type || 'Unit type not specified'}
+                      
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        {property.unit_type}
                       </Typography>
-
+                      
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                         <LocationIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                          {getTruncatedAddress(property.address, 50)}
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                          {property.address?.length > 50 ? `${property.address.substring(0, 50)}...` : property.address}
                         </Typography>
                       </Box>
-
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <PriceIcon sx={{ fontSize: 16, color: 'primary.main', mr: 0.5 }} />
-                        <Typography variant="body1" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                          {formatPrice(property.price)}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
-                          /month
+                      
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                        <PriceIcon sx={{ fontSize: 16, color: theme.primary, mr: 0.5 }} />
+                        <Typography variant="h6" sx={{ color: theme.primary, fontWeight: 'bold', fontSize: '1rem' }}>
+                          {formatPrice(property.price)} / month
                         </Typography>
                       </Box>
-
-                      <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <BedroomIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-                          <Typography variant="caption" color="text.secondary">
-                            {bedroomCount} Bed
-                          </Typography>
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <BathroomIcon sx={{ fontSize: 16, color: 'text.secondary', mr: 0.5 }} />
-                          <Typography variant="caption" color="text.secondary">
-                            {bathroomCount} Bath
-                          </Typography>
-                        </Box>
+                      
+                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                        {Object.entries(getDisplayFacilities(property.facilities)).slice(0, 2).map(([key, value]) => (
+                          <Chip
+                            key={key}
+                            icon={key === 'Bedrooms' ? <BedroomIcon /> : <BathroomIcon />}
+                            label={`${value} ${key}`}
+                            size="small"
+                            variant="outlined"
+                            sx={{ fontSize: '0.75rem' }}
+                          />
+                        ))}
                       </Box>
-
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <CalendarIcon sx={{ fontSize: 14, color: 'text.secondary', mr: 0.5 }} />
-                        <Typography variant="caption" color="text.secondary">
-                          Available: {formatDate(property.available_from)}
-                        </Typography>
-                      </Box>
-
-                      {Array.isArray(images) && images.length > 0 && (
-                        <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
-                          <ImageIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                          {images.length} image{images.length !== 1 ? 's' : ''}
-                        </Typography>
-                      )}
                     </CardContent>
-
+                    
                     <CardActions sx={{ p: 2, pt: 0 }}>
                       <Button
                         size="small"
+                        variant="outlined"
                         startIcon={<ViewIcon />}
-                        onClick={() => handleViewProperty(property)}
+                        onClick={() => handleViewDetails(property)}
                         sx={{ mr: 1 }}
                       >
                         View
                       </Button>
                       <Button
                         size="small"
+                        variant="outlined"
                         startIcon={<EditIcon />}
-                        onClick={() => handleEditProperty(property.id)}
-                        color="primary"
+                        onClick={() => handleEdit(property)}
                         sx={{ mr: 1 }}
                       >
                         Edit
                       </Button>
-                      <IconButton
+                      <Button
                         size="small"
-                        onClick={() => handleDeleteProperty(property)}
+                        variant="outlined"
                         color="error"
+                        startIcon={<DeleteIcon />}
+                        onClick={() => handleDelete(property)}
                       >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                        Delete
+                      </Button>
                     </CardActions>
                   </Card>
                 </Grid>
               );
             })}
           </Grid>
-        )}
 
-        {/* Property Details Dialog */}
-        <Dialog
-          open={viewDialogOpen}
-          onClose={() => setViewDialogOpen(false)}
-          maxWidth="md"
-          fullWidth
-        >
-          {selectedProperty && (
-            <>
-              <DialogTitle>
-                <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                  {selectedProperty.property_type} - {selectedProperty.unit_type}
-                </Typography>
-                <Typography variant="subtitle1" color="text.secondary">
-                  {selectedProperty.address}
-                </Typography>
-              </DialogTitle>
-              <DialogContent>
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={6}>
-                    <List dense>
-                      <ListItem>
-                        <ListItemIcon><PriceIcon /></ListItemIcon>
-                        <ListItemText 
-                          primary="Price" 
-                          secondary={formatPrice(selectedProperty.price)} 
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemIcon><CalendarIcon /></ListItemIcon>
-                        <ListItemText 
-                          primary="Available Period" 
-                          secondary={`${formatDate(selectedProperty.available_from)} - ${formatDate(selectedProperty.available_to)}`} 
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemIcon><BedroomIcon /></ListItemIcon>
-                        <ListItemText 
-                          primary="Rooms" 
-                          secondary={`${safeJsonParse(selectedProperty.facilities, {})?.Bedroom || 0} Bedrooms, ${safeJsonParse(selectedProperty.facilities, {})?.Bathroom || 0} Bathrooms`} 
-                        />
-                      </ListItem>
-                    </List>
-                  </Grid>
-                  <Grid item xs={12} md={6}>
-                    <Typography variant="h6" gutterBottom>Amenities</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 2 }}>
-                      {Object.keys(safeJsonParse(selectedProperty.amenities, {})).map((amenity) => (
-                        <Chip key={amenity} label={amenity} size="small" variant="outlined" />
-                      ))}
-                    </Box>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <Typography variant="h6" gutterBottom>Description</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {selectedProperty.description || 'No description provided.'}
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </DialogContent>
-              <DialogActions>
-                <Button onClick={() => setViewDialogOpen(false)}>Close</Button>
-                <Button 
-                  onClick={() => handleEditProperty(selectedProperty.id)}
-                  variant="contained"
-                  startIcon={<EditIcon />}
-                >
-                  Edit Property
-                </Button>
-              </DialogActions>
-            </>
+          <Pagination
+            currentPage={paginationData.page}
+            totalPages={paginationData.totalPages}
+            totalItems={paginationData.total}
+            itemsPerPage={itemsPerPage}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+            disabled={loading}
+            itemsPerPageOptions={[12, 24, 36]}
+            showInfo={true}
+            showFirstLast={true}
+          />
+        </>
+      )}
+
+      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1">
+            Are you sure you want to delete this property? This action cannot be undone.
+          </Typography>
+          {propertyToDelete && (
+            <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+              <Typography variant="subtitle2">
+                {propertyToDelete.property_type} - {propertyToDelete.unit_type}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {propertyToDelete.address}
+              </Typography>
+            </Box>
           )}
-        </Dialog>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+          <Button onClick={confirmDelete} color="error" variant="contained">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
-        {/* Delete Confirmation Dialog */}
-        <Dialog
-          open={deleteDialogOpen}
-          onClose={() => setDeleteDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Delete Property</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Are you sure you want to delete this property? This action cannot be undone.
-            </Typography>
-            {propertyToDelete && (
-              <Box sx={{ mt: 2, p: 2, backgroundColor: 'grey.100', borderRadius: 1 }}>
-                <Typography variant="subtitle2">
-                  {propertyToDelete.property_type} - {propertyToDelete.unit_type}
+      <Dialog open={viewDialogOpen} onClose={() => setViewDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            Property Details
+            <IconButton onClick={() => setViewDialogOpen(false)}>
+              <BrokenImageIcon />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedProperty && (
+            <Box>
+              <Typography variant="h5" gutterBottom>
+                {selectedProperty.property_type} - {selectedProperty.unit_type}
+              </Typography>
+              
+              <Typography variant="body1" color="text.secondary" gutterBottom>
+                {selectedProperty.address}
+              </Typography>
+
+              <Typography variant="h6" sx={{ color: theme.primary, mb: 2 }}>
+                {formatPrice(selectedProperty.price)} / month
+              </Typography>
+
+              {selectedProperty.description && (
+                <Box sx={{ mb: 2 }}>
+                  <Typography variant="h6" gutterBottom>Description</Typography>
+                  <Typography variant="body2">{selectedProperty.description}</Typography>
+                </Box>
+              )}
+
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <Typography variant="h6" gutterBottom>Facilities</Typography>
+                  <List dense>
+                    {Object.entries(getDisplayFacilities(selectedProperty.facilities)).map(([key, value]) => (
+                      <ListItem key={key}>
+                        <ListItemText primary={`${key}: ${value}`} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Typography variant="h6" gutterBottom>Amenities</Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {getDisplayAmenities(selectedProperty.amenities).map((amenity, index) => (
+                      <Chip key={index} label={amenity} size="small" />
+                    ))}
+                  </Box>
+                </Grid>
+              </Grid>
+
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="h6" gutterBottom>Availability</Typography>
+                <Typography variant="body2">
+                  Available from: {formatDate(selectedProperty.available_from)}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {propertyToDelete.address}
-                </Typography>
+                {selectedProperty.available_to && (
+                  <Typography variant="body2">
+                    Available until: {formatDate(selectedProperty.available_to)}
+                  </Typography>
+                )}
               </Box>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-            <Button onClick={confirmDelete} color="error" variant="contained">
-              Delete
-            </Button>
-          </DialogActions>
-        </Dialog>
+            </Box>
+          )}
+        </DialogContent>
+      </Dialog>
 
-        <AppSnackbar
-          open={snackbar.open}
-          message={snackbar.message}
-          severity={snackbar.severity}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-        />
-      </Container>
-    </Box>
+      <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      />
+    </Container>
   );
 };
 
