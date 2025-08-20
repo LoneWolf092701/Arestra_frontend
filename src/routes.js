@@ -123,7 +123,7 @@ const AppRoutes = () => {
               element={<Home />} 
             />
           } 
-        />
+        /> 
         <Route 
           path="/my-properties" 
           element={
