@@ -41,10 +41,17 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import AppSnackbar from '../../components/common/AppSnackbar';
+import {
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteNotification,
+  getUnreadNotificationCount
+} from '../../api/notificationApi';
 
 const UserNotifications = () => {
   const navigate = useNavigate();
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   
   // State management
   const [notifications, setNotifications] = useState([]);
@@ -58,52 +65,14 @@ const UserNotifications = () => {
     severity: 'info'
   });
 
-  // Mock notifications data - replace with actual API call
-  const mockNotifications = [
-    {
-      id: 1,
-      type: 'booking_confirmed',
-      title: 'Booking Confirmed',
-      message: 'Your booking for Studio Apartment in Colombo has been confirmed.',
-      read: false,
-      created_at: new Date().toISOString(),
-      property_id: 1,
-      booking_id: 1
-    },
-    {
-      id: 2,
-      type: 'property_update',
-      title: 'Property Update',
-      message: 'New photos have been added to your favorite property.',
-      read: true,
-      created_at: new Date(Date.now() - 86400000).toISOString(),
-      property_id: 2
-    },
-    {
-      id: 3,
-      type: 'rating_request',
-      title: 'Rate Your Stay',
-      message: 'How was your recent stay? Please rate the property.',
-      read: false,
-      created_at: new Date(Date.now() - 172800000).toISOString(),
-      property_id: 3
-    }
-  ];
-
   // Load notifications
   useEffect(() => {
     const loadNotifications = async () => {
       try {
         setLoading(true);
-        // Replace with actual API call
-        // const response = await getUserNotifications();
-        // setNotifications(response.data);
-        
-        // Using mock data for now
-        setTimeout(() => {
-          setNotifications(mockNotifications);
-          setLoading(false);
-        }, 1000);
+        const response = await getNotifications({ page: 1, limit: 50 });
+        setNotifications(response.notifications || []);
+        setLoading(false);
       } catch (error) {
         console.error('Error loading notifications:', error);
         setSnackbar({
@@ -121,11 +90,13 @@ const UserNotifications = () => {
   // Get notification icon based on type
   const getNotificationIcon = (type) => {
     switch (type) {
-      case 'booking_confirmed':
-      case 'booking_update':
+      case 'booking_request':
+      case 'booking_response':
         return <BookingIcon color="primary" />;
-      case 'property_update':
-        return <PropertyIcon color="info" />;
+      case 'property_approval':
+        return <PropertyIcon color="success" />;
+      case 'property_rejection':
+        return <PropertyIcon color="error" />;
       case 'rating_request':
         return <RatingIcon color="warning" />;
       case 'report_update':
@@ -138,98 +109,73 @@ const UserNotifications = () => {
   // Get notification color based on type
   const getNotificationColor = (type) => {
     switch (type) {
-      case 'booking_confirmed':
+      case 'booking_response':
         return 'success';
-      case 'booking_update':
+      case 'booking_request':
         return 'primary';
-      case 'property_update':
-        return 'info';
+      case 'property_approval':
+        return 'success';
+      case 'property_rejection':
+        return 'error';
       case 'rating_request':
         return 'warning';
       case 'report_update':
         return 'error';
+      case 'system':
+        return 'info';
       default:
         return 'default';
     }
   };
 
-  // Format relative time
-  const formatRelativeTime = (dateString) => {
+  // Format notification date
+  const formatDate = (dateString) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffInSeconds = Math.floor((now - date) / 1000);
+    const diffInHours = Math.floor((now - date) / (1000 * 60 * 60));
     
-    if (diffInSeconds < 60) return 'Just now';
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)} days ago`;
-    
+    if (diffInHours < 1) return 'Just now';
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    if (diffInHours < 48) return 'Yesterday';
     return date.toLocaleDateString();
   };
 
-  // Handle notification click
-  const handleNotificationClick = (notification) => {
-    setSelectedNotification(notification);
-    setDetailDialogOpen(true);
-    
-    // Mark as read if not already read
-    if (!notification.read) {
-      toggleReadStatus(notification.id, true);
-    }
-  };
-
-  // Handle menu click
-  const handleMenuClick = (event, notification) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
-    setSelectedNotification(notification);
-  };
-
-  // Handle menu close
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  // Toggle read status
-  const toggleReadStatus = async (notificationId, markAsRead = true) => {
+  // Mark notification as read
+  const handleMarkAsRead = async (notificationId) => {
     try {
-      // Replace with actual API call
-      // await updateNotificationReadStatus(notificationId, markAsRead);
-      
-      setNotifications(prev => prev.map(notification => 
-        notification.id === notificationId 
-          ? { ...notification, read: markAsRead }
-          : notification
-      ));
-      
+      await markNotificationAsRead(notificationId);
+      setNotifications(prev => 
+        prev.map(notification => 
+          notification.id === notificationId 
+            ? { ...notification, read_at: new Date().toISOString() }
+            : notification
+        )
+      );
       setSnackbar({
         open: true,
-        message: markAsRead ? 'Marked as read' : 'Marked as unread',
+        message: 'Notification marked as read',
         severity: 'success'
       });
     } catch (error) {
-      console.error('Error updating notification status:', error);
+      console.error('Error marking as read:', error);
       setSnackbar({
         open: true,
-        message: 'Failed to update notification',
+        message: 'Failed to mark as read',
         severity: 'error'
       });
     }
   };
 
   // Delete notification
-  const handleDeleteNotification = async (notificationId) => {
+  const handleDelete = async (notificationId) => {
     try {
-      // Replace with actual API call
-      // await deleteNotification(notificationId);
-      
+      await deleteNotification(notificationId);
       setNotifications(prev => prev.filter(n => n.id !== notificationId));
       setSnackbar({
         open: true,
         message: 'Notification deleted',
         severity: 'success'
       });
-      handleMenuClose();
     } catch (error) {
       console.error('Error deleting notification:', error);
       setSnackbar({
@@ -240,14 +186,17 @@ const UserNotifications = () => {
     }
   };
 
-  // Handle action button click
-  const handleActionClick = () => {
-    if (!selectedNotification) return;
-    
-    if (selectedNotification.booking_id) {
-      navigate(`/bookings/${selectedNotification.booking_id}`);
-    } else if (selectedNotification.property_id) {
-      navigate(`/user-property-view/${selectedNotification.property_id}`);
+  // Handle notification click
+  const handleNotificationClick = (notification) => {
+    if (!notification.read_at) {
+      handleMarkAsRead(notification.id);
+    }
+
+    // Navigate based on notification type
+    if (notification.booking_id) {
+      navigate(`/bookings/${notification.booking_id}`);
+    } else if (notification.property_id) {
+      navigate(`/user-property-view/${notification.property_id}`);
     }
     
     setDetailDialogOpen(false);
@@ -256,10 +205,12 @@ const UserNotifications = () => {
   // Mark all as read
   const markAllAsRead = async () => {
     try {
-      // Replace with actual API call
-      // await markAllNotificationsAsRead();
+      await markAllNotificationsAsRead();
       
-      setNotifications(prev => prev.map(notification => ({ ...notification, read: true })));
+      setNotifications(prev => prev.map(notification => ({ 
+        ...notification, 
+        read_at: notification.read_at || new Date().toISOString() 
+      })));
       setSnackbar({
         open: true,
         message: 'All notifications marked as read',
@@ -275,233 +226,502 @@ const UserNotifications = () => {
     }
   };
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Menu handlers
+  const handleMenuOpen = (event, notification) => {
+    event.stopPropagation();
+    setAnchorEl(event.currentTarget);
+    setSelectedNotification(notification);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+    setSelectedNotification(null);
+  };
+
+  const handleViewDetails = () => {
+    setDetailDialogOpen(true);
+    handleMenuClose();
+  };
+
+  const unreadCount = notifications.filter(n => !n.read_at).length;
 
   if (loading) {
     return (
-      <Container maxWidth="md" sx={{ py: 4, display: 'flex', justifyContent: 'center' }}>
-        <CircularProgress />
+      <Container maxWidth="md" sx={{ 
+        py: 4, 
+        display: 'flex', 
+        justifyContent: 'center',
+        backgroundColor: theme.background,
+        minHeight: '50vh'
+      }}>
+        <CircularProgress sx={{ color: theme.primary }} />
       </Container>
     );
   }
 
   return (
-    <Container maxWidth="md" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Badge badgeContent={unreadCount} color="error">
-            <NotificationsIcon sx={{ fontSize: 32, color: theme.primary }} />
-          </Badge>
-          <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
-            Notifications
-          </Typography>
+    <Box sx={{ 
+      backgroundColor: theme.background, 
+      minHeight: '100vh',
+      color: theme.textPrimary 
+    }}>
+      <Container maxWidth="md" sx={{ py: 4 }}>
+        {/* Header */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          mb: 4,
+          p: 3,
+          backgroundColor: theme.paperBackground,
+          borderRadius: 2,
+          boxShadow: theme.shadows.light,
+          border: `1px solid ${theme.border}`
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Badge badgeContent={unreadCount} color="error">
+              <NotificationsIcon sx={{ 
+                fontSize: 32, 
+                color: theme.primary 
+              }} />
+            </Badge>
+            <Typography 
+              variant="h4" 
+              component="h1" 
+              sx={{ 
+                fontWeight: 700,
+                color: theme.textPrimary
+              }}
+            >
+              Notifications
+            </Typography>
+          </Box>
+          
+          {unreadCount > 0 && (
+            <Button
+              variant="outlined"
+              onClick={markAllAsRead}
+              sx={{ 
+                borderColor: theme.primary, 
+                color: theme.primary,
+                '&:hover': {
+                  backgroundColor: theme.hover,
+                  borderColor: theme.primary
+                }
+              }}
+            >
+              Mark All as Read
+            </Button>
+          )}
         </Box>
-        
-        {unreadCount > 0 && (
-          <Button
-            variant="outlined"
-            onClick={markAllAsRead}
-            sx={{ borderColor: theme.primary, color: theme.primary }}
-          >
-            Mark All as Read
-          </Button>
-        )}
-      </Box>
 
-      {/* Notifications List */}
-      {notifications.length === 0 ? (
-        <Card sx={{ p: 4, textAlign: 'center', borderRadius: 3 }}>
-          <NotificationsIcon sx={{ fontSize: 64, color: theme.textSecondary, mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No notifications yet
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            You'll see notifications about your bookings, properties, and account here.
-          </Typography>
-        </Card>
-      ) : (
-        <List sx={{ p: 0 }}>
-          {notifications.map((notification, index) => (
-            <Box key={notification.id}>
-              <Card 
-                sx={{ 
-                  mb: 2, 
-                  borderRadius: 2,
-                  border: notification.read ? 'none' : `2px solid ${theme.primary}`,
-                  backgroundColor: notification.read ? theme.surfaceBackground : theme.paperBackground,
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  '&:hover': {
-                    transform: 'translateY(-2px)',
-                    boxShadow: theme.shadows.medium
-                  }
-                }}
-                onClick={() => handleNotificationClick(notification)}
-              >
-                <CardContent sx={{ p: 3 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                    {/* Notification Icon */}
-                    <Box sx={{ mt: 0.5 }}>
-                      {getNotificationIcon(notification.type)}
-                    </Box>
-                    
-                    {/* Notification Content */}
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                        <Typography 
-                          variant="h6" 
-                          sx={{ 
-                            fontWeight: notification.read ? 500 : 700,
-                            color: notification.read ? theme.textSecondary : theme.textPrimary
-                          }}
-                        >
-                          {notification.title}
-                        </Typography>
+        {/* Notifications List */}
+        {notifications.length === 0 ? (
+          <Card sx={{ 
+            p: 4, 
+            textAlign: 'center', 
+            borderRadius: 3,
+            backgroundColor: theme.paperBackground,
+            border: `1px solid ${theme.border}`,
+            boxShadow: theme.shadows.light
+          }}>
+            <NotificationsIcon sx={{ 
+              fontSize: 64, 
+              color: theme.textSecondary, 
+              mb: 2 
+            }} />
+            <Typography 
+              variant="h6" 
+              sx={{ color: theme.textSecondary }} 
+              gutterBottom
+            >
+              No notifications yet
+            </Typography>
+            <Typography 
+              variant="body2" 
+              sx={{ color: theme.textSecondary }}
+            >
+              You'll see notifications about your bookings, properties, and account here.
+            </Typography>
+          </Card>
+        ) : (
+          <List sx={{ p: 0 }}>
+            {notifications.map((notification, index) => (
+              <Box key={notification.id}>
+                <Card 
+                  sx={{ 
+                    mb: 2, 
+                    borderRadius: 2,
+                    border: notification.read_at ? 
+                      `1px solid ${theme.border}` : 
+                      `2px solid ${theme.primary}`,
+                    backgroundColor: notification.read_at ? 
+                      theme.paperBackground : 
+                      isDark ? 
+                        `${theme.primary}10` : 
+                        `${theme.primary}05`,
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    boxShadow: theme.shadows.light,
+                    '&:hover': {
+                      backgroundColor: isDark ? 
+                        theme.hover : 
+                        theme.selected,
+                      transform: 'translateY(-1px)',
+                      boxShadow: theme.shadows.medium
+                    }
+                  }}
+                  onClick={() => handleNotificationClick(notification)}
+                >
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      justifyContent: 'space-between', 
+                      alignItems: 'flex-start' 
+                    }}>
+                      <Box sx={{ 
+                        display: 'flex', 
+                        alignItems: 'flex-start', 
+                        gap: 2, 
+                        flex: 1 
+                      }}>
+                        <Box sx={{ mt: 0.5 }}>
+                          {getNotificationIcon(notification.type)}
+                        </Box>
                         
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip
-                            label={getNotificationColor(notification.type)}
-                            size="small"
-                            color={getNotificationColor(notification.type)}
-                            variant="outlined"
-                          />
-                          
-                          {!notification.read && (
-                            <Box
+                        <Box sx={{ flex: 1 }}>
+                          <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: 1, 
+                            mb: 1 
+                          }}>
+                            <Typography 
+                              variant="h6" 
+                              sx={{ 
+                                fontWeight: notification.read_at ? 500 : 700,
+                                color: theme.textPrimary,
+                                fontSize: '1.1rem'
+                              }}
+                            >
+                              {notification.title}
+                            </Typography>
+                            <Chip 
+                              label={notification.type.replace('_', ' ')} 
+                              size="small" 
+                              color={getNotificationColor(notification.type)}
                               sx={{
-                                width: 8,
-                                height: 8,
-                                borderRadius: '50%',
-                                backgroundColor: theme.primary
+                                textTransform: 'capitalize',
+                                fontSize: '0.75rem'
                               }}
                             />
+                          </Box>
+                          
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: theme.textSecondary,
+                              mb: 2,
+                              lineHeight: 1.5
+                            }}
+                          >
+                            {notification.message}
+                          </Typography>
+                          
+                          {/* Additional notification data */}
+                          {notification.data && (
+                            <Box sx={{ 
+                              backgroundColor: isDark ? 
+                                theme.surfaceBackground : 
+                                theme.background,
+                              p: 2, 
+                              borderRadius: 1,
+                              border: `1px solid ${theme.divider}`,
+                              mt: 1
+                            }}>
+                              {notification.data.tenant_name && (
+                                <Typography 
+                                  variant="body2" 
+                                  sx={{ color: theme.textSecondary }}
+                                >
+                                  <strong>From:</strong> {notification.data.tenant_name}
+                                </Typography>
+                              )}
+                              {notification.data.property_address && (
+                                <Typography 
+                                  variant="body2" 
+                                  sx={{ color: theme.textSecondary }}
+                                >
+                                  <strong>Property:</strong> {notification.data.property_address}
+                                </Typography>
+                              )}
+                              {notification.data.check_in_date && (
+                                <Typography 
+                                  variant="body2" 
+                                  sx={{ color: theme.textSecondary }}
+                                >
+                                  <strong>Dates:</strong> {notification.data.check_in_date} to {notification.data.check_out_date}
+                                </Typography>
+                              )}
+                              {notification.data.total_price && (
+                                <Typography 
+                                  variant="body2" 
+                                  sx={{ color: theme.textSecondary }}
+                                >
+                                  <strong>Amount:</strong> LKR {notification.data.total_price.toLocaleString()}
+                                </Typography>
+                              )}
+                            </Box>
                           )}
                           
-                          <Tooltip title="More options">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleMenuClick(e, notification)}
-                              sx={{ color: theme.textSecondary }}
+                          <Box sx={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center', 
+                            mt: 2 
+                          }}>
+                            <Typography 
+                              variant="caption" 
+                              sx={{ color: theme.textDisabled }}
                             >
-                              <MoreVertIcon />
-                            </IconButton>
-                          </Tooltip>
+                              {formatDate(notification.created_at)}
+                            </Typography>
+                            
+                            {!notification.read_at && (
+                              <Chip 
+                                label="New" 
+                                size="small" 
+                                color="primary"
+                                sx={{ 
+                                  fontSize: '0.7rem',
+                                  height: 20
+                                }}
+                              />
+                            )}
+                          </Box>
                         </Box>
                       </Box>
                       
-                      <Typography 
-                        variant="body2" 
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleMenuOpen(e, notification)}
                         sx={{ 
                           color: theme.textSecondary,
-                          mb: 1,
-                          lineHeight: 1.5
+                          '&:hover': {
+                            backgroundColor: theme.hover
+                          }
                         }}
                       >
-                        {notification.message}
-                      </Typography>
-                      
-                      <Typography variant="caption" sx={{ color: theme.textSecondary }}>
-                        {formatRelativeTime(notification.created_at)}
-                      </Typography>
+                        <MoreVertIcon />
+                      </IconButton>
                     </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Box>
-          ))}
-        </List>
-      )}
-
-      {/* Notification Detail Dialog */}
-      <Dialog 
-        open={detailDialogOpen} 
-        onClose={() => setDetailDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        {selectedNotification && (
-          <React.Fragment>
-            <DialogTitle>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                {getNotificationIcon(selectedNotification.type)}
-                {selectedNotification.title}
+                  </CardContent>
+                </Card>
+                
+                {index < notifications.length - 1 && (
+                  <Divider sx={{ 
+                    backgroundColor: theme.divider,
+                    my: 1
+                  }} />
+                )}
               </Box>
-            </DialogTitle>
-            <DialogContent>
-              <Typography variant="body1" sx={{ mb: 2 }}>
-                {selectedNotification.message}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                Received {formatRelativeTime(selectedNotification.created_at)}
-              </Typography>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDetailDialogOpen(false)}>
-                Close
-              </Button>
-              {(selectedNotification.booking_id || selectedNotification.property_id) && (
-                <Button 
-                  onClick={handleActionClick}
-                  variant="contained"
-                  sx={{ backgroundColor: theme.primary }}
-                >
-                  {selectedNotification.booking_id ? 'View Booking' : 
-                   selectedNotification.property_id ? 'View Property' : 
-                   'Update Profile'}
-                </Button>
-              )}
-            </DialogActions>
-          </React.Fragment>
+            ))}
+          </List>
         )}
-      </Dialog>
 
-      {/* Context Menu - FIXED Fragment Issue */}
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleMenuClose}
-      >
-        {selectedNotification && selectedNotification.read && (
-          <MenuItem 
-            onClick={() => {
-              toggleReadStatus(selectedNotification.id, false);
-              handleMenuClose();
-            }}
-          >
-            <MarkReadIcon sx={{ mr: 1 }} />
-            Mark as Unread
-          </MenuItem>
-        )}
-        {selectedNotification && !selectedNotification.read && (
-          <MenuItem 
-            onClick={() => {
-              toggleReadStatus(selectedNotification.id, true);
-              handleMenuClose();
-            }}
-          >
-            <MarkReadIcon sx={{ mr: 1 }} />
-            Mark as Read
-          </MenuItem>
-        )}
-        <MenuItem 
-          onClick={() => {
-            handleDeleteNotification(selectedNotification?.id);
+        {/* Menu */}
+        <Menu
+          anchorEl={anchorEl}
+          open={Boolean(anchorEl)}
+          onClose={handleMenuClose}
+          PaperProps={{
+            sx: {
+              backgroundColor: theme.paperBackground,
+              border: `1px solid ${theme.border}`,
+              boxShadow: theme.shadows.medium
+            }
           }}
-          sx={{ color: 'error.main' }}
         >
-          <DeleteIcon sx={{ mr: 1 }} />
-          Delete
-        </MenuItem>
-      </Menu>
+          {selectedNotification && !selectedNotification.read_at && (
+            <MenuItem 
+              onClick={() => {
+                handleMarkAsRead(selectedNotification.id);
+                handleMenuClose();
+              }}
+              sx={{
+                color: theme.textPrimary,
+                '&:hover': {
+                  backgroundColor: theme.hover
+                }
+              }}
+            >
+              <ListItemIcon>
+                <MarkReadIcon sx={{ color: theme.textSecondary }} />
+              </ListItemIcon>
+              <ListItemText>Mark as Read</ListItemText>
+            </MenuItem>
+          )}
+          
+          <MenuItem 
+            onClick={handleViewDetails}
+            sx={{
+              color: theme.textPrimary,
+              '&:hover': {
+                backgroundColor: theme.hover
+              }
+            }}
+          >
+            <ListItemIcon>
+              <InfoIcon sx={{ color: theme.textSecondary }} />
+            </ListItemIcon>
+            <ListItemText>View Details</ListItemText>
+          </MenuItem>
+          
+          <MenuItem 
+            onClick={() => {
+              handleDelete(selectedNotification.id);
+              handleMenuClose();
+            }}
+            sx={{
+              color: theme.error,
+              '&:hover': {
+                backgroundColor: `${theme.error}10`
+              }
+            }}
+          >
+            <ListItemIcon>
+              <DeleteIcon sx={{ color: theme.error }} />
+            </ListItemIcon>
+            <ListItemText>Delete</ListItemText>
+          </MenuItem>
+        </Menu>
 
-      <AppSnackbar
-        open={snackbar.open}
-        message={snackbar.message}
-        severity={snackbar.severity}
-        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-      />
-    </Container>
+        {/* Detail Dialog */}
+        <Dialog
+          open={detailDialogOpen}
+          onClose={() => setDetailDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+          PaperProps={{
+            sx: {
+              backgroundColor: theme.paperBackground,
+              color: theme.textPrimary,
+              border: `1px solid ${theme.border}`
+            }
+          }}
+        >
+          {selectedNotification && (
+            <>
+              <DialogTitle sx={{ 
+                color: theme.textPrimary,
+                borderBottom: `1px solid ${theme.divider}`
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  {getNotificationIcon(selectedNotification.type)}
+                  {selectedNotification.title}
+                </Box>
+              </DialogTitle>
+              
+              <DialogContent sx={{ pt: 3 }}>
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    color: theme.textPrimary,
+                    mb: 2,
+                    lineHeight: 1.6
+                  }}
+                >
+                  {selectedNotification.message}
+                </Typography>
+                
+                {selectedNotification.data && (
+                  <Box sx={{ 
+                    backgroundColor: theme.surfaceBackground,
+                    p: 2, 
+                    borderRadius: 1,
+                    border: `1px solid ${theme.border}`
+                  }}>
+                    <Typography 
+                      variant="subtitle2" 
+                      sx={{ 
+                        color: theme.textPrimary,
+                        mb: 1,
+                        fontWeight: 600
+                      }}
+                    >
+                      Additional Information:
+                    </Typography>
+                    <pre style={{ 
+                      color: theme.textSecondary,
+                      fontSize: '0.875rem',
+                      fontFamily: 'inherit',
+                      whiteSpace: 'pre-wrap',
+                      margin: 0
+                    }}>
+                      {JSON.stringify(selectedNotification.data, null, 2)}
+                    </pre>
+                  </Box>
+                )}
+                
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    color: theme.textDisabled,
+                    mt: 2,
+                    display: 'block'
+                  }}
+                >
+                  Received: {formatDate(selectedNotification.created_at)}
+                </Typography>
+              </DialogContent>
+              
+              <DialogActions sx={{ 
+                borderTop: `1px solid ${theme.divider}`,
+                p: 3
+              }}>
+                <Button 
+                  onClick={() => setDetailDialogOpen(false)}
+                  sx={{ 
+                    color: theme.textSecondary,
+                    '&:hover': {
+                      backgroundColor: theme.hover
+                    }
+                  }}
+                >
+                  Close
+                </Button>
+                
+                {selectedNotification.booking_id && (
+                  <Button 
+                    variant="contained"
+                    onClick={() => {
+                      navigate(`/bookings/${selectedNotification.booking_id}`);
+                      setDetailDialogOpen(false);
+                    }}
+                    sx={{
+                      backgroundColor: theme.primary,
+                      '&:hover': {
+                        backgroundColor: theme.primary + 'dd'
+                      }
+                    }}
+                  >
+                    View Booking
+                  </Button>
+                )}
+              </DialogActions>
+            </>
+          )}
+        </Dialog>
+
+        {/* Snackbar */}
+        <AppSnackbar
+          open={snackbar.open}
+          message={snackbar.message}
+          severity={snackbar.severity}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+        />
+      </Container>
+    </Box>
   );
 };
 

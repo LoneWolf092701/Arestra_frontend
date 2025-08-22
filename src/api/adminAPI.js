@@ -64,32 +64,47 @@ export const getDashboardStats = async () => {
     
     if (!response.data) {
       return {
-        users: { total: 0, active: 0, new_this_month: 0 },
-        properties: { total: 0, pending: 0, approved: 0 },
-        bookings: { total: 0, pending: 0, confirmed: 0 },
-        revenue: { total: 0, this_month: 0 },
-        system_health: { status: 'unknown', uptime: 0 }
+        total_users: 0,
+        total_properties: 0,
+        total_bookings: 0,
+        pending_approvals: 0,
+        monthly_revenue: 0,
+        active_properties: 0,
+        new_users_this_month: 0,
+        approval_rate: 0
       };
     }
     
     return response.data;
   } catch (error) {
-    handleAdminError(error, 'fetch admin statistics');
+    console.error('Error fetching dashboard stats:', error);
+    
+    return {
+      total_users: 0,
+      total_properties: 0,
+      total_bookings: 0,
+      pending_approvals: 0,
+      monthly_revenue: 0,
+      active_properties: 0,
+      new_users_this_month: 0,
+      approval_rate: 0
+    };
   }
 };
 
 export const getUsers = async (options = {}) => {
   try {
-    const { role, page = 1, limit = 20, search, status, sort_by = 'created_at', sort_order = 'desc' } = options;
+    const { page = 1, limit = 20, role = 'all', status = 'all', search, sort_by = 'created_at', sort_order = 'desc' } = options;
     
     const params = new URLSearchParams();
-    if (role && role !== 'all') params.append('role', role);
-    if (search) params.append('search', search);
-    if (status && status !== 'all') params.append('status', status);
     params.append('page', page.toString());
     params.append('limit', limit.toString());
     params.append('sort_by', sort_by);
     params.append('sort_order', sort_order);
+    
+    if (role && role !== 'all') params.append('role', role);
+    if (status && status !== 'all') params.append('status', status);
+    if (search) params.append('search', search);
 
     const response = await apiClient.get(`/admin/users?${params.toString()}`);
     
@@ -102,7 +117,7 @@ export const getUsers = async (options = {}) => {
     
     return response.data;
   } catch (error) {
-    handleAdminError(error, 'fetch users');
+    handleAdminError(error, 'fetching users');
   }
 };
 
@@ -232,9 +247,12 @@ export const approveRejectProperty = async (propertyId, action, reason = '') => 
       throw new Error('Action must be either "approve" or "reject"');
     }
 
+    // FIX: Convert frontend action to backend approval_status and use correct field names
+    const approval_status = action === 'approve' ? 'approved' : 'rejected';
+    
     const payload = {
-      action,
-      reason: reason || ''
+      approval_status,  // Backend expects 'approval_status' not 'action'
+      rejection_reason: reason || ''  // Backend expects 'rejection_reason' not 'reason'
     };
 
     const response = await apiClient.put(`/admin/properties/${propertyId}/approval`, payload);
@@ -281,9 +299,11 @@ export const deletePropertyAdmin = async (propertyId, reason = '') => {
       throw new Error('Property ID is required');
     }
 
-    const payload = reason ? { deletion_reason: reason } : {};
+    const payload = reason ? { reason } : {};
 
-    const response = await apiClient.delete(`/admin/properties/${propertyId}`, { data: payload });
+    const response = await apiClient.delete(`/admin/properties/${propertyId}`, {
+      data: payload
+    });
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -299,17 +319,7 @@ export const removeProperty = deletePropertyAdmin;
 
 export const getBookingRequestsAdmin = async (options = {}) => {
   try {
-    const { 
-      page = 1, 
-      limit = 20, 
-      status = 'all',
-      property_id,
-      user_id,
-      date_from,
-      date_to,
-      sort_by = 'created_at',
-      sort_order = 'desc'
-    } = options;
+    const { page = 1, limit = 20, status = 'all', sort_by = 'created_at', sort_order = 'desc' } = options;
     
     const params = new URLSearchParams();
     params.append('page', page.toString());
@@ -318,44 +328,34 @@ export const getBookingRequestsAdmin = async (options = {}) => {
     params.append('sort_order', sort_order);
     
     if (status && status !== 'all') params.append('status', status);
-    if (property_id) params.append('property_id', property_id.toString());
-    if (user_id) params.append('user_id', user_id.toString());
-    if (date_from) params.append('date_from', date_from);
-    if (date_to) params.append('date_to', date_to);
 
-    const response = await apiClient.get(`/admin/bookings?${params.toString()}`);
+    const response = await apiClient.get(`/admin/booking-requests?${params.toString()}`);
     
     if (!response.data) {
       return {
-        bookings: [],
+        booking_requests: [],
         pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
       };
     }
     
     return response.data;
   } catch (error) {
-    handleAdminError(error, 'fetching booking requests');
+    console.error('Error fetching booking requests:', error);
+    
+    return {
+      booking_requests: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 }
+    };
   }
 };
 
 export const getActivityLogs = async (options = {}) => {
   try {
-    const { 
-      page = 1, 
-      limit = 50, 
-      user_id,
-      action_type,
-      date_from,
-      date_to,
-      sort_by = 'created_at',
-      sort_order = 'desc'
-    } = options;
+    const { page = 1, limit = 50, user_id, action_type, date_from, date_to } = options;
     
     const params = new URLSearchParams();
     params.append('page', page.toString());
     params.append('limit', limit.toString());
-    params.append('sort_by', sort_by);
-    params.append('sort_order', sort_order);
     
     if (user_id) params.append('user_id', user_id.toString());
     if (action_type) params.append('action_type', action_type);
@@ -489,28 +489,13 @@ export const getSystemConfig = async () => {
     const response = await apiClient.get('/admin/system-config');
     
     if (!response.data) {
-      return {
-        maintenance_mode: false,
-        registration_enabled: true,
-        max_properties_per_owner: 10,
-        booking_advance_days: 365,
-        service_fee_percentage: 5,
-        system_notifications: true
-      };
+      return {};
     }
     
     return response.data;
   } catch (error) {
     console.error('Error fetching system config:', error);
-    
-    return {
-      maintenance_mode: false,
-      registration_enabled: true,
-      max_properties_per_owner: 10,
-      booking_advance_days: 365,
-      service_fee_percentage: 5,
-      system_notifications: true
-    };
+    return {};
   }
 };
 
@@ -518,14 +503,6 @@ export const createAnnouncement = async (announcementData) => {
   try {
     if (!announcementData || typeof announcementData !== 'object') {
       throw new Error('Announcement data is required');
-    }
-
-    const requiredFields = ['title', 'content'];
-    
-    for (const field of requiredFields) {
-      if (!announcementData[field]) {
-        throw new Error(`${field} is required`);
-      }
     }
 
     const response = await apiClient.post('/admin/announcements', announcementData);
@@ -543,19 +520,11 @@ export const createAnnouncement = async (announcementData) => {
 
 export const getAnnouncements = async (options = {}) => {
   try {
-    const { 
-      page = 1, 
-      limit = 20, 
-      status = 'all',
-      sort_by = 'created_at',
-      sort_order = 'desc'
-    } = options;
+    const { page = 1, limit = 20, status = 'all' } = options;
     
     const params = new URLSearchParams();
     params.append('page', page.toString());
     params.append('limit', limit.toString());
-    params.append('sort_by', sort_by);
-    params.append('sort_order', sort_order);
     
     if (status && status !== 'all') params.append('status', status);
 
@@ -581,14 +550,7 @@ export const getAnnouncements = async (options = {}) => {
 
 export const getReportedContent = async (options = {}) => {
   try {
-    const { 
-      page = 1, 
-      limit = 20, 
-      status = 'pending',
-      content_type,
-      sort_by = 'created_at',
-      sort_order = 'desc'
-    } = options;
+    const { page = 1, limit = 20, status = 'all', content_type, sort_by = 'created_at', sort_order = 'desc' } = options;
     
     const params = new URLSearchParams();
     params.append('page', page.toString());
@@ -664,9 +626,21 @@ export const exportAdminData = async (options = {}) => {
       responseType: 'blob'
     });
     
-    return response.data;
+    const blob = new Blob([response.data], { type: response.headers['content-type'] });
+    const filename = response.headers['content-disposition']?.split('filename=')[1] || `export.${format}`;
+    
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return { success: true, message: 'Export downloaded successfully' };
   } catch (error) {
-    console.error('Error exporting admin data:', error);
+    console.error('Error exporting data:', error);
     throw new Error('Failed to export data');
   }
 };
@@ -678,10 +652,11 @@ export const getSystemHealth = async () => {
     if (!response.data) {
       return {
         status: 'unknown',
-        database: { status: 'unknown' },
-        server: { status: 'unknown', uptime: 0 },
-        storage: { status: 'unknown', usage: 0 },
-        memory: { status: 'unknown', usage: 0 }
+        uptime: 0,
+        memory_usage: 0,
+        cpu_usage: 0,
+        database_status: 'unknown',
+        services: []
       };
     }
     
@@ -691,22 +666,18 @@ export const getSystemHealth = async () => {
     
     return {
       status: 'error',
-      database: { status: 'error' },
-      server: { status: 'error', uptime: 0 },
-      storage: { status: 'unknown', usage: 0 },
-      memory: { status: 'unknown', usage: 0 }
+      uptime: 0,
+      memory_usage: 0,
+      cpu_usage: 0,
+      database_status: 'error',
+      services: []
     };
   }
 };
 
 export const getFinancialReports = async (options = {}) => {
   try {
-    const { 
-      period = 'monthly', 
-      year,
-      month,
-      report_type = 'summary'
-    } = options;
+    const { period = 'monthly', year, month, report_type = 'revenue' } = options;
     
     const params = new URLSearchParams();
     params.append('period', period);
@@ -720,10 +691,10 @@ export const getFinancialReports = async (options = {}) => {
     if (!response.data) {
       return {
         total_revenue: 0,
-        service_fees_collected: 0,
-        property_owner_earnings: 0,
+        total_transactions: 0,
+        average_transaction: 0,
+        commission_earned: 0,
         monthly_breakdown: [],
-        top_earning_properties: [],
         payment_methods: {}
       };
     }
@@ -734,10 +705,10 @@ export const getFinancialReports = async (options = {}) => {
     
     return {
       total_revenue: 0,
-      service_fees_collected: 0,
-      property_owner_earnings: 0,
+      total_transactions: 0,
+      average_transaction: 0,
+      commission_earned: 0,
       monthly_breakdown: [],
-      top_earning_properties: [],
       payment_methods: {}
     };
   }
