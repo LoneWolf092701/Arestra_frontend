@@ -69,123 +69,312 @@ const PropertyDetailsDialog = ({ open, onClose, property, onApprove, onReject })
   const handleReject = () => {
     if (rejectReason.trim()) {
       onReject(property.id, rejectReason);
-      setRejectReason('');
-      setShowRejectForm(false);
       onClose();
+      setRejectReason('');
+      setShowRejectForm(false); // FIX: Complete function name instead of "setSh"
     }
-  };
-
-  const handleViewFullProperty = () => {
-    onClose();
-    navigate(`/property/${property.id}`);
   };
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          Property Review Details
-          <Button
-            startIcon={<VisibilityIcon />}
-            onClick={handleViewFullProperty}
-            size="small"
-          >
-            View Full Property
-          </Button>
+          <Typography variant="h6">Property Review</Typography>
+          <Chip 
+            label="Pending Review" 
+            color="warning" 
+            size="small" 
+          />
         </Box>
       </DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2}>
+      
+      <DialogContent dividers>
+        <Grid container spacing={3}>
+          {/* Property Images */}
+          {images && images.length > 0 && (
+            <Grid item xs={12}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="h6" gutterBottom>Property Images</Typography>
+                <Grid container spacing={1}>
+                  {images.slice(0, 4).map((image, index) => (
+                    <Grid item xs={6} sm={3} key={index}>
+                      <Card>
+                        <CardMedia
+                          component="img"
+                          height="120"
+                          image={image}
+                          alt={`Property image ${index + 1}`}
+                          sx={{ objectFit: 'cover' }}
+                        />
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+                {images.length > 4 && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    +{images.length - 4} more images
+                  </Typography>
+                )}
+              </Box>
+            </Grid>
+          )}
+
+          {/* Basic Property Information */}
           <Grid item xs={12} md={6}>
-            <CardMedia
-              component="img"
-              height="200"
-              image={images && images.length > 0 ? images[0] : Room}
-              alt={property.property_type}
-              sx={{ borderRadius: 1, objectFit: 'cover' }}
-            />
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Typography variant="h6" gutterBottom>
-              {property.property_type} - {property.unit_type}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <LocationOnIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-              <Typography variant="body2">{property.address}</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <AttachMoneyIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-              <Typography variant="body2">LKR {parseFloat(property.price || 0).toLocaleString()}/month</Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <CalendarTodayIcon sx={{ fontSize: 16, mr: 1, color: 'text.secondary' }} />
-              <Typography variant="body2">
-                Available from: {property.available_from ? new Date(property.available_from).toLocaleDateString() : 'Immediately'}
-              </Typography>
-            </Box>
-            
-            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-              <Chip icon={<HotelIcon />} label={`${facilities?.Bedroom || 0} Bedrooms`} size="small" />
-              <Chip icon={<BathtubIcon />} label={`${facilities?.Bathroom || 0} Bathrooms`} size="small" />
-            </Box>
-          </Grid>
-        </Grid>
-
-        <Divider sx={{ my: 2 }} />
-
-        {property.description && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>Description:</Typography>
-            <Typography variant="body2" color="text.secondary">
-              {property.description}
-            </Typography>
-          </Box>
-        )}
-
-        {amenities && amenities.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>Amenities:</Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {Object.entries(amenities).map(([key, value]) => (
-                value && <Chip key={key} label={key} size="small" />
-              ))}
-            </Box>
-          </Box>
-        )}
-
-        {rules && rules.length > 0 && (
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>Property Rules:</Typography>
+            <Typography variant="h6" gutterBottom>Property Details</Typography>
             <List dense>
-              {rules.map((rule, index) => (
-                <ListItem key={index} sx={{ py: 0.5 }}>
-                  <ListItemIcon sx={{ minWidth: 32 }}>
-                    <InfoIcon sx={{ fontSize: 16 }} />
-                  </ListItemIcon>
-                  <ListItemText primary={rule} />
-                </ListItem>
-              ))}
+              <ListItem>
+                <ListItemIcon>
+                  <InfoIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Property Type" 
+                  secondary={property.property_type} 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <InfoIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Unit Type" 
+                  secondary={property.unit_type} 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <LocationOnIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Address" 
+                  secondary={property.address} 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <AttachMoneyIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Price" 
+                  secondary={`LKR ${property.price}`} 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <CalendarTodayIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Available From" 
+                  secondary={property.available_from ? new Date(property.available_from).toLocaleDateString() : 'Not specified'} 
+                />
+              </ListItem>
             </List>
-          </Box>
-        )}
+          </Grid>
 
-        {showRejectForm && (
-          <Box sx={{ mt: 3 }}>
-            <TextField
-              fullWidth
-              multiline
-              rows={3}
-              label="Rejection Reason"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Please provide a clear reason for rejecting this property..."
-              required
-            />
-          </Box>
-        )}
+          {/* Facility Information */}
+          <Grid item xs={12} md={6}>
+            <Typography variant="h6" gutterBottom>Facilities</Typography>
+            <List dense>
+              <ListItem>
+                <ListItemIcon>
+                  <HotelIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Bedrooms" 
+                  secondary={property.bedrooms || 'Not specified'} 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <BathtubIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Bathrooms" 
+                  secondary={property.bathrooms || 'Not specified'} 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <PeopleIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Max Occupancy" 
+                  secondary={property.occupancy || 'Not specified'} 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <InfoIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Floor Area" 
+                  secondary={property.floor_area ? `${property.floor_area} sq ft` : 'Not specified'} 
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <InfoIcon />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Furnished" 
+                  secondary={property.furnished === 1 ? 'Yes' : property.furnished === 0 ? 'No' : 'Not specified'} 
+                />
+              </ListItem>
+            </List>
+          </Grid>
+
+          {/* Amenities */}
+          {amenities && amenities.length > 0 && (
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>Amenities</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {amenities.map((amenity, index) => (
+                  <Chip 
+                    key={index} 
+                    label={amenity} 
+                    size="small" 
+                    color="primary"
+                  />
+                ))}
+              </Box>
+            </Grid>
+          )}
+
+          {/* Facilities */}
+          {facilities && facilities.length > 0 && (
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>Additional Facilities</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {facilities.map((facility, index) => (
+                  <Chip 
+                    key={index} 
+                    label={facility} 
+                    size="small" 
+                    color="secondary"
+                  />
+                ))}
+              </Box>
+            </Grid>
+          )}
+
+          {/* Property Description */}
+          {property.description && (
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>Description</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {property.description}
+              </Typography>
+            </Grid>
+          )}
+
+          {/* House Rules */}
+          {rules && rules.length > 0 && (
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>House Rules</Typography>
+              <List dense>
+                {rules.map((rule, index) => (
+                  <ListItem key={index}>
+                    <ListItemText primary={rule} />
+                  </ListItem>
+                ))}
+              </List>
+            </Grid>
+          )}
+
+          {/* Roommate Information */}
+          {roommates && roommates.length > 0 && (
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>Roommate Information</Typography>
+              <List dense>
+                {roommates.map((roommate, index) => (
+                  <ListItem key={index}>
+                    <ListItemText 
+                      primary={`${roommate.name} (${roommate.age} years)`} 
+                      secondary={`Gender: ${roommate.gender}, Occupation: ${roommate.occupation}`}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Grid>
+          )}
+
+          {/* Bills Inclusive Information */}
+          {billsInclusive && billsInclusive.length > 0 && (
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>Bills Included</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {billsInclusive.map((bill, index) => (
+                  <Chip 
+                    key={index} 
+                    label={bill} 
+                    size="small" 
+                    color="primary"
+                  />
+                ))}
+              </Box>
+            </Grid>
+          )}
+
+          {/* Owner Information */}
+          {property.owner_info && (
+            <Grid item xs={12}>
+              <Typography variant="h6" gutterBottom>Property Owner</Typography>
+              <List dense>
+                <ListItem>
+                  <ListItemText 
+                    primary="Username" 
+                    secondary={property.owner_info.username} 
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary="Email" 
+                    secondary={property.owner_info.email} 
+                  />
+                </ListItem>
+                {property.owner_info.business_name && (
+                  <ListItem>
+                    <ListItemText 
+                      primary="Business Name" 
+                      secondary={property.owner_info.business_name} 
+                    />
+                  </ListItem>
+                )}
+                {property.owner_info.phone && (
+                  <ListItem>
+                    <ListItemText 
+                      primary="Phone" 
+                      secondary={property.owner_info.phone} 
+                    />
+                  </ListItem>
+                )}
+              </List>
+            </Grid>
+          )}
+
+          {/* Rejection Form */}
+          {showRejectForm && (
+            <Grid item xs={12}>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="h6" gutterBottom color="error">
+                Reject Property
+              </Typography>
+              <TextField
+                fullWidth
+                multiline
+                rows={3}
+                label="Reason for Rejection"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                placeholder="Please provide a clear reason for rejecting this property..."
+                required
+              />
+            </Grid>
+          )}
+        </Grid>
       </DialogContent>
+
       <DialogActions>
-        <Button onClick={onClose}>Close</Button>
         {!showRejectForm ? (
           <>
             <Button 
@@ -239,13 +428,13 @@ const AdminNewListings = () => {
   const fetchPendingProperties = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
-      const data = await getPendingProperties(token);
-      setPendingProperties(data);
+      const response = await getPendingProperties({ page: 1, limit: 50 });
+      setPendingProperties(response?.pending_properties || []);
     } catch (error) {
       console.error('Error fetching pending properties:', error);
       setSnackbarMessage('Error fetching pending properties');
       setSnackbarOpen(true);
+      setPendingProperties([]);
     } finally {
       setLoading(false);
     }
@@ -258,8 +447,7 @@ const AdminNewListings = () => {
 
   const handleApproveProperty = async (propertyId) => {
     try {
-      const token = localStorage.getItem('token');
-      await approveProperty(propertyId, token);
+      await approveProperty(propertyId);
       setSnackbarMessage('Property approved successfully');
       setSnackbarOpen(true);
       setPendingProperties(prev => prev.filter(p => p.id !== propertyId));
@@ -272,8 +460,7 @@ const AdminNewListings = () => {
 
   const handleRejectProperty = async (propertyId, reason) => {
     try {
-      const token = localStorage.getItem('token');
-      await rejectProperty(propertyId, reason, token);
+      await rejectProperty(propertyId, reason);
       setSnackbarMessage('Property rejected');
       setSnackbarOpen(true);
       setPendingProperties(prev => prev.filter(p => p.id !== propertyId));
@@ -325,89 +512,103 @@ const AdminNewListings = () => {
               const amenities = safeParse(property.amenities);
               const facilities = safeParse(property.facilities);
               const images = safeParse(property.images);
-              const primaryImage = images && images.length > 0 ? images[0] : Room;
+              const primaryImage = images && images.length > 0 ? 
+                images[0] : Room;
 
               return (
                 <Grid item xs={12} sm={6} md={4} key={property.id}>
-                  <Card sx={{ 
-                    height: '100%', 
-                    display: 'flex', 
-                    flexDirection: 'column',
-                    transition: 'transform 0.2s ease-in-out',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: 3
-                    }
-                  }}>
+                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <CardMedia
                       component="img"
-                      height="180"
+                      height="200"
                       image={primaryImage}
                       alt={property.property_type}
                       sx={{ objectFit: 'cover' }}
                     />
-                    
                     <CardContent sx={{ flexGrow: 1 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                        <Typography variant="h6" component="h3">
+                        <Typography gutterBottom variant="h6" component="div" noWrap>
                           {property.property_type}
                         </Typography>
-                        <Chip 
-                          label="Pending Review" 
-                          color="warning" 
-                          size="small" 
-                        />
+                        <Chip label={property.unit_type} size="small" color="primary" />
                       </Box>
 
-                      <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                        {property.unit_type}
-                      </Typography>
-
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                        <LocationOnIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="text.secondary" noWrap>
+                        <LocationOnIcon fontSize="small" color="action" />
+                        <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }} noWrap>
                           {property.address}
                         </Typography>
                       </Box>
 
-                      <Typography variant="h6" color="primary" sx={{ mb: 1, fontWeight: 'bold' }}>
-                        LKR {parseFloat(property.price || 0).toLocaleString()}/month
-                      </Typography>
-
-                      <Box sx={{ display: 'flex', gap: 2, mb: 1 }}>
-                        <Box display="flex" alignItems="center">
-                          <HotelIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-                          <Typography variant="body2">
-                            {facilities?.Bedroom || facilities?.bedroom || 0}
-                          </Typography>
-                        </Box>
-                        <Box display="flex" alignItems="center">
-                          <BathtubIcon sx={{ fontSize: 16, mr: 0.5, color: 'text.secondary' }} />
-                          <Typography variant="body2">
-                            {facilities?.Bathroom || facilities?.bathroom || 0}
-                          </Typography>
-                        </Box>
-                        <Box display="flex" alignItems="center">
-                          <Typography variant="body2">
-                            {amenities?.length || 0} amenities
-                          </Typography>
-                        </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        <AttachMoneyIcon fontSize="small" color="action" />
+                        <Typography variant="h6" color="primary" sx={{ ml: 0.5 }}>
+                          LKR {property.price?.toLocaleString()}
+                        </Typography>
                       </Box>
 
-                      <Typography variant="caption" color="text.secondary">
-                        Submitted: {new Date(property.created_at).toLocaleDateString()}
-                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                        {property.bedrooms && (
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <HotelIcon fontSize="small" color="action" />
+                            <Typography variant="body2" sx={{ ml: 0.5 }}>
+                              {property.bedrooms}
+                            </Typography>
+                          </Box>
+                        )}
+                        {property.bathrooms && (
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <BathtubIcon fontSize="small" color="action" />
+                            <Typography variant="body2" sx={{ ml: 0.5 }}>
+                              {property.bathrooms}
+                            </Typography>
+                          </Box>
+                        )}
+                        {property.occupancy && (
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <PeopleIcon fontSize="small" color="action" />
+                            <Typography variant="body2" sx={{ ml: 0.5 }}>
+                              {property.occupancy}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+
+                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                        <CalendarTodayIcon fontSize="small" color="action" />
+                        <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
+                          Available: {property.available_from ? 
+                            new Date(property.available_from).toLocaleDateString() : 
+                            'Not specified'
+                          }
+                        </Typography>
+                      </Box>
+
+                      {amenities && amenities.length > 0 && (
+                        <Box>
+                          <Typography variant="caption" color="text.secondary">
+                            {amenities.slice(0, 3).join(', ')}
+                            {amenities.length > 3 && ` +${amenities.length - 3} more`}
+                          </Typography>
+                        </Box>
+                      )}
                     </CardContent>
-                    
-                    <CardActions>
+
+                    <CardActions sx={{ p: 2, pt: 0 }}>
                       <Button 
                         size="small" 
-                        color="primary" 
-                        startIcon={<VisibilityIcon />}
                         onClick={() => handleViewProperty(property)}
-                        fullWidth
+                        startIcon={<VisibilityIcon />}
                       >
-                        View Details
+                        Review
+                      </Button>
+                      <Button 
+                        size="small" 
+                        color="success"
+                        onClick={() => handleApproveProperty(property.id)}
+                        startIcon={<CheckIcon />}
+                      >
+                        Quick Approve
                       </Button>
                     </CardActions>
                   </Card>
@@ -429,7 +630,6 @@ const AdminNewListings = () => {
       <AppSnackbar
         open={snackbarOpen}
         message={snackbarMessage}
-        autoHideDuration={4000}
         onClose={() => setSnackbarOpen(false)}
       />
     </Container>
