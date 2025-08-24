@@ -32,6 +32,9 @@ import AdminUserManagement from './pages/AdminPages/AdminUserManagement';
 
 import ProfilePage from './pages/ProfilePage';
 
+import EmailVerification from './pages/EmailVerification';
+
+
 const PrivateRoute = ({ element }) => {
   return isAuthenticated() ?
     element : <Navigate to="/login" replace />;
@@ -72,6 +75,8 @@ const AppRoutes = () => {
           path="/forgot-password" 
           element={<PublicRoute element={<ForgotPassword />} />} 
         />
+
+        <Route path="/verify-email" element={<EmailVerification />} />
         
         <Route path="/user-home" element={<UserHome />} />
         <Route path="/user-allproperties" element={<UserAllProperties />} />
