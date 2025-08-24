@@ -98,7 +98,7 @@ const HamburgerMenuDropdown = () => {
           { icon: <DashboardIcon />, text: 'Admin Dashboard', path: '/admin/home' },
           { icon: <BusinessIcon />, text: 'All Properties', path: '/admin/all-properties' },
           { icon: <ListIcon />, text: 'New Listings', path: '/admin/new-listings' },
-          { icon: <PersonIcon />, text: 'Manage Users', path: '/admin/users' },
+          { icon: <PersonIcon />, text: 'Manage Users', path: '/admin/user-management' },
           { icon: <NotificationsIcon />, text: 'Notifications', path: '/notifications' },
           { icon: <SettingsIcon />, text: 'Settings', path: '/admin/settings' },
           { icon: <PersonIcon />, text: 'Profile', path: '/profile' }

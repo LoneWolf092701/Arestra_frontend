@@ -28,6 +28,7 @@ import AdminHome from './pages/AdminPages/AdminHome';
 import AdminNewListings from './pages/AdminPages/AdminNewListing';
 import AdminAllProperties from './pages/AdminPages/AdminAllProperties';
 import AdminPropertyView from './pages/AdminPages/AdminPropertyView';
+import AdminUserManagement from './pages/AdminPages/AdminUserManagement';
 
 import ProfilePage from './pages/ProfilePage';
 
@@ -271,6 +272,25 @@ const AppRoutes = () => {
             <RoleProtectedRoute 
               allowedRoles={['admin']} 
               element={<AdminPropertyView />} 
+            />
+          } 
+        />
+        
+        <Route 
+          path="/admin/user-management" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminUserManagement />} 
+            />
+          } 
+        />
+        <Route 
+          path="/admin/users" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminUserManagement />} 
             />
           } 
         />

@@ -17,21 +17,9 @@ import {
   TableRow,
   Paper,
   Chip,
-  LinearProgress,
   Divider,
   IconButton,
-  Tooltip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  TextField,
-  Switch,
-  FormControlLabel
+  Tooltip
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -39,36 +27,18 @@ import {
   Home as HomeIcon,
   BookOnline as BookingIcon,
   AttachMoney as MoneyIcon,
-  Assessment as AssessmentIcon,
-  Settings as SettingsIcon,
-  Health as HealthIcon,
   Refresh as RefreshIcon,
   TrendingUp as TrendingUpIcon,
   TrendingDown as TrendingDownIcon,
-  Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Pending as PendingIcon,
-  Download as DownloadIcon,
-  Announcement as AnnouncementIcon,
-  ReportProblem as ReportIcon
+  Visibility as ViewIcon
 } from '@mui/icons-material';
-import { 
-  getDashboardStats,
-  getUserStatistics,
-  getPropertyApprovalStats,
-  getBookingRequestsAdmin,
-  getSystemHealth,
-  getFinancialReports,
-  getActivityLogs,
-  getReportedContent,
-  getSystemConfig,
-  updateSystemConfig,
-  exportAdminData,
-  createAnnouncement
-} from '../../api/adminAPI';
+import { getDashboardStats } from '../../api/adminAPI';
 import { useTheme } from '../../contexts/ThemeContext';
 import AppSnackbar from '../../components/common/AppSnackbar';
+import { useNavigate } from 'react-router-dom';
 
 const StatCard = ({ title, value, icon, color = 'primary', trend, subtitle, loading = false }) => (
   <Card sx={{ height: '100%' }}>
@@ -111,124 +81,56 @@ const StatCard = ({ title, value, icon, color = 'primary', trend, subtitle, load
   </Card>
 );
 
-const SystemHealthIndicator = ({ status, label }) => {
-  const getColor = (status) => {
-    switch (status) {
-      case 'healthy': return 'success';
-      case 'warning': return 'warning';
-      case 'error': return 'error';
-      default: return 'default';
-    }
-  };
-
-  const getIcon = (status) => {
-    switch (status) {
-      case 'healthy': return <CheckCircleIcon />;
-      case 'warning': return <WarningIcon />;
-      case 'error': return <ErrorIcon />;
-      default: return <PendingIcon />;
-    }
-  };
-
-  return (
-    <Chip
-      icon={getIcon(status)}
-      label={label}
-      color={getColor(status)}
-      size="small"
-      sx={{ mr: 1, mb: 1 }}
-    />
-  );
-};
-
 const AdminHome = () => {
-  const [dashboardStats, setDashboardStats] = useState(null);
-  const [userStats, setUserStats] = useState(null);
-  const [propertyStats, setPropertyStats] = useState(null);
-  const [bookingStats, setBookingStats] = useState([]);
-  const [systemHealth, setSystemHealth] = useState(null);
-  const [financialReports, setFinancialReports] = useState(null);
-  const [activityLogs, setActivityLogs] = useState([]);
-  const [reportedContent, setReportedContent] = useState([]);
-  const [systemConfig, setSystemConfig] = useState(null);
+  const navigate = useNavigate();
+  const { theme, isDark } = useTheme();
+  
+  const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
-  
-  const [configDialog, setConfigDialog] = useState(false);
-  const [announcementDialog, setAnnouncementDialog] = useState(false);
-  const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', priority: 'normal' });
-  
-  const { isDark } = useTheme();
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
 
   useEffect(() => {
-    loadAllData();
+    loadDashboardData();
   }, []);
 
-  const loadAllData = async () => {
+  const loadDashboardData = async () => {
     try {
       setLoading(true);
       
-      const [
-        statsResponse,
-        userStatsResponse,
-        propertyStatsResponse,
-        bookingStatsResponse,
-        healthResponse,
-        financialResponse,
-        logsResponse,
-        reportsResponse,
-        configResponse
-      ] = await Promise.allSettled([
+      const [statsResponse, dashboardResponse] = await Promise.allSettled([
         getDashboardStats(),
-        getUserStatistics({ period: 'monthly' }),
-        getPropertyApprovalStats({ period: 'monthly' }),
-        getBookingRequestsAdmin({ limit: 10, sort_by: 'created_at', sort_order: 'desc' }),
-        getSystemHealth(),
-        getFinancialReports({ period: 'monthly' }),
-        getActivityLogs({ limit: 10 }),
-        getReportedContent({ limit: 10, status: 'pending' }),
-        getSystemConfig()
+        fetch('/api/admin/dashboard', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Cache-Control': 'no-cache'
+          }
+        }).then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        })
       ]);
 
       if (statsResponse.status === 'fulfilled') {
-        setDashboardStats(statsResponse.value);
+        setDashboardData(prev => ({ ...prev, stats: statsResponse.value }));
       }
-      
-      if (userStatsResponse.status === 'fulfilled') {
-        setUserStats(userStatsResponse.value);
+
+      if (dashboardResponse.status === 'fulfilled') {
+        setDashboardData(prev => ({ 
+          ...prev, 
+          ...dashboardResponse.value,
+          stats: prev?.stats || dashboardResponse.value.stats
+        }));
+      } else {
+        console.error('Dashboard response error:', dashboardResponse.reason);
       }
-      
-      if (propertyStatsResponse.status === 'fulfilled') {
-        setPropertyStats(propertyStatsResponse.value);
-      }
-      
-      if (bookingStatsResponse.status === 'fulfilled') {
-        setBookingStats(bookingStatsResponse.value.bookings || []);
-      }
-      
-      if (healthResponse.status === 'fulfilled') {
-        setSystemHealth(healthResponse.value);
-      }
-      
-      if (financialResponse.status === 'fulfilled') {
-        setFinancialReports(financialResponse.value);
-      }
-      
-      if (logsResponse.status === 'fulfilled') {
-        setActivityLogs(logsResponse.value.logs || []);
-      }
-      
-      if (reportsResponse.status === 'fulfilled') {
-        setReportedContent(reportsResponse.value.reports || []);
-      }
-      
-      if (configResponse.status === 'fulfilled') {
-        setSystemConfig(configResponse.value);
-      }
-      
+
     } catch (error) {
-      console.error('Error loading admin data:', error);
+      console.error('Error loading dashboard data:', error);
       setSnackbar({
         open: true,
         message: 'Error loading admin dashboard data',
@@ -241,7 +143,7 @@ const AdminHome = () => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await loadAllData();
+    await loadDashboardData();
     setRefreshing(false);
     setSnackbar({
       open: true,
@@ -250,82 +152,49 @@ const AdminHome = () => {
     });
   };
 
-  const handleConfigUpdate = async (newConfig) => {
-    try {
-      await updateSystemConfig(newConfig);
-      setSystemConfig(newConfig);
-      setConfigDialog(false);
-      setSnackbar({
-        open: true,
-        message: 'System configuration updated successfully',
-        severity: 'success'
-      });
-    } catch (error) {
-      console.error('Error updating config:', error);
-      setSnackbar({
-        open: true,
-        message: 'Error updating system configuration',
-        severity: 'error'
-      });
-    }
-  };
-
-  const handleCreateAnnouncement = async () => {
-    try {
-      await createAnnouncement(newAnnouncement);
-      setAnnouncementDialog(false);
-      setNewAnnouncement({ title: '', content: '', priority: 'normal' });
-      setSnackbar({
-        open: true,
-        message: 'Announcement created successfully',
-        severity: 'success'
-      });
-    } catch (error) {
-      console.error('Error creating announcement:', error);
-      setSnackbar({
-        open: true,
-        message: 'Error creating announcement',
-        severity: 'error'
-      });
-    }
-  };
-
-  const handleExportData = async (dataType, format = 'csv') => {
-    try {
-      const blob = await exportAdminData({ data_type: dataType, format });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${dataType}_export.${format}`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-      
-      setSnackbar({
-        open: true,
-        message: `${dataType} data exported successfully`,
-        severity: 'success'
-      });
-    } catch (error) {
-      console.error('Error exporting data:', error);
-      setSnackbar({
-        open: true,
-        message: 'Error exporting data',
-        severity: 'error'
-      });
-    }
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-LK', {
+      style: 'currency',
+      currency: 'LKR'
+    }).format(amount || 0);
   };
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleString();
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-LK', {
-      style: 'currency',
-      currency: 'LKR'
-    }).format(amount || 0);
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'approved':
+      case 'confirmed':
+      case 'active':
+        return 'success';
+      case 'pending':
+        return 'warning';
+      case 'rejected':
+      case 'cancelled':
+      case 'inactive':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'approved':
+      case 'confirmed':
+      case 'active':
+        return <CheckCircleIcon fontSize="small" />;
+      case 'pending':
+        return <PendingIcon fontSize="small" />;
+      case 'rejected':
+      case 'cancelled':
+      case 'inactive':
+        return <ErrorIcon fontSize="small" />;
+      default:
+        return null;
+    }
   };
 
   if (loading) {
@@ -336,81 +205,59 @@ const AdminHome = () => {
     );
   }
 
+  const stats = dashboardData?.stats || {};
+
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
           Admin Dashboard
         </Typography>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<AnnouncementIcon />}
-            onClick={() => setAnnouncementDialog(true)}
-          >
-            Create Announcement
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<SettingsIcon />}
-            onClick={() => setConfigDialog(true)}
-          >
-            System Config
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={refreshing ? <CircularProgress size={20} /> : <RefreshIcon />}
-            onClick={handleRefresh}
-            disabled={refreshing}
-          >
-            Refresh
-          </Button>
-        </Box>
+        <Button
+          variant="contained"
+          startIcon={refreshing ? <CircularProgress size={20} /> : <RefreshIcon />}
+          onClick={handleRefresh}
+          disabled={refreshing}
+        >
+          Refresh Data
+        </Button>
       </Box>
-
-      {systemHealth && systemHealth.status !== 'healthy' && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          System health warning detected. Some services may be experiencing issues.
-        </Alert>
-      )}
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Users"
-            value={dashboardStats?.users?.total || 0}
+            value={stats.users?.total || 0}
             icon={<PeopleIcon fontSize="large" />}
             color="primary"
-            trend={userStats?.growth_rate}
-            subtitle={`${dashboardStats?.users?.new_this_month || 0} new this month`}
+            subtitle={`${stats.users?.new_this_month || 0} new this month`}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Properties"
-            value={dashboardStats?.properties?.total || 0}
+            value={stats.properties?.total || 0}
             icon={<HomeIcon fontSize="large" />}
             color="secondary"
-            trend={propertyStats?.growth_rate}
-            subtitle={`${dashboardStats?.properties?.pending || 0} pending approval`}
+            subtitle={`${stats.properties?.pending || 0} pending approval`}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
             title="Total Bookings"
-            value={dashboardStats?.bookings?.total || 0}
+            value={stats.bookings?.total || 0}
             icon={<BookingIcon fontSize="large" />}
             color="info"
-            subtitle={`${dashboardStats?.bookings?.pending || 0} pending`}
+            subtitle={`${stats.bookings?.pending || 0} pending`}
           />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard
-            title="Revenue (This Month)"
-            value={formatCurrency(dashboardStats?.revenue?.this_month)}
+            title="Monthly Revenue"
+            value={formatCurrency(stats.revenue?.this_month || 0)}
             icon={<MoneyIcon fontSize="large" />}
             color="success"
-            subtitle={`Total: ${formatCurrency(dashboardStats?.revenue?.total)}`}
+            subtitle={`Total: ${formatCurrency(stats.revenue?.total || 0)}`}
           />
         </Grid>
       </Grid>
@@ -419,422 +266,297 @@ const AdminHome = () => {
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Recent Booking Requests
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Recent Booking Requests
+                </Typography>
+                <Button 
+                  size="small" 
+                  onClick={() => navigate('/admin/home')}
+                  endIcon={<ViewIcon />}
+                >
+                  View All
+                </Button>
+              </Box>
               <TableContainer>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell>ID</TableCell>
-                      <TableCell>Guest</TableCell>
+                      <TableCell>Guest Name</TableCell>
                       <TableCell>Property</TableCell>
-                      <TableCell>Dates</TableCell>
+                      <TableCell>Check-in</TableCell>
                       <TableCell>Status</TableCell>
                       <TableCell>Amount</TableCell>
-                      <TableCell>Created</TableCell>
+                      <TableCell>Date</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {bookingStats.slice(0, 5).map((booking) => (
-                      <TableRow key={booking.id}>
-                        <TableCell>#{booking.id}</TableCell>
-                        <TableCell>{booking.first_name} {booking.last_name}</TableCell>
+                    {(dashboardData?.recent_bookings || []).slice(0, 5).map((booking) => (
+                      <TableRow key={booking.id} hover>
+                        <TableCell>{booking.id}</TableCell>
                         <TableCell>
-                          <Typography variant="body2">
-                            {booking.property_type} - {booking.property_address}
+                          <Typography variant="body2" fontWeight="medium">
+                            {booking.first_name} {booking.last_name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {booking.tenant_email}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {booking.property_type} - {booking.unit_type}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {booking.property_address}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Typography variant="body2">
-                            {new Date(booking.check_in_date).toLocaleDateString()} - 
-                            {new Date(booking.check_out_date).toLocaleDateString()}
+                            {new Date(booking.check_in_date).toLocaleDateString()}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Chip
+                            icon={getStatusIcon(booking.status)}
                             label={booking.status}
-                            color={
-                              booking.status === 'confirmed' ? 'success' :
-                              booking.status === 'pending' ? 'warning' :
-                              booking.status === 'rejected' ? 'error' : 'default'
-                            }
                             size="small"
+                            color={getStatusColor(booking.status)}
+                            variant="outlined"
                           />
                         </TableCell>
-                        <TableCell>{formatCurrency(booking.total_price)}</TableCell>
-                        <TableCell>{new Date(booking.created_at).toLocaleDateString()}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {formatCurrency(booking.advance_amount)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            of {formatCurrency(booking.total_price)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption">
+                            {formatDate(booking.created_at)}
+                          </Typography>
+                        </TableCell>
                       </TableRow>
                     ))}
+                    {(!dashboardData?.recent_bookings || dashboardData.recent_bookings.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={7} align="center">
+                          <Typography color="text.secondary">
+                            No recent bookings found
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
             </CardContent>
           </Card>
         </Grid>
-        
+
         <Grid item xs={12} md={4}>
-          <Card sx={{ mb: 3 }}>
+          <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                System Health
+                Quick Actions
               </Typography>
-              {systemHealth ? (
-                <Box>
-                  <SystemHealthIndicator 
-                    status={systemHealth.database?.status} 
-                    label="Database" 
-                  />
-                  <SystemHealthIndicator 
-                    status={systemHealth.server?.status} 
-                    label="Server" 
-                  />
-                  <SystemHealthIndicator 
-                    status={systemHealth.storage?.status} 
-                    label="Storage" 
-                  />
-                  <SystemHealthIndicator 
-                    status={systemHealth.memory?.status} 
-                    label="Memory" 
-                  />
-                  {systemHealth.server?.uptime && (
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                      Uptime: {Math.round(systemHealth.server.uptime / 3600)} hours
-                    </Typography>
-                  )}
-                </Box>
-              ) : (
-                <Typography>Health data unavailable</Typography>
-              )}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                 <Button
+                  variant="outlined"
+                  startIcon={<PeopleIcon />}
+                  fullWidth
+                  onClick={() => navigate('/admin/user-management')}
+                >
+                  Manage Users
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<HomeIcon />}
+                  fullWidth
+                  onClick={() => navigate('/admin/all-properties')}
+                >
+                  View All Properties
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<PendingIcon />}
+                  fullWidth
+                  onClick={() => navigate('/admin/new-listings')}
+                >
+                  Pending Approvals ({stats.properties?.pending || 0})
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={<BookingIcon />}
+                  fullWidth
+                  onClick={() => navigate('/admin/home')}
+                >
+                  Booking Management
+                </Button>
+              </Box>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                User Statistics
-              </Typography>
-              {userStats && (
-                <Box>
-                  <Typography variant="body2">
-                    <strong>Total Users:</strong> {userStats.total_users}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Active Users:</strong> {userStats.active_users}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>New Registrations:</strong> {userStats.new_registrations}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Retention Rate:</strong> {userStats.user_retention_rate}%
-                  </Typography>
-                  
-                  <Divider sx={{ my: 2 }} />
-                  
-                  <Typography variant="subtitle2" gutterBottom>
-                    Role Distribution:
-                  </Typography>
-                  {userStats.role_distribution && Object.entries(userStats.role_distribution).map(([role, count]) => (
-                    <Box key={role} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                      <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>
-                        {role}:
-                      </Typography>
-                      <Typography variant="body2">{count}</Typography>
-                    </Box>
-                  ))}
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-        
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Property Approval Statistics
-              </Typography>
-              {propertyStats && (
-                <Box>
-                  <Typography variant="body2">
-                    <strong>Total Submitted:</strong> {propertyStats.total_submitted}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Approved:</strong> {propertyStats.total_approved}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Rejected:</strong> {propertyStats.total_rejected}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Pending:</strong> {propertyStats.pending_approval}
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Approval Rate:</strong> {propertyStats.approval_rate}%
-                  </Typography>
-                  <Typography variant="body2">
-                    <strong>Avg Approval Time:</strong> {propertyStats.average_approval_time} hours
-                  </Typography>
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6">
-                  Recent Activity Logs
+                <Typography variant="h6" gutterBottom>
+                  Pending Property Approvals
                 </Typography>
-                <Button
-                  size="small"
-                  startIcon={<DownloadIcon />}
-                  onClick={() => handleExportData('activity_logs')}
+                <Button 
+                  size="small" 
+                  onClick={() => navigate('/admin/new-listings')}
+                  endIcon={<ViewIcon />}
                 >
-                  Export
+                  View All
                 </Button>
               </Box>
-              <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-                {activityLogs.map((log, index) => (
-                  <Box key={index} sx={{ mb: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-                    <Typography variant="body2">
-                      <strong>{log.user_name || 'System'}</strong> {log.action}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {formatDate(log.created_at)}
-                    </Typography>
-                    {log.details && (
-                      <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                        {log.details}
-                      </Typography>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Property</TableCell>
+                      <TableCell>Owner</TableCell>
+                      <TableCell>Type</TableCell>
+                      <TableCell>Submitted</TableCell>
+                      <TableCell>Action</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(dashboardData?.recent_properties || []).slice(0, 5).map((property) => (
+                      <TableRow key={property.id} hover>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {property.address}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {property.owner_username}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {property.property_type}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption">
+                            {formatDate(property.created_at)}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip title="View Property">
+                            <IconButton 
+                              size="small"
+                              onClick={() => navigate(`/admin/property/${property.id}`)}
+                            >
+                              <ViewIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!dashboardData?.recent_properties || dashboardData.recent_properties.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={5} align="center">
+                          <Typography color="text.secondary">
+                            No pending approvals
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
                     )}
-                  </Box>
-                ))}
-              </Box>
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </CardContent>
           </Card>
         </Grid>
-        
+
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Reported Content
-              </Typography>
-              <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-                {reportedContent.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    No pending reports
-                  </Typography>
-                ) : (
-                  reportedContent.map((report, index) => (
-                    <Box key={index} sx={{ mb: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-                      <Typography variant="body2">
-                        <strong>{report.report_type}</strong> - {report.content_type}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {report.description}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Reported: {formatDate(report.created_at)}
-                      </Typography>
-                    </Box>
-                  ))
-                )}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Recent User Registrations
+                </Typography>
+                <Button 
+                  size="small" 
+                  onClick={() => navigate('/admin/home')}
+                  endIcon={<ViewIcon />}
+                >
+                  View All
+                </Button>
               </Box>
+              <TableContainer>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>User</TableCell>
+                      <TableCell>Role</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Joined</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {(dashboardData?.recent_users || []).slice(0, 5).map((user) => (
+                      <TableRow key={user.id} hover>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight="medium">
+                            {user.first_name && user.last_name 
+                              ? `${user.first_name} ${user.last_name}` 
+                              : user.username}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {user.email}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            label={user.role}
+                            size="small"
+                            color={user.role === 'admin' ? 'error' : user.role === 'propertyowner' ? 'warning' : 'primary'}
+                            variant="outlined"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Chip
+                            icon={getStatusIcon(user.is_active ? 'active' : 'inactive')}
+                            label={user.is_active ? 'Active' : 'Inactive'}
+                            size="small"
+                            color={getStatusColor(user.is_active ? 'active' : 'inactive')}
+                            variant="outlined"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="caption">
+                            {formatDate(user.created_at)}
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {(!dashboardData?.recent_users || dashboardData.recent_users.length === 0) && (
+                      <TableRow>
+                        <TableCell colSpan={4} align="center">
+                          <Typography color="text.secondary">
+                            No recent users
+                          </Typography>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
-
-      {financialReports && (
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="h6">
-                    Financial Overview
-                  </Typography>
-                  <Button
-                    size="small"
-                    startIcon={<DownloadIcon />}
-                    onClick={() => handleExportData('financial_reports')}
-                  >
-                    Export Report
-                  </Button>
-                </Box>
-                <Grid container spacing={3}>
-                  <Grid item xs={12} md={3}>
-                    <Typography variant="body2" color="text.secondary">
-                      Total Revenue
-                    </Typography>
-                    <Typography variant="h5" color="success.main">
-                      {formatCurrency(financialReports.total_revenue)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Typography variant="body2" color="text.secondary">
-                      Service Fees
-                    </Typography>
-                    <Typography variant="h5">
-                      {formatCurrency(financialReports.service_fees_collected)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Typography variant="body2" color="text.secondary">
-                      Owner Earnings
-                    </Typography>
-                    <Typography variant="h5">
-                      {formatCurrency(financialReports.property_owner_earnings)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} md={3}>
-                    <Typography variant="body2" color="text.secondary">
-                      Top Properties
-                    </Typography>
-                    <Typography variant="body2">
-                      {financialReports.top_earning_properties?.length || 0} high performers
-                    </Typography>
-                  </Grid>
-                </Grid>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      )}
-
-      <Dialog open={configDialog} onClose={() => setConfigDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>System Configuration</DialogTitle>
-        <DialogContent>
-          {systemConfig && (
-            <Box sx={{ pt: 2 }}>
-              <Grid container spacing={3}>
-                <Grid item xs={12} md={6}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={systemConfig.maintenance_mode}
-                        onChange={(e) => setSystemConfig(prev => ({ ...prev, maintenance_mode: e.target.checked }))}
-                      />
-                    }
-                    label="Maintenance Mode"
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={systemConfig.registration_enabled}
-                        onChange={(e) => setSystemConfig(prev => ({ ...prev, registration_enabled: e.target.checked }))}
-                      />
-                    }
-                    label="User Registration Enabled"
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Max Properties Per Owner"
-                    value={systemConfig.max_properties_per_owner}
-                    onChange={(e) => setSystemConfig(prev => ({ ...prev, max_properties_per_owner: parseInt(e.target.value) }))}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Booking Advance Days"
-                    value={systemConfig.booking_advance_days}
-                    onChange={(e) => setSystemConfig(prev => ({ ...prev, booking_advance_days: parseInt(e.target.value) }))}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Service Fee Percentage"
-                    value={systemConfig.service_fee_percentage}
-                    onChange={(e) => setSystemConfig(prev => ({ ...prev, service_fee_percentage: parseFloat(e.target.value) }))}
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <FormControlLabel
-                    control={
-                      <Switch
-                        checked={systemConfig.system_notifications}
-                        onChange={(e) => setSystemConfig(prev => ({ ...prev, system_notifications: e.target.checked }))}
-                      />
-                    }
-                    label="System Notifications"
-                  />
-                </Grid>
-              </Grid>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfigDialog(false)}>Cancel</Button>
-          <Button onClick={() => handleConfigUpdate(systemConfig)} variant="contained">
-            Save Configuration
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      <Dialog open={announcementDialog} onClose={() => setAnnouncementDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Create Announcement</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2 }}>
-            <TextField
-              fullWidth
-              label="Title"
-              value={newAnnouncement.title}
-              onChange={(e) => setNewAnnouncement(prev => ({ ...prev, title: e.target.value }))}
-              sx={{ mb: 3 }}
-            />
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              label="Content"
-              value={newAnnouncement.content}
-              onChange={(e) => setNewAnnouncement(prev => ({ ...prev, content: e.target.value }))}
-              sx={{ mb: 3 }}
-            />
-            <FormControl fullWidth>
-              <InputLabel>Priority</InputLabel>
-              <Select
-                value={newAnnouncement.priority}
-                label="Priority"
-                onChange={(e) => setNewAnnouncement(prev => ({ ...prev, priority: e.target.value }))}
-              >
-                <MenuItem value="low">Low</MenuItem>
-                <MenuItem value="normal">Normal</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="urgent">Urgent</MenuItem>
-              </Select>
-            </FormControl>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAnnouncementDialog(false)}>Cancel</Button>
-          <Button 
-            onClick={handleCreateAnnouncement} 
-            variant="contained"
-            disabled={!newAnnouncement.title || !newAnnouncement.content}
-          >
-            Create Announcement
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       <AppSnackbar
         open={snackbar.open}
