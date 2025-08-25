@@ -28,8 +28,12 @@ import AdminHome from './pages/AdminPages/AdminHome';
 import AdminNewListings from './pages/AdminPages/AdminNewListing';
 import AdminAllProperties from './pages/AdminPages/AdminAllProperties';
 import AdminPropertyView from './pages/AdminPages/AdminPropertyView';
+import AdminUserManagement from './pages/AdminPages/AdminUserManagement';
 
 import ProfilePage from './pages/ProfilePage';
+
+import EmailVerification from './pages/EmailVerification';
+
 
 const PrivateRoute = ({ element }) => {
   return isAuthenticated() ?
@@ -71,6 +75,8 @@ const AppRoutes = () => {
           path="/forgot-password" 
           element={<PublicRoute element={<ForgotPassword />} />} 
         />
+
+        <Route path="/verify-email" element={<EmailVerification />} />
         
         <Route path="/user-home" element={<UserHome />} />
         <Route path="/user-allproperties" element={<UserAllProperties />} />
@@ -271,6 +277,25 @@ const AppRoutes = () => {
             <RoleProtectedRoute 
               allowedRoles={['admin']} 
               element={<AdminPropertyView />} 
+            />
+          } 
+        />
+        
+        <Route 
+          path="/admin/user-management" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminUserManagement />} 
+            />
+          } 
+        />
+        <Route 
+          path="/admin/users" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['admin']} 
+              element={<AdminUserManagement />} 
             />
           } 
         />

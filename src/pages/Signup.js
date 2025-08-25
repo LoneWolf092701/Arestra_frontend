@@ -159,89 +159,99 @@ const Signup = () => {
   };
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
+  event.preventDefault();
+  
+  if (!validateForm()) {
+    return;
+  }
+
+  setIsLoading(true);
+  setError('');
+
+  try {
+    let currentForm, userRole, profileData;
     
-    if (!validateForm()) {
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    try {
-      let currentForm, userRole, profileData;
-      
-      if (activeTab === 0) {
-        currentForm = tenantForm;
-        userRole = 'user';
-        profileData = {
-          first_name: currentForm.firstName,
-          last_name: currentForm.lastName,
-          phone: currentForm.phone,
-          gender: currentForm.gender,
-          birthdate: currentForm.birthdate,
-          nationality: currentForm.nationality
-        };
-      } else if (activeTab === 1) {
-        currentForm = ownerForm;
-        userRole = 'propertyowner';
-        profileData = {
-          first_name: currentForm.firstName,
-          last_name: currentForm.lastName,
-          phone: currentForm.phone,
-          gender: currentForm.gender,
-          birthdate: currentForm.birthdate,
-          nationality: currentForm.nationality,
-          business_name: currentForm.businessName,
-          contact_person: currentForm.contactPerson,
-          business_type: currentForm.businessType,
-          business_registration: currentForm.businessRegistration,
-          business_address: currentForm.businessAddress
-        };
-      } else {
-        currentForm = adminForm;
-        userRole = 'admin';
-        profileData = {
-          first_name: currentForm.firstName,
-          last_name: currentForm.lastName,
-          phone: currentForm.phone,
-          gender: currentForm.gender,
-          birthdate: currentForm.birthdate,
-          nationality: currentForm.nationality,
-          department: currentForm.department,
-          admin_level: currentForm.adminLevel
-        };
-      }
-      
-      const userData = {
-        username: currentForm.username,
-        email: currentForm.email,
-        password: currentForm.password,
-        role: userRole,
-        profile: profileData
+    if (activeTab === 0) {
+      currentForm = tenantForm;
+      userRole = 'user';
+      profileData = {
+        first_name: currentForm.firstName,
+        last_name: currentForm.lastName,
+        phone: currentForm.phone,
+        gender: currentForm.gender,
+        birthdate: currentForm.birthdate,
+        nationality: currentForm.nationality
       };
+    } else if (activeTab === 1) {
+      currentForm = ownerForm;
+      userRole = 'propertyowner';
+      profileData = {
+        first_name: currentForm.firstName,
+        last_name: currentForm.lastName,
+        phone: currentForm.phone,
+        gender: currentForm.gender,
+        birthdate: currentForm.birthdate,
+        nationality: currentForm.nationality,
+        business_name: currentForm.businessName,
+        contact_person: currentForm.contactPerson,
+        business_type: currentForm.businessType,
+        business_registration: currentForm.businessRegistration,
+        business_address: currentForm.businessAddress
+      };
+    } else {
+      currentForm = adminForm;
+      userRole = 'admin';
+      profileData = {
+        first_name: currentForm.firstName,
+        last_name: currentForm.lastName,
+        phone: currentForm.phone,
+        gender: currentForm.gender,
+        birthdate: currentForm.birthdate,
+        nationality: currentForm.nationality,
+        department: currentForm.department,
+        admin_level: currentForm.adminLevel
+      };
+    }
+    
+    const userData = {
+      username: currentForm.username,
+      email: currentForm.email,
+      password: currentForm.password,
+      role: userRole,
+      profile: profileData
+    };
 
-      const response = await registerUser(userData);
+    const response = await registerUser(userData);
+    
+    if (response.success || response.message.includes('successfully')) {
+      setSnackbar({
+        open: true,
+        message: response.requiresEmailVerification 
+          ? 'Account created successfully! Please check your email and click the verification link to activate your account.'
+          : 'Account created successfully! Please check your email for verification.',
+        severity: 'success'
+      });
       
-      if (response.success || response.message === 'User registered successfully') {
-        setSnackbar({
-          open: true,
-          message: 'Account created successfully! Please check your email for verification.',
-          severity: 'success'
-        });
+      // If email verification is required, navigate to a verification pending page or stay on current page
+      if (response.requiresEmailVerification) {
+        setTimeout(() => {
+          navigate(`/verify-email?email=${encodeURIComponent(currentForm.email)}`);
+        }, 2000);
+      } else {
         setTimeout(() => {
           navigate('/login');
         }, 2000);
-      } else {
-        setError(response.message || 'Registration failed. Please try again.');
       }
-    } catch (error) {
-      console.error('Registration error:', error);
-      setError(error.message || 'An error occurred during registration. Please try again.');
-    } finally {
-      setIsLoading(false);
+    } else {
+      setError(response.message || 'Registration failed. Please try again.');
     }
-  };
+  } catch (error) {
+    console.error('Registration error:', error);
+    setError(error.message || 'An error occurred during registration. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <Container 
