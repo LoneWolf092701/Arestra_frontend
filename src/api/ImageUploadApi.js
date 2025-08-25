@@ -110,6 +110,7 @@ export const uploadSingleImage = async (imageFile, options = {}) => {
         }
       }
     };
+    
 
     const response = await apiClient.post('/upload/single', formData, config);
     
