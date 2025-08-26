@@ -70,7 +70,7 @@ const HamburgerMenuDropdown = () => {
         { icon: <HomeIcon />, text: 'Home', path: '/user-home' },
         { icon: <SearchIcon />, text: 'Browse Properties', path: '/user-allproperties' },
         { icon: <InfoIcon />, text: 'About Us', path: '/about' },
-        { icon: <HelpIcon />, text: 'Help', path: '/help' },
+        { icon: <HelpIcon />, text: 'Help', path: '/help-support' },
         { icon: <ContactIcon />, text: 'Contact', path: '/contact' }
       );
     } else {
@@ -109,7 +109,7 @@ const HamburgerMenuDropdown = () => {
       menuItems.push(
         { divider: true },
         { icon: <SettingsIcon />, text: 'Settings', path: '/settings' },
-        { icon: <HelpIcon />, text: 'Help & Support', path: '/help' },
+        { icon: <HelpIcon />, text: 'Help & Support', path: '/help-support' },
         { icon: <LogoutIcon />, text: 'Logout', action: 'logout' }
       );
     }
