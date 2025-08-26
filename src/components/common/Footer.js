@@ -220,7 +220,7 @@ const Footer = () => {
               justifyContent: { xs: 'center', sm: 'flex-end' },
             }}
           >
-            {['Accessibility', 'Sitemap', 'Help'].map((text, index) => (
+            {['Accessibility', 'Sitemap', 'Help-support'].map((text, index) => (
               <Link
                 key={index}
                 href={`/${text.toLowerCase()}`}
