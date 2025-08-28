@@ -41,6 +41,9 @@ import {
   AdminPanelSettings as AdminIcon,
   Search as SearchIcon
 } from '@mui/icons-material';
+import EmailIcon from '@mui/icons-material/Email';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CloseIcon from '@mui/icons-material/Close';
 import { useTheme } from '../../contexts/ThemeContext';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import { getUsers, updateUserStatus, getUserDetails } from '../../api/adminAPI';
@@ -48,6 +51,8 @@ import { getUsers, updateUserStatus, getUserDetails } from '../../api/adminAPI';
 const AdminUserManagement = () => {
   const { theme, isDark } = useTheme();
   
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalUsers, setTotalUsers] = useState(0);
@@ -158,6 +163,63 @@ const AdminUserManagement = () => {
       });
     }
   };
+  
+  const handleVerifyEmail = async (userId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/verify-email`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      setSnackbar({
+        open: true,
+        message: 'User email verified successfully',
+        severity: 'success'
+      });
+      loadUsers(); // Reload the users list
+    } else {
+      throw new Error('Failed to verify email');
+    }
+  } catch (error) {
+    setSnackbar({
+      open: true,
+      message: 'Failed to verify user email',
+      severity: 'error'
+    });
+  }
+};
+
+const handleResendVerification = async (userId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}/resend-verification`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      setSnackbar({
+        open: true,
+        message: 'Verification email sent successfully',
+        severity: 'success'
+      });
+    } else {
+      throw new Error('Failed to send verification email');
+    }
+  } catch (error) {
+    setSnackbar({
+      open: true,
+      message: 'Failed to send verification email',
+      severity: 'error'
+    });
+  }
+};
 
   const getRoleIcon = (role) => {
     switch (role) {
@@ -272,6 +334,7 @@ const AdminUserManagement = () => {
                   <TableCell>Email</TableCell>
                   <TableCell>Role</TableCell>
                   <TableCell>Status</TableCell>
+                  <TableCell>Email Verified</TableCell>
                   <TableCell>Joined</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
@@ -314,6 +377,15 @@ const AdminUserManagement = () => {
                       />
                     </TableCell>
                     <TableCell>
+  <Chip
+    size="small"
+    label={user.email_verified ? 'Verified' : 'Unverified'}
+    color={user.email_verified ? 'success' : 'warning'}
+    variant={user.email_verified ? 'filled' : 'outlined'}
+    icon={user.email_verified ? <CheckCircleIcon /> : <CloseIcon />}
+  />
+</TableCell>
+                    <TableCell>
                       <Typography variant="body2">
                         {formatDate(user.created_at)}
                       </Typography>
@@ -350,6 +422,28 @@ const AdminUserManagement = () => {
                             </IconButton>
                           </Tooltip>
                         )}
+                        {!user.email_verified && (
+  <>
+    <Tooltip title="Verify Email">
+      <IconButton
+        size="small"
+        onClick={() => handleVerifyEmail(user.id)}
+        sx={{ color: theme.success }}
+      >
+        <CheckCircleIcon />
+      </IconButton>
+    </Tooltip>
+    <Tooltip title="Resend Verification">
+      <IconButton
+        size="small"
+        onClick={() => handleResendVerification(user.id)}
+        sx={{ color: theme.info }}
+      >
+        <EmailIcon />
+      </IconButton>
+    </Tooltip>
+  </>
+)}
                       </Box>
                     </TableCell>
                   </TableRow>
