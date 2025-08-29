@@ -177,6 +177,11 @@ export const API_ENDPOINTS = {
     PROGRESS: '/upload/progress/{id}',
     CANCEL: '/upload/cancel/{id}',
   },
+
+  SETTINGS: {
+  GET: '/settings',
+  UPDATE: '/settings'
+}
 };
 
 export const buildEndpoint = (endpoint, params = {}) => {

@@ -66,7 +66,8 @@ import {
   Group as RoommateIcon,
   Edit as EditIcon,
   Flag as ReportIcon,
-  Check as CheckIcon
+  Check as CheckIcon,
+  WhatsApp as WhatsAppIcon
 } from '@mui/icons-material';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getPublicPropertyById } from '../../api/propertyApi';
@@ -83,6 +84,7 @@ import {
 } from '../../api/userInteractionApi';
 import { isAuthenticated, getUserId } from '../../utils/auth';
 import AppSnackbar from '../../components/common/AppSnackbar';
+import MapSearch from '../../components/specific/MapSearch';
 
 const ImageCarousel = ({ images, propertyTitle }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -343,6 +345,7 @@ const UserViewProperty = () => {
   const isPropertyOwner = property && property.user_id && currentUserId && 
     parseInt(property.user_id) === parseInt(currentUserId);
 
+    console.log({property})
   useEffect(() => {
     const fetchProperty = async () => {
       try {
@@ -434,6 +437,41 @@ const UserViewProperty = () => {
       fetchProperty();
     }
   }, [id, isLoggedIn]);
+  
+  const formatPhoneForWhatsApp = (phone) => {
+  if (!phone) return null;
+  return phone.replace(/\D/g, '');
+};
+
+const openWhatsApp = (phone, property) => {
+  if (!phone) return;
+  const formattedPhone = formatPhoneForWhatsApp(phone);
+  
+  // Create comprehensive property message
+  const propertyTitle = `${property?.property_type} - ${property?.unit_type}`;
+  const location = property?.address;
+  const price = `LKR ${property?.price?.toLocaleString()}`;
+  const bedrooms = property?.bedrooms > 0 ? `${property?.bedrooms} Bed` : '';
+  const bathrooms = property?.bathrooms > 0 ? `${property?.bathrooms} Bath` : '';
+  const availableFrom = property?.available_from ? `Available from ${property?.available_from}` : '';
+  
+  let message = `Hi! I'm interested in this property:\n\n`;
+  message += `🏠 ${propertyTitle}\n`;
+  message += `📍 ${location}\n`;
+  message += `💰 ${price}\n`;
+  if (bedrooms || bathrooms) {
+    message += `🛏️ ${[bedrooms, bathrooms].filter(Boolean).join(', ')}\n`;
+  }
+  if (availableFrom) {
+    message += `📅 ${availableFrom}\n`;
+  }
+  message += `\nCould you please provide more details?`;
+  
+  const encodedMessage = encodeURIComponent(message);
+  const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+  window.open(whatsappUrl, '_blank');
+};
+
 
   const parseJsonField = (field) => {
     if (!field) return null;
@@ -875,6 +913,42 @@ const UserViewProperty = () => {
                   </Box>
                 </Box>
               )}
+              {/* Property Location Map */}
+{property.latitude && property.longitude && (
+  <Paper sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
+      <LocationIcon sx={{ mr: 1 }} />
+      Location
+    </Typography>
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      {property.address}
+    </Typography>
+    <MapSearch
+      address={property.address}
+      latitude={property.latitude}
+      longitude={property.longitude}
+      readonly={true}
+      showSearch={false}
+    />
+  </Paper>
+)}
+
+{(!property.latitude || !property.longitude) && property.address && (
+  <Paper sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
+      <LocationIcon sx={{ mr: 1 }} />
+      Location
+    </Typography>
+    <Typography variant="body1" sx={{ mb: 2 }}>
+      {property.address}
+    </Typography>
+    <MapSearch
+      address={property.address}
+      readonly={true}
+      showSearch={false}
+    />
+  </Paper>
+)}
             </Box>
 
             <Divider sx={{ my: 3 }} />
@@ -980,6 +1054,45 @@ const UserViewProperty = () => {
                 )}
               </Paper>
             )}
+           {property.owner_info && !isPropertyOwner && (
+  <Paper elevation={2} sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h6" gutterBottom sx={{ color: theme.primary, fontWeight: 600 }}>
+      Contact Property Owner
+    </Typography>
+    <List dense>
+      <ListItem disableGutters>
+        <ListItemIcon><PersonIcon /></ListItemIcon>
+        <ListItemText primary={property.owner_info.username} />
+      </ListItem>
+      <ListItem disableGutters>
+        <ListItemIcon><EmailIcon /></ListItemIcon>
+        <ListItemText primary={property.owner_info.email} />
+      </ListItem>
+      {property.owner_info.phone && (
+        <ListItem disableGutters>
+          <ListItemIcon><PhoneIcon /></ListItemIcon>
+          <ListItemText primary={property.owner_info.phone} />
+          <IconButton
+            onClick={() => openWhatsApp(property.owner_info.phone, property)}
+            sx={{ 
+              color: '#25D366',
+              '&:hover': { backgroundColor: 'rgba(37, 211, 102, 0.1)' }
+            }}
+            title="Contact on WhatsApp"
+          >
+            <WhatsAppIcon />
+          </IconButton>
+        </ListItem>
+      )}
+      {property.owner_info.business_name && (
+        <ListItem disableGutters>
+          <ListItemIcon><BusinessIcon /></ListItemIcon>
+          <ListItemText primary={property.owner_info.business_name} />
+        </ListItem>
+      )}
+    </List>
+  </Paper>
+)}
           </Paper>
         </Grid>
       </Grid>

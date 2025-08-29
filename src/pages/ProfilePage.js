@@ -56,6 +56,7 @@ const ProfilePage = () => {
     gender: '',
     birthdate: '',
     nationality: '',
+    identification_number: '',
     business_name: '',
     contact_person: '',
     business_type: '',
@@ -101,6 +102,7 @@ const ProfilePage = () => {
         gender: profileData.gender || '',
         birthdate: formattedBirthdate,
         nationality: profileData.nationality || '',
+        identification_number: profileData.identification_number || '',
         business_name: profileData.business_name || '',
         contact_person: profileData.contact_person || '',
         business_type: profileData.business_type || '',
@@ -455,6 +457,18 @@ const ProfilePage = () => {
               />
             </Grid>
 
+            <Grid item xs={12} sm={6}>
+  <TextField
+    fullWidth
+    label="NIC or Passport Number"
+    value={profile.identification_number}
+    onChange={(e) => handleInputChange('identification_number', e.target.value)}
+    disabled={!isEditing}
+    error={!!fieldErrors.identification_number}
+    helperText={fieldErrors.identification_number || "National Identity Card or Passport Number"}
+  />
+</Grid>
+
             {userRole === 'admin' && (
               <>
                 <Grid item xs={12}>
@@ -495,8 +509,8 @@ const ProfilePage = () => {
               </>
             )}
 
-            {userRole === 'propertyowner' && (
-              <>
+            {userRole === 'propertyowner' && (profile.business_name || profile.contact_person || profile.business_type || profile.business_registration || profile.business_address) && (
+  <>
                 <Grid item xs={12}>
                   <Divider sx={{ my: 2 }} />
                   <Typography variant="h5" sx={{ mb: 3, fontWeight: 'bold' }}>

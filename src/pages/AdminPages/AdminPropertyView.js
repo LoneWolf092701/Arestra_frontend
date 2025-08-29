@@ -30,7 +30,9 @@ import {
   AccordionSummary,
   AccordionDetails,
   Divider,
-  Avatar
+  Avatar,
+  CardContent,
+  IconButton
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -52,11 +54,13 @@ import {
   Group as RoommateIcon,
   Home as HomeIcon,
   LocationOn as LocationIcon,
-  CalendarToday as CalendarIcon
+  CalendarToday as CalendarIcon,
+  WhatsApp as WhatsAppIcon
 } from '@mui/icons-material';
 import { getPropertyDetailsAdmin, approveRejectProperty } from '../../api/adminAPI';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import Room from '../../assets/images/Room.jpg';
+import MapSearch from '../../components/specific/MapSearch';
 
 const ApprovalDialog = ({ open, onClose, onConfirm, action, loading }) => {
   const [reason, setReason] = useState('');
@@ -173,6 +177,19 @@ const AdminPropertyView = () => {
       setActionLoading(false);
     }
   };
+
+  const formatPhoneForWhatsApp = (phone) => {
+  if (!phone) return null;
+  return phone.replace(/\D/g, '');
+};
+
+const openWhatsApp = (phone, propertyTitle) => {
+  if (!phone) return;
+  const formattedPhone = formatPhoneForWhatsApp(phone);
+  const message = encodeURIComponent(`Hi! I'm interested in the property: ${propertyTitle}`);
+  const whatsappUrl = `https://wa.me/${formattedPhone}?text=${message}`;
+  window.open(whatsappUrl, '_blank');
+};
 
   const safeParse = (jsonString) => {
     try {
@@ -376,12 +393,28 @@ const AdminPropertyView = () => {
                     <ListItemIcon><EmailIcon /></ListItemIcon>
                     <ListItemText primary={property.owner_info.email} />
                   </ListItem>
-                  {property.owner_info.phone && (
+                  {/* {property.owner_info.phone && (
                     <ListItem disableGutters>
                       <ListItemIcon><PhoneIcon /></ListItemIcon>
                       <ListItemText primary={property.owner_info.phone} />
                     </ListItem>
-                  )}
+                  )} */}
+                  {property.owner_info.phone && (
+  <ListItem disableGutters>
+    <ListItemIcon><PhoneIcon /></ListItemIcon>
+    <ListItemText primary={property.owner_info.phone} />
+    <IconButton
+      onClick={() => openWhatsApp(property.owner_info.phone, property.property_name)}
+      sx={{ 
+        color: '#25D366',
+        '&:hover': { backgroundColor: 'rgba(37, 211, 102, 0.1)' }
+      }}
+      title="Contact on WhatsApp"
+    >
+      <WhatsAppIcon />
+    </IconButton>
+  </ListItem>
+)}
                   {property.owner_info.business_name && (
                     <ListItem disableGutters>
                       <ListItemIcon><BusinessIcon /></ListItemIcon>
@@ -713,6 +746,50 @@ const AdminPropertyView = () => {
             )}
           </Paper>
         </Grid>
+
+        {property.latitude && property.longitude && (
+  <Card sx={{ mb: 3 }}>
+    <CardContent>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
+        <LocationIcon sx={{ mr: 1 }} />
+        Property Location
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {property.address}
+      </Typography>
+      <MapSearch
+        address={property.address}
+        latitude={property.latitude}
+        longitude={property.longitude}
+        readonly={true}
+        showSearch={false}
+      />
+    </CardContent>
+  </Card>
+)}
+
+{/* Alternative: If coordinates aren't available but address exists */}
+{(!property.latitude || !property.longitude) && property.address && (
+  <Card sx={{ mb: 3 }}>
+    <CardContent>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
+        <LocationIcon sx={{ mr: 1 }} />
+        Property Location
+      </Typography>
+      <Typography variant="body1" sx={{ mb: 2 }}>
+        {property.address}
+      </Typography>
+      <Typography variant="body2" color="warning.main" sx={{ mb: 2 }}>
+        ⚠️ Precise coordinates not available. Showing approximate location based on address.
+      </Typography>
+      <MapSearch
+        address={property.address}
+        readonly={true}
+        showSearch={false}
+      />
+    </CardContent>
+  </Card>
+)}
       </Grid>
 
       <ApprovalDialog

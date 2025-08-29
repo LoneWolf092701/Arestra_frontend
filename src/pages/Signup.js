@@ -16,6 +16,8 @@ import {
   Grid,
   Divider
 } from '@mui/material';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Checkbox from '@mui/material/Checkbox';
 import { useNavigate } from 'react-router-dom';
 import { registerUser } from '../api/authApi';
 import { useTheme } from '../contexts/ThemeContext';
@@ -64,7 +66,8 @@ const Signup = () => {
     phone: '',
     gender: '',
     birthdate: '',
-    nationality: ''
+    nationality: '',
+    identificationNumber: ''
   });
 
   const [ownerForm, setOwnerForm] = useState({
@@ -82,7 +85,9 @@ const Signup = () => {
     contactPerson: '',
     businessType: '',
     businessRegistration: '',
-    businessAddress: ''
+    businessAddress: '',
+    identificationNumber: '',
+    showBusinessInfo: false
   });
 
   const [adminForm, setAdminForm] = useState({
@@ -97,7 +102,8 @@ const Signup = () => {
     birthdate: '',
     nationality: '',
     department: '',
-    adminLevel: ''
+    adminLevel: '',
+    identificationNumber: ''
   });
 
   const handleTabChange = (event, newValue) => {
@@ -180,7 +186,8 @@ const Signup = () => {
         phone: currentForm.phone,
         gender: currentForm.gender,
         birthdate: currentForm.birthdate,
-        nationality: currentForm.nationality
+        nationality: currentForm.nationality,
+        identification_number: currentForm.identificationNumber
       };
     } else if (activeTab === 1) {
       currentForm = ownerForm;
@@ -192,12 +199,17 @@ const Signup = () => {
         gender: currentForm.gender,
         birthdate: currentForm.birthdate,
         nationality: currentForm.nationality,
-        business_name: currentForm.businessName,
-        contact_person: currentForm.contactPerson,
-        business_type: currentForm.businessType,
-        business_registration: currentForm.businessRegistration,
-        business_address: currentForm.businessAddress
+        identification_number: currentForm.identificationNumber
       };
+      
+      // Only include business data if showBusinessInfo is true
+      if (currentForm.showBusinessInfo) {
+        profileData.business_name = currentForm.businessName;
+        profileData.contact_person = currentForm.contactPerson;
+        profileData.business_type = currentForm.businessType;
+        profileData.business_registration = currentForm.businessRegistration;
+        profileData.business_address = currentForm.businessAddress;
+      }
     } else {
       currentForm = adminForm;
       userRole = 'admin';
@@ -208,6 +220,7 @@ const Signup = () => {
         gender: currentForm.gender,
         birthdate: currentForm.birthdate,
         nationality: currentForm.nationality,
+        identification_number: currentForm.identificationNumber,
         department: currentForm.department,
         admin_level: currentForm.adminLevel
       };
@@ -232,22 +245,13 @@ const Signup = () => {
         severity: 'success'
       });
       
-      // If email verification is required, navigate to a verification pending page or stay on current page
-      if (response.requiresEmailVerification) {
-        setTimeout(() => {
-          navigate(`/verify-email?email=${encodeURIComponent(currentForm.email)}`);
-        }, 2000);
-      } else {
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
-      }
-    } else {
-      setError(response.message || 'Registration failed. Please try again.');
+      setTimeout(() => {
+        navigate('/login');
+      }, 3000);
     }
   } catch (error) {
     console.error('Registration error:', error);
-    setError(error.message || 'An error occurred during registration. Please try again.');
+    setError(error.message || 'Registration failed. Please try again.');
   } finally {
     setIsLoading(false);
   }
@@ -430,6 +434,17 @@ const Signup = () => {
               helperText="Optional - e.g., Sri Lankan"
             />
 
+            <TextField
+  label="NIC or Passport Number"
+  variant="outlined"
+  fullWidth
+  required
+  margin="normal"
+  value={tenantForm.identificationNumber}
+  onChange={handleTenantChange('identificationNumber')}
+  helperText="National Identity Card or Passport Number"
+/>
+
             <Divider sx={{ my: 3 }} />
 
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
@@ -592,8 +607,36 @@ const Signup = () => {
               helperText="Optional - e.g., Sri Lankan"
             />
 
+            <TextField
+  label="NIC or Passport Number"
+  variant="outlined"
+  fullWidth
+  required
+  margin="normal"
+  value={ownerForm.identificationNumber}
+  onChange={handleOwnerChange('identificationNumber')}
+  helperText="National Identity Card or Passport Number"
+/>
+
             <Divider sx={{ my: 3 }} />
 
+<FormControlLabel
+  control={
+    <Checkbox
+      checked={ownerForm.showBusinessInfo}
+      onChange={(e) => setOwnerForm(prev => ({
+        ...prev,
+        showBusinessInfo: e.target.checked
+      }))}
+      name="showBusinessInfo"
+    />
+  }
+  label="I want to add business information"
+  sx={{ mt: 2, mb: 1 }}
+/>
+
+{ownerForm.showBusinessInfo && (
+  <>
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
               Business Information
             </Typography>
@@ -660,7 +703,8 @@ const Signup = () => {
               onChange={handleOwnerChange('businessAddress')}
               helperText="Complete business address"
             />
-
+  </>
+)}
             <Divider sx={{ my: 3 }} />
 
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
@@ -822,6 +866,17 @@ const Signup = () => {
               onChange={handleAdminChange('nationality')}
               helperText="Optional - e.g., Sri Lankan"
             />
+
+            <TextField
+  label="NIC or Passport Number"
+  variant="outlined"
+  fullWidth
+  required
+  margin="normal"
+  value={adminForm.identificationNumber}
+  onChange={handleAdminChange('identificationNumber')}
+  helperText="National Identity Card or Passport Number"
+/>
 
             <Divider sx={{ my: 3 }} />
 
