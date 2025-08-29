@@ -1,220 +1,188 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { TextField, Button, Box, Typography, Alert } from '@mui/material';
+import React, { useState, useCallback, useEffect } from 'react';
+import { TextField, Button, Box, Typography } from '@mui/material';
 import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 
 const containerStyle = {
   width: '100%',
-  height: '400px',
-  borderRadius: '8px'
+  height: '300px'
 };
 
 const defaultCenter = {
   lat: 6.9271,
-  lng: 79.8612
+  lng: 79.8612 // Colombo, Sri Lanka
 };
 
 const MapSearch = ({ 
   address, 
   setAddress, 
-  onLocationSelect = null,
-  coordinates = null,
-  setCoordinates = null,
-  readOnly = false,
-  showSearch = true
+  onLocationSelect, 
+  latitude, 
+  longitude, 
+  readonly = false,
+  showSearch = true 
 }) => {
-  const [mapCenter, setMapCenter] = useState(defaultCenter);
-  const [markerPosition, setMarkerPosition] = useState(null);
-  const [mapInstance, setMapInstance] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [mapCenter, setMapCenter] = useState(
+    latitude && longitude ? { lat: latitude, lng: longitude } : defaultCenter
+  );
+  const [markerPosition, setMarkerPosition] = useState(
+    latitude && longitude ? { lat: latitude, lng: longitude } : null
+  );
 
   useEffect(() => {
-    if (coordinates && coordinates.latitude && coordinates.longitude) {
-      const position = { 
-        lat: parseFloat(coordinates.latitude), 
-        lng: parseFloat(coordinates.longitude) 
-      };
+    if (latitude && longitude) {
+      const position = { lat: latitude, lng: longitude };
       setMapCenter(position);
       setMarkerPosition(position);
     }
-  }, [coordinates]);
+  }, [latitude, longitude]);
 
-  const geocodeAddress = useCallback(async (addressToGeocode) => {
-    if (!window.google || !addressToGeocode.trim()) return;
+  const handleSearch = useCallback(() => {
+    if (window.google && address && !readonly) {
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ address: address }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          const location = results[0].geometry.location;
+          const lat = location.lat();
+          const lng = location.lng();
+          const newPosition = { lat, lng };
+          
+          setMapCenter(newPosition);
+          setMarkerPosition(newPosition);
+          
+          if (onLocationSelect) {
+            onLocationSelect(lat, lng, results[0].formatted_address);
+          }
+        } else {
+          console.error('Geocode was not successful for the following reason: ' + status);
+        }
+      });
+    }
+  }, [address, readonly, onLocationSelect]);
 
-    setIsLoading(true);
-    setError('');
-
-    const geocoder = new window.google.maps.Geocoder();
-    
-    try {
-      const results = await new Promise((resolve, reject) => {
-        geocoder.geocode({ address: addressToGeocode }, (results, status) => {
+  const handleMapClick = useCallback((event) => {
+    if (!readonly && event.latLng) {
+      const lat = event.latLng.lat();
+      const lng = event.latLng.lng();
+      const newPosition = { lat, lng };
+      
+      setMarkerPosition(newPosition);
+      
+      // Reverse geocode to get address
+      if (window.google) {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: newPosition }, (results, status) => {
           if (status === 'OK' && results[0]) {
-            resolve(results);
+            const formattedAddress = results[0].formatted_address;
+            if (setAddress) {
+              setAddress(formattedAddress);
+            }
+            if (onLocationSelect) {
+              onLocationSelect(lat, lng, formattedAddress);
+            }
           } else {
-            reject(new Error(`Geocoding failed: ${status}`));
+            if (onLocationSelect) {
+              onLocationSelect(lat, lng, address || '');
+            }
           }
         });
-      });
+      } else {
+        if (onLocationSelect) {
+          onLocationSelect(lat, lng, address || '');
+        }
+      }
+    }
+  }, [readonly, onLocationSelect, setAddress, address]);
 
-      const location = results[0].geometry.location;
-      const lat = location.lat();
-      const lng = location.lng();
-      const formattedAddress = results[0].formatted_address;
-
+  const handleMarkerDragEnd = useCallback((event) => {
+    if (!readonly && event.latLng) {
+      const lat = event.latLng.lat();
+      const lng = event.latLng.lng();
       const newPosition = { lat, lng };
-      setMapCenter(newPosition);
-      setMarkerPosition(newPosition);
-
-      if (onLocationSelect) {
-        onLocationSelect(lat, lng, formattedAddress);
-      }
       
-      if (setCoordinates) {
-        setCoordinates({ latitude: lat, longitude: lng });
-      }
-
-      if (setAddress && formattedAddress !== address) {
-        setAddress(formattedAddress);
-      }
-
-    } catch (error) {
-      setError(`Location not found: ${error.message}`);
-      console.error('Geocoding error:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [address, onLocationSelect, setAddress, setCoordinates]);
-
-  const handleSearch = () => {
-    if (address && address.trim()) {
-      geocodeAddress(address.trim());
-    }
-  };
-
-  const handleMapClick = useCallback(async (event) => {
-    if (readOnly) return;
-
-    const lat = event.latLng.lat();
-    const lng = event.latLng.lng();
-    const newPosition = { lat, lng };
-
-    setMarkerPosition(newPosition);
-    setMapCenter(newPosition);
-
-    if (window.google) {
-      const geocoder = new window.google.maps.Geocoder();
-      try {
-        const results = await new Promise((resolve, reject) => {
-          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-            if (status === 'OK' && results[0]) {
-              resolve(results);
-            } else {
-              reject(new Error('Reverse geocoding failed'));
+      setMarkerPosition(newPosition);
+      
+      // Reverse geocode to get address
+      if (window.google) {
+        const geocoder = new window.google.maps.Geocoder();
+        geocoder.geocode({ location: newPosition }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            const formattedAddress = results[0].formatted_address;
+            if (setAddress) {
+              setAddress(formattedAddress);
             }
-          });
+            if (onLocationSelect) {
+              onLocationSelect(lat, lng, formattedAddress);
+            }
+          } else {
+            if (onLocationSelect) {
+              onLocationSelect(lat, lng, address || '');
+            }
+          }
         });
-
-        const formattedAddress = results[0].formatted_address;
-        if (setAddress) {
-          setAddress(formattedAddress);
-        }
-
-        if (onLocationSelect) {
-          onLocationSelect(lat, lng, formattedAddress);
-        }
-
-      } catch (error) {
-        console.error('Reverse geocoding error:', error);
-        if (onLocationSelect) {
-          onLocationSelect(lat, lng, null);
-        }
       }
     }
-
-    if (setCoordinates) {
-      setCoordinates({ latitude: lat, longitude: lng });
-    }
-  }, [readOnly, setAddress, onLocationSelect, setCoordinates]);
-
-  const onMapLoad = useCallback((map) => {
-    setMapInstance(map);
-  }, []);
-
-  const handleKeyPress = (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      handleSearch();
-    }
-  };
+  }, [readonly, onLocationSelect, setAddress, address]);
 
   return (
     <Box>
-      {showSearch && (
-        <Box sx={{ mb: 2 }}>
+      {showSearch && !readonly && (
+        <>
           <TextField 
             fullWidth 
-            label="Search Address or Location" 
-            variant="outlined"
+            label="Search Address" 
+            variant="outlined" 
+            margin="normal"
             value={address || ''}
             onChange={(e) => setAddress && setAddress(e.target.value)}
-            onKeyPress={handleKeyPress}
-            disabled={isLoading || readOnly}
-            sx={{ mb: 2 }}
+            onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
           />
           <Button 
             variant="contained" 
             onClick={handleSearch} 
-            disabled={!address || isLoading || readOnly}
-            sx={{ mr: 2 }}
+            sx={{ mb: 2 }} 
+            disabled={!address}
           >
-            {isLoading ? 'Searching...' : 'Search Location'}
+            Search Location
           </Button>
-          {!readOnly && (
-            <Typography variant="body2" color="text.secondary">
-              Click on the map to select a precise location
-            </Typography>
-          )}
-        </Box>
+        </>
+      )}
+      
+      {readonly && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Property Location
+        </Typography>
       )}
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      <LoadScript googleMapsApiKey="AIzaSyAj859D2RRgws_IF64BnN-qy8QsHwCzJZM">
+      <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY || "AIzaSyAj859D2RRgws_IF64BnN-qy8QsHwCzJZM"}> 
         <GoogleMap
           mapContainerStyle={containerStyle}
           center={mapCenter}
-          zoom={15}
-          onLoad={onMapLoad}
+          zoom={markerPosition ? 15 : 10}
           onClick={handleMapClick}
           options={{
-            zoomControl: true,
-            mapTypeControl: true,
+            disableDefaultUI: readonly,
+            zoomControl: !readonly,
+            mapTypeControl: false,
             scaleControl: true,
-            streetViewControl: true,
-            rotateControl: true,
-            fullscreenControl: true,
-            gestureHandling: 'cooperative'
+            streetViewControl: !readonly,
+            rotateControl: false,
+            fullscreenControl: !readonly
           }}
         >
           {markerPosition && (
             <Marker 
-              position={markerPosition}
-              title={address || 'Selected Location'}
-              animation={window.google?.maps?.Animation?.DROP}
+              position={markerPosition} 
+              draggable={!readonly}
+              onDragEnd={handleMarkerDragEnd}
+              title={readonly ? "Property Location" : "Drag to adjust location"}
             />
           )}
         </GoogleMap>
       </LoadScript>
-
-      {markerPosition && (
-        <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-          Selected coordinates: {markerPosition.lat.toFixed(6)}, {markerPosition.lng.toFixed(6)}
+      
+      {!readonly && (
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+          Click on the map or drag the marker to set the exact property location
         </Typography>
       )}
     </Box>

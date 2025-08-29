@@ -83,6 +83,7 @@ import {
 } from '../../api/userInteractionApi';
 import { isAuthenticated, getUserId } from '../../utils/auth';
 import AppSnackbar from '../../components/common/AppSnackbar';
+import MapSearch from '../../components/specific/MapSearch';
 
 const ImageCarousel = ({ images, propertyTitle }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -875,6 +876,42 @@ const UserViewProperty = () => {
                   </Box>
                 </Box>
               )}
+              {/* Property Location Map */}
+{property.latitude && property.longitude && (
+  <Paper sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
+      <LocationIcon sx={{ mr: 1 }} />
+      Location
+    </Typography>
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      {property.address}
+    </Typography>
+    <MapSearch
+      address={property.address}
+      latitude={property.latitude}
+      longitude={property.longitude}
+      readonly={true}
+      showSearch={false}
+    />
+  </Paper>
+)}
+
+{(!property.latitude || !property.longitude) && property.address && (
+  <Paper sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h5" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
+      <LocationIcon sx={{ mr: 1 }} />
+      Location
+    </Typography>
+    <Typography variant="body1" sx={{ mb: 2 }}>
+      {property.address}
+    </Typography>
+    <MapSearch
+      address={property.address}
+      readonly={true}
+      showSearch={false}
+    />
+  </Paper>
+)}
             </Box>
 
             <Divider sx={{ my: 3 }} />

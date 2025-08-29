@@ -41,6 +41,7 @@ import { getPropertyById, updateProperty } from '../api/propertyApi';
 import { ThemeContext } from '../contexts/ThemeContext';
 import ImageUpload from '../components/common/ImageUpload';
 import AppSnackbar from '../components/common/AppSnackbar';
+import MapSearch from '../components/specific/MapSearch';
 
 const propertyTypes = ['ROOMS', 'FLATS', 'HOTELS', 'VILLAS'];
 
@@ -261,6 +262,9 @@ const UpdateProperty = () => {
   const [selectedAmenityToAdd, setSelectedAmenityToAdd] = useState('');
   const [selectedFacilityToAdd, setSelectedFacilityToAdd] = useState('');
 
+  const [latitude, setLatitude] = useState(null);
+const [longitude, setLongitude] = useState(null);
+
   const { register, handleSubmit, control, watch, setValue, reset, formState: { errors } } = useForm({
     resolver: yupResolver(schema),
     defaultValues: {
@@ -315,6 +319,9 @@ const UpdateProperty = () => {
           const roommates = Array.isArray(propertyData.roommates) ? propertyData.roommates : [];
           const billsInclusive = Array.isArray(propertyData.bills_inclusive) ? propertyData.bills_inclusive : [];
           const images = Array.isArray(propertyData.images) ? propertyData.images : [];
+          
+           setLatitude(propertyData.latitude);
+      setLongitude(propertyData.longitude);
 
           // Populate form with existing data
           reset({
@@ -351,6 +358,12 @@ const UpdateProperty = () => {
       loadPropertyData();
     }
   }, [id, reset]);
+  
+  const handleLocationSelect = (lat, lng, formattedAddress) => {
+  setLatitude(lat);
+  setLongitude(lng);
+  setValue('address', formattedAddress);
+};
 
   const onSubmit = async (data) => {
     try {
@@ -360,6 +373,8 @@ const UpdateProperty = () => {
         property_type: data.propertyType,
         unit_type: data.unitType,
         address: data.address,
+        latitude: latitude,
+        longitude: longitude,
         description: data.description,
         price: parseFloat(data.price),
         amenities: data.amenities,
@@ -576,6 +591,83 @@ const UpdateProperty = () => {
               </Grid>
             </Grid>
           </EditableSection>
+
+          <EditableSection
+  title="Location & Address"
+  isEditing={editingSection === 'location'}
+  onEdit={() => setEditingSection('location')}
+  onSave={() => setEditingSection('')}
+  onCancel={handleCancelEdit}
+  error={errors.address?.message}
+>
+  <Grid container spacing={3}>
+    <Grid item xs={12}>
+      <TextField
+        fullWidth
+        label={<RequiredFieldLabel required>Property Address</RequiredFieldLabel>}
+        variant="outlined"
+        disabled={editingSection !== 'location'}
+        {...register('address')}
+        error={!!errors.address}
+        helperText={errors.address?.message}
+      />
+    </Grid>
+    
+    {editingSection === 'location' ? (
+      <Grid item xs={12}>
+        <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+          Property Location on Map
+        </Typography>
+        <MapSearch
+          address={watch('address')}
+          setAddress={(addr) => setValue('address', addr)}
+          onLocationSelect={handleLocationSelect}
+          latitude={latitude}
+          longitude={longitude}
+          readonly={false}
+          showSearch={true}
+        />
+        {latitude && longitude && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(76, 175, 80, 0.1)', borderRadius: 1 }}>
+            <Typography variant="body2" color="success.main">
+              📍 Current location: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+            </Typography>
+          </Box>
+        )}
+      </Grid>
+    ) : (
+      // Display map when not editing
+      latitude && longitude && (
+        <Grid item xs={12}>
+          <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+            Property Location
+          </Typography>
+          <MapSearch
+            address={watch('address')}
+            latitude={latitude}
+            longitude={longitude}
+            readonly={true}
+            showSearch={false}
+          />
+        </Grid>
+      )
+    )}
+
+    {/* <Grid item xs={12}>
+      <TextField
+        fullWidth
+        multiline
+        rows={4}
+        label={<RequiredFieldLabel required>Description</RequiredFieldLabel>}
+        variant="outlined"
+        disabled={editingSection !== 'location'}
+        {...register('description')}
+        error={!!errors.description}
+        helperText={errors.description?.message}
+      />
+    </Grid> */}
+  </Grid>
+</EditableSection>
 
           <EditableSection
             title="Property Amenities"

@@ -30,7 +30,8 @@ import {
   AccordionSummary,
   AccordionDetails,
   Divider,
-  Avatar
+  Avatar,
+  CardContent
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -57,6 +58,7 @@ import {
 import { getPropertyDetailsAdmin, approveRejectProperty } from '../../api/adminAPI';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import Room from '../../assets/images/Room.jpg';
+import MapSearch from '../../components/specific/MapSearch';
 
 const ApprovalDialog = ({ open, onClose, onConfirm, action, loading }) => {
   const [reason, setReason] = useState('');
@@ -713,6 +715,50 @@ const AdminPropertyView = () => {
             )}
           </Paper>
         </Grid>
+
+        {property.latitude && property.longitude && (
+  <Card sx={{ mb: 3 }}>
+    <CardContent>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
+        <LocationIcon sx={{ mr: 1 }} />
+        Property Location
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        {property.address}
+      </Typography>
+      <MapSearch
+        address={property.address}
+        latitude={property.latitude}
+        longitude={property.longitude}
+        readonly={true}
+        showSearch={false}
+      />
+    </CardContent>
+  </Card>
+)}
+
+{/* Alternative: If coordinates aren't available but address exists */}
+{(!property.latitude || !property.longitude) && property.address && (
+  <Card sx={{ mb: 3 }}>
+    <CardContent>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, display: 'flex', alignItems: 'center' }}>
+        <LocationIcon sx={{ mr: 1 }} />
+        Property Location
+      </Typography>
+      <Typography variant="body1" sx={{ mb: 2 }}>
+        {property.address}
+      </Typography>
+      <Typography variant="body2" color="warning.main" sx={{ mb: 2 }}>
+        ⚠️ Precise coordinates not available. Showing approximate location based on address.
+      </Typography>
+      <MapSearch
+        address={property.address}
+        readonly={true}
+        showSearch={false}
+      />
+    </CardContent>
+  </Card>
+)}
       </Grid>
 
       <ApprovalDialog

@@ -39,6 +39,7 @@ import { ThemeContext } from '../contexts/ThemeContext';
 import { PropertyContext } from '../contexts/PropertyContext';
 import ImageUpload from '../components/common/ImageUpload';
 import AppSnackbar from '../components/common/AppSnackbar';
+import MapSearch from '../components/specific/MapSearch';
 
 const unitOptions = [
   { label: 'Rental unit', value: 'Rental unit' },
@@ -124,6 +125,10 @@ const AddPropertyDetails = () => {
   const [customAmenity, setCustomAmenity] = useState('');
   const [uploadedImages, setUploadedImages] = useState([]);
 
+  const [addressValue, setAddressValue] = useState('');
+const [latitude, setLatitude] = useState(null);
+const [longitude, setLongitude] = useState(null);
+
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm({
     resolver: yupResolver(validationSchema),
     defaultValues: {
@@ -165,6 +170,13 @@ const AddPropertyDetails = () => {
   });
 
   const facilitiesValue = watch('facilities') || {};
+  
+  const handleLocationSelect = (lat, lng, formattedAddress) => {
+  setLatitude(lat);
+  setLongitude(lng);
+  setValue('address', formattedAddress);
+  setAddressValue(formattedAddress);
+};
 
   const onSubmit = async (data) => {
     if (selectedAmenities.length === 0) {
@@ -183,6 +195,8 @@ const AddPropertyDetails = () => {
       property_type: propertyType,
       unit_type: data.unitType,
       address: data.address,
+      latitude: latitude,
+      longitude: longitude,
       description: data.description,
       price: parseFloat(data.price),
       advance_percentage: parseFloat(data.advancePercentage) || 30.00, 
@@ -440,7 +454,7 @@ const AddPropertyDetails = () => {
             />
           </Card>
 
-          <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
+          {/* <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
               Add the Address*
             </Typography>
@@ -452,7 +466,46 @@ const AddPropertyDetails = () => {
               error={!!errors.address}
               helperText={errors.address?.message}
             />
-          </Card>
+          </Card> */}
+
+          <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
+  <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
+    Property Address & Location*
+  </Typography>
+  <TextField
+    fullWidth
+    variant="outlined"
+    label="Property Address"
+    placeholder="Enter property address..."
+    {...register('address')}
+    value={addressValue}
+    onChange={(e) => {
+      setAddressValue(e.target.value);
+      setValue('address', e.target.value);
+    }}
+    error={!!errors.address}
+    helperText={errors.address?.message || "Enter the property address or search on the map below"}
+    sx={{ mb: 3 }}
+  />
+  
+  <MapSearch
+    address={addressValue}
+    setAddress={setAddressValue}
+    onLocationSelect={handleLocationSelect}
+    latitude={latitude}
+    longitude={longitude}
+    readonly={false}
+    showSearch={true}
+  />
+  
+  {latitude && longitude && (
+    <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(76, 175, 80, 0.1)', borderRadius: 1 }}>
+      <Typography variant="body2" color="success.main">
+        📍 Location selected: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+      </Typography>
+    </Box>
+  )}
+</Card>
 
           {propertyType === 'Rooms' && (
             <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
@@ -626,7 +679,7 @@ const AddPropertyDetails = () => {
             </Grid>
           </Card>
 
-          <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
+          {/* <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
               Set Price Range*
             </Typography>
@@ -639,7 +692,7 @@ const AddPropertyDetails = () => {
               error={!!errors.price}
               helperText={errors.price?.message}
             />
-          </Card>
+          </Card> */}
 
           <Card sx={{ mb: 4, p: 4, borderRadius: 3, backgroundColor: theme.surfaceBackground }}>
   <Typography variant="h6" sx={{ mb: 3, fontWeight: 600 }}>
