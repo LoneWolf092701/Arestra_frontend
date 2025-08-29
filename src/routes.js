@@ -34,6 +34,7 @@ import ProfilePage from './pages/ProfilePage';
 
 import EmailVerification from './pages/EmailVerification';
 import HelpSupport from './pages/HelpSupport';
+import SettingsPage from './components/settings/SettingsPage';
 
 
 const PrivateRoute = ({ element }) => {
@@ -80,6 +81,11 @@ const AppRoutes = () => {
         <Route path="/verify-email" element={<EmailVerification />} />
         
         <Route path="/help-support" element={<HelpSupport />} />
+        
+        <Route 
+  path="/settings" 
+  element={<PrivateRoute element={<SettingsPage />} />} 
+/>
         
         <Route path="/user-home" element={<UserHome />} />
         <Route path="/user-allproperties" element={<UserAllProperties />} />

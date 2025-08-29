@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState, useEffect} from 'react';
 import { 
   Button, 
   Typography, 
@@ -17,10 +17,36 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import CarouselComponent from '../components/specific/CarouselComponent';
 import PropertyGrid from '../components/common/PropertyGrid';
+import { getMyProperties } from '../api/propertyApi';
 
 const Home = () => {
   const navigate = useNavigate();
 
+const [properties, setProperties] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    fetchRecentProperties();
+  }, []);
+
+  const fetchRecentProperties = async () => {
+    try {
+      setLoading(true);
+      const result = await getMyProperties({ 
+        limit: 6,
+        sort_by: 'created_at',
+        sort_order: 'DESC'
+      });
+      
+      setProperties(result?.properties || []);
+    } catch (error) {
+      console.error('Error fetching recent properties:', error);
+      setProperties([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   const handleAddProperty = () => {
     navigate("/add-property");
   };
@@ -135,10 +161,11 @@ const Home = () => {
       </Typography>
       
       <PropertyGrid 
+      properties={properties}
         showMyProperties={true}
         showActions={true}
         showEditButton={true}
-        limit={6}
+        limit={4}
         onViewProperty={handleViewProperty}
         onEditProperty={handleEditProperty}
         emptyStateMessage="You haven't added any properties yet"
