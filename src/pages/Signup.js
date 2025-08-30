@@ -39,7 +39,7 @@ function TabPanel({ children, value, index, ...other }) {
 
 // const today = new Date();
 // const minAgeDate = new Date(
-//   today.getFullYear() - 18,  //  18 years instead of 16
+//   today.getFullYear() - 18,  //  18 years
 //   today.getMonth(),
 //   today.getDate()
 // );
@@ -65,6 +65,7 @@ function a11yProps(index) {
     'aria-controls': `simple-tabpanel-${index}`,
   };
 }
+
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -430,7 +431,7 @@ const Signup = () => {
                     <MenuItem value="male">Male</MenuItem>
                     <MenuItem value="female">Female</MenuItem>
                     <MenuItem value="other">Other</MenuItem>
-                    <MenuItem value="prefer_not_to_say">Prefer not to say</MenuItem>
+
                   </Select>
                 </FormControl>
               </Grid>
@@ -887,22 +888,21 @@ const Signup = () => {
               </Grid>
               
               <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Birth Date"
-                  type="date"
-                  fullWidth
-                  required
-                  value={tenantForm.birthdate}
-                  onChange={handleTenantChange('birthdate')}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  inputProps={{
-                    min: formattedMinDate, // oldest allowed birthdate (e.g., 100 years ago)
-                    max: formattedMaxDate, // youngest allowed birthdate (18 years ago)
-                  }}
-                  helperText="You must be at least 18 years old"
-                />
+                 <TextField
+              label="Birth Date"
+              type="date"
+              fullWidth
+              required
+              value={tenantForm.birthdate}
+              onChange={handleTenantChange('birthdate')}
+              InputLabelProps={{
+                shrink: true,
+              }}
+              inputProps={{
+                max: formattedMaxDate,  // enforce 18+ years
+              }}
+              //helperText="You must be at least 16 years old"
+            />
 
               </Grid>
             </Grid>
@@ -954,10 +954,10 @@ const Signup = () => {
                 onChange={handleAdminChange('adminLevel')}
               >
                 <MenuItem value="">Select Level</MenuItem>
-                <MenuItem value="junior">Junior</MenuItem>
-                <MenuItem value="senior">Senior</MenuItem>
+                <MenuItem value="staff">Staff</MenuItem>
+                <MenuItem value="supervisor">Supervisor</MenuItem>
                 <MenuItem value="manager">Manager</MenuItem>
-                <MenuItem value="director">Director</MenuItem>
+                
               </Select>
             </FormControl>
 
