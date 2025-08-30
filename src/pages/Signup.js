@@ -37,6 +37,28 @@ function TabPanel({ children, value, index, ...other }) {
   );
 }
 
+// const today = new Date();
+// const minAgeDate = new Date(
+//   today.getFullYear() - 18,  //  18 years instead of 16
+//   today.getMonth(),
+//   today.getDate()
+// );
+// const formattedMaxDate = minAgeDate.toISOString().split("T")[0]; // YYYY-MM-DD
+
+// Inside Signup.js, above the component
+
+const today = new Date();
+
+// Minimum age: 18 years old
+const maxAgeDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+
+// Maximum age: 100 years old
+const minAgeDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+
+const formattedMaxDate = maxAgeDate.toISOString().split("T")[0]; // for youngest allowed
+const formattedMinDate = minAgeDate.toISOString().split("T")[0]; // for oldest allowed
+
+
 function a11yProps(index) {
   return {
     id: `simple-tab-${index}`,
@@ -105,6 +127,8 @@ const Signup = () => {
     adminLevel: '',
     identificationNumber: ''
   });
+
+  
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -386,10 +410,11 @@ const Signup = () => {
               label="Phone Number"
               variant="outlined"
               fullWidth
+              required 
               margin="normal"
               value={tenantForm.phone}
               onChange={handleTenantChange('phone')}
-              helperText="Optional - Contact number"
+              //helperText="Optional - Contact number"
             />
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -411,16 +436,23 @@ const Signup = () => {
               </Grid>
               
               <Grid item xs={12} sm={6}>
-                <TextField
+               <TextField
                   label="Birth Date"
                   type="date"
                   fullWidth
+                  required
                   value={tenantForm.birthdate}
                   onChange={handleTenantChange('birthdate')}
                   InputLabelProps={{
                     shrink: true,
                   }}
+                  inputProps={{
+                    min: formattedMinDate, // oldest allowed birthdate (e.g., 100 years ago)
+                    max: formattedMaxDate, // youngest allowed birthdate (18 years ago)
+                  }}
+                  helperText="You must be at least 18 years old"
                 />
+
               </Grid>
             </Grid>
 
@@ -428,6 +460,7 @@ const Signup = () => {
               label="Nationality"
               variant="outlined"
               fullWidth
+              required 
               margin="normal"
               value={tenantForm.nationality}
               onChange={handleTenantChange('nationality')}
@@ -559,10 +592,11 @@ const Signup = () => {
               label="Phone Number"
               variant="outlined"
               fullWidth
+              required
               margin="normal"
               value={ownerForm.phone}
               onChange={handleOwnerChange('phone')}
-              helperText="Optional - Business contact number"
+             // helperText="Optional - Business contact number"
             />
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -584,16 +618,23 @@ const Signup = () => {
               </Grid>
               
               <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Birth Date"
-                  type="date"
-                  fullWidth
-                  value={ownerForm.birthdate}
-                  onChange={handleOwnerChange('birthdate')}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                />
+                    <TextField
+                      label="Birth Date"
+                      type="date"
+                      fullWidth
+                      required
+                      value={tenantForm.birthdate}
+                      onChange={handleTenantChange('birthdate')}
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                      inputProps={{
+                        min: formattedMinDate, // oldest allowed birthdate (e.g., 100 years ago)
+                        max: formattedMaxDate, // youngest allowed birthdate (18 years ago)
+                      }}
+                      helperText="You must be at least 18 years old"
+                    />
+
               </Grid>
             </Grid>
 
@@ -601,6 +642,7 @@ const Signup = () => {
               label="Nationality"
               variant="outlined"
               fullWidth
+              required
               margin="normal"
               value={ownerForm.nationality}
               onChange={handleOwnerChange('nationality')}
@@ -819,10 +861,11 @@ const Signup = () => {
               label="Phone Number"
               variant="outlined"
               fullWidth
+              required
               margin="normal"
               value={adminForm.phone}
               onChange={handleAdminChange('phone')}
-              helperText="Official contact number"
+             // helperText="Official contact number"
             />
 
             <Grid container spacing={2} sx={{ mt: 1 }}>
@@ -848,12 +891,19 @@ const Signup = () => {
                   label="Birth Date"
                   type="date"
                   fullWidth
-                  value={adminForm.birthdate}
-                  onChange={handleAdminChange('birthdate')}
+                  required
+                  value={tenantForm.birthdate}
+                  onChange={handleTenantChange('birthdate')}
                   InputLabelProps={{
                     shrink: true,
                   }}
+                  inputProps={{
+                    min: formattedMinDate, // oldest allowed birthdate (e.g., 100 years ago)
+                    max: formattedMaxDate, // youngest allowed birthdate (18 years ago)
+                  }}
+                  helperText="You must be at least 18 years old"
                 />
+
               </Grid>
             </Grid>
 
@@ -861,6 +911,7 @@ const Signup = () => {
               label="Nationality"
               variant="outlined"
               fullWidth
+              required
               margin="normal"
               value={adminForm.nationality}
               onChange={handleAdminChange('nationality')}
