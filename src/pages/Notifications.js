@@ -41,6 +41,14 @@ import {
   deleteNotification,
   getUnreadNotificationCount
 } from '../api/notificationApi';
+import { getBookingDetails } from '../api/bookingApi';
+import { getPublicPropertyById } from '../api/propertyApi';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import PersonIcon from '@mui/icons-material/Person';
+import PaymentIcon from '@mui/icons-material/Payment';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import { Grid, } from '@mui/material';
 
 const Notifications = () => {
   const navigate = useNavigate();
@@ -57,6 +65,13 @@ const Notifications = () => {
     booking: null
   });
   const [responseMessage, setResponseMessage] = useState('');
+  
+  const [bookingDetailsModal, setBookingDetailsModal] = useState({
+  open: false,
+  booking: null,
+  property: null,
+  loading: false
+});
 
   useEffect(() => {
     loadNotifications();
@@ -147,6 +162,30 @@ const Notifications = () => {
       setError(error.message || 'Failed to process action');
     }
   };
+  
+  const handleViewBookingDetails = async (notification) => {
+  if (!notification.booking_id) return;
+  
+  setBookingDetailsModal(prev => ({ ...prev, open: true, loading: true }));
+  
+  try {
+    const [bookingDetails, propertyDetails] = await Promise.all([
+      getBookingDetails(notification.booking_id),
+      notification.property_id ? getPublicPropertyById(notification.property_id) : null
+    ]);
+    
+    setBookingDetailsModal({
+      open: true,
+      booking: bookingDetails,
+      property: propertyDetails,
+      loading: false
+    });
+  } catch (error) {
+    console.error('Error fetching booking details:', error);
+    setBookingDetailsModal(prev => ({ ...prev, loading: false }));
+    setError('Failed to load booking details');
+  }
+};
 
   const handleDelete = async (notificationId) => {
     try {
@@ -494,6 +533,17 @@ const Notifications = () => {
                         {notification.type === 'booking_request' && notification.action_taken === 'pending' && (
                           <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                             <Button
+    size="small"
+    startIcon={<VisibilityIcon />}
+    onClick={() => handleViewBookingDetails(notification)}
+    sx={{ 
+      color: theme.textSecondary,
+      '&:hover': { color: theme.primary }
+    }}
+  >
+    View Details
+  </Button>
+                            <Button
                               variant="contained"
                               color="success"
                               size="small"
@@ -524,6 +574,21 @@ const Notifications = () => {
                               Reject
                             </Button>
                           </Box>
+                        )}
+
+                        {notification.type === 'booking_request' && notification.action_taken === 'accepted' && (
+
+                        <Button
+    size="small"
+    startIcon={<VisibilityIcon />}
+    onClick={() => handleViewBookingDetails(notification)}
+    sx={{ 
+      color: theme.textSecondary,
+      '&:hover': { color: theme.primary }
+    }}
+  >
+    View Details
+  </Button>
                         )}
                         
                         {/* Status Chips */}
@@ -739,6 +804,162 @@ const Notifications = () => {
           </DialogActions>
         </Dialog>
       </Container>
+      
+      {/* Booking Details Modal */}
+<Dialog
+  open={bookingDetailsModal.open}
+  onClose={() => setBookingDetailsModal(prev => ({ ...prev, open: false }))}
+  maxWidth="md"
+  fullWidth
+  PaperProps={{
+    sx: {
+      backgroundColor: theme.paperBackground,
+      border: `1px solid ${theme.border}`
+    }
+  }}
+>
+  <DialogTitle sx={{ 
+    color: theme.textPrimary,
+    borderBottom: `1px solid ${theme.border}`,
+    pb: 2
+  }}>
+    <Typography variant="h6" component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <BookingIcon />
+      Booking Request Details
+    </Typography>
+  </DialogTitle>
+  
+  <DialogContent sx={{ p: 0 }}>
+    {bookingDetailsModal.loading ? (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+        <CircularProgress />
+      </Box>
+    ) : bookingDetailsModal.booking && (
+      <Box sx={{ p: 3 }}>
+        {/* Property Information */}
+        {bookingDetailsModal.property && (
+          <Card sx={{ mb: 3, backgroundColor: theme.surfaceBackground }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom sx={{ color: theme.textPrimary }}>
+                Property Information
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <LocationOnIcon sx={{ color: theme.textSecondary, fontSize: 20 }} />
+                <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                  {bookingDetailsModal.property.address}
+                </Typography>
+              </Box>
+              <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                {bookingDetailsModal.property.property_type} • {bookingDetailsModal.property.unit_type}
+              </Typography>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Booking Information */}
+        <Card sx={{ mb: 3, backgroundColor: theme.surfaceBackground }}>
+          <CardContent>
+            <Typography variant="h6" gutterBottom sx={{ color: theme.textPrimary }}>
+              Booking Information
+            </Typography>
+            
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <PersonIcon sx={{ color: theme.textSecondary, fontSize: 20 }} />
+                  <Box>
+                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                      Guest Name
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: theme.textPrimary }}>
+                      {bookingDetailsModal.booking.first_name} {bookingDetailsModal.booking.last_name}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <CalendarTodayIcon sx={{ color: theme.textSecondary, fontSize: 20 }} />
+                  <Box>
+                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                      Check-in Date
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: theme.textPrimary }}>
+                      {new Date(bookingDetailsModal.booking.check_in_date).toLocaleDateString()}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <CalendarTodayIcon sx={{ color: theme.textSecondary, fontSize: 20 }} />
+                  <Box>
+                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                      Check-out Date
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: theme.textPrimary }}>
+                      {new Date(bookingDetailsModal.booking.check_out_date).toLocaleDateString()}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+              
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <PaymentIcon sx={{ color: theme.textSecondary, fontSize: 20 }} />
+                  <Box>
+                    <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+                      Total Amount
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: theme.textPrimary }}>
+                      LKR {bookingDetailsModal.booking.total_price?.toLocaleString()}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Contact Information */}
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle1" gutterBottom sx={{ color: theme.textPrimary }}>
+              Contact Information
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.textSecondary, mb: 1 }}>
+              Email: {bookingDetailsModal.booking.email}
+            </Typography>
+            <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+              Phone: {bookingDetailsModal.booking.country_code}{bookingDetailsModal.booking.mobile_number}
+            </Typography>
+            
+            {/* Status */}
+            <Divider sx={{ my: 2 }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="subtitle1" sx={{ color: theme.textPrimary }}>
+                Status:
+              </Typography>
+              <Chip
+                label={bookingDetailsModal.booking.status?.toUpperCase()}
+                color={bookingDetailsModal.booking.status === 'pending' ? 'warning' : 'default'}
+                size="small"
+              />
+            </Box>
+          </CardContent>
+        </Card>
+      </Box>
+    )}
+  </DialogContent>
+  
+  <DialogActions sx={{ p: 2, borderTop: `1px solid ${theme.border}` }}>
+    <Button
+      onClick={() => setBookingDetailsModal(prev => ({ ...prev, open: false }))}
+      sx={{ color: theme.textSecondary }}
+    >
+      Close
+    </Button>
+  </DialogActions>
+</Dialog>
     </Box>
   );
 };
