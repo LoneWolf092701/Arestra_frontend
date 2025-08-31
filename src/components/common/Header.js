@@ -43,6 +43,28 @@ const Header = () => {
         navigate('/user-home');
     }
   };
+  
+  const handleNotificationsClick = () => {
+    if (!authenticated) {
+      navigate('/login');
+      return;
+    }
+
+    switch (roleValue) {
+      case 'user':
+        navigate('/user-notifications');
+        break;
+      case 'propertyowner':
+        navigate('/notifications');
+        break;
+      case 'admin':
+        navigate('/notifications');
+        break;
+      default:
+        console.warn('Unknown user role:', roleValue);
+        navigate('/login');
+    }
+  };
 
   const getPageTitle = () => {
     switch (roleValue) {
@@ -127,7 +149,7 @@ const Header = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Tooltip title={`You have ${unreadCount} unread notifications`}>
               <IconButton
-                onClick={() => navigate('/notifications')}
+                onClick={handleNotificationsClick}
                 sx={{
                   color: 'white',
                   position: 'relative',

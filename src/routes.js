@@ -23,6 +23,7 @@ import UserPropertyViewPage from './pages/UserPages/UserViewProperty';
 import UserBookingPage from "./pages/UserPages/UserBookingPage";
 import UserFavouriteProperties from './pages/UserPages/UserFavouriteProperties';
 import UserNotifications from './pages/UserPages/UserNotifications';
+import MyBookingsPage from './pages/UserPages/MyBookingsPage';
 
 import AdminHome from './pages/AdminPages/AdminHome';
 import AdminNewListings from './pages/AdminPages/AdminNewListing';
@@ -130,6 +131,15 @@ const AppRoutes = () => {
             <RoleProtectedRoute 
               allowedRoles={['user']} 
               element={<UserNotifications />} 
+            />
+          } 
+        />
+        <Route 
+          path="/user-bookings" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['user']} 
+              element={<MyBookingsPage />} 
             />
           } 
         />

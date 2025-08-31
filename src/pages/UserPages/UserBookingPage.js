@@ -302,8 +302,6 @@ const [currentBookingId, setCurrentBookingId] = useState(null);
     setActiveStep(prev => prev - 1);
   };
   
-  const handleSubmitOriginal = handleSubmit;
-
   const handleSubmit = async () => {
     if (!validateStep(1)) return;
     

@@ -1,409 +1,382 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Typography,
+  Box,
+  Tabs,
+  Tab,
   Card,
   CardContent,
   Grid,
-  Box,
-  Chip,
   Button,
   Alert,
   CircularProgress,
-  Stepper,
-  Step,
-  StepLabel,
-  StepContent,
-  Paper,
-  Divider,
-  Avatar,
-  IconButton,
-  Tooltip
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TextField
 } from '@mui/material';
 import {
-  Schedule as ScheduleIcon,
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
-  Payment as PaymentIcon,
-  Receipt as ReceiptIcon,
-  Home as HomeIcon,
-  Visibility as VisibilityIcon,
-  Refresh as RefreshIcon
+  BookmarkBorder as RequestedIcon,
+  CheckCircle as AcceptedIcon,
+  Refresh as RefreshIcon,
+  FilterList as FilterIcon,
+  Home as HomeIcon
 } from '@mui/icons-material';
 import { getUserBookings } from '../../api/bookingApi';
-import PaymentOptionsModal from '../../components/booking/PaymentOptionsModal';
-import { useTheme } from '../../contexts/ThemeContext';
+import PropertyGrid from '../../components/common/PropertyGrid';
 import AppSnackbar from '../../components/common/AppSnackbar';
+import { isAuthenticated, getUserId } from '../../utils/auth';
 
 const MyBookingsPage = () => {
-  const { theme, isDark } = useTheme();
+  const [activeTab, setActiveTab] = useState(0);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
-  const [selectedBooking, setSelectedBooking] = useState(null);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [filters, setFilters] = useState({
+    status: 'all',
+    date_from: '',
+    date_to: ''
+  });
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    fetchBookings();
-  }, []);
+  const authenticated = isAuthenticated();
+  const userId = getUserId();
 
-  const fetchBookings = async (showRefreshing = false) => {
-    if (showRefreshing) setRefreshing(true);
-    else setLoading(true);
-    
+  const loadBookings = async () => {
+    if (!authenticated) {
+      navigate('/login');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
     try {
-      const response = await getUserBookings();
+      const response = await getUserBookings({
+        page: 1,
+        limit: 100,
+        status: filters.status !== 'all' ? filters.status : undefined,
+        date_from: filters.date_from || undefined,
+        date_to: filters.date_to || undefined
+      });
+
       setBookings(response.bookings || []);
-      setError('');
     } catch (error) {
-      console.error('Error fetching bookings:', error);
-      setError('Failed to fetch bookings. Please try again.');
+      console.error('Error loading bookings:', error);
+      setError(`Failed to load bookings: ${error.message}`);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
-  const getStatusColor = (status) => {
-    const statusColors = {
-      'pending': 'warning',
-      'approved': 'info',
-      'payment_submitted': 'primary',
-      'confirmed': 'success',
-      'rejected': 'error',
-      'auto_rejected': 'error',
-      'payment_rejected': 'error',
-      'cancelled': 'default'
-    };
-    return statusColors[status] || 'default';
-  };
+  useEffect(() => {
+    if (authenticated) {
+      loadBookings();
+    }
+  }, [authenticated, filters]);
 
-  const getStatusText = (status) => {
-    const statusTexts = {
-      'pending': 'Pending Approval',
-      'approved': 'Payment Required',
-      'payment_submitted': 'Payment Under Review',
-      'confirmed': 'Booking Confirmed',
-      'rejected': 'Rejected',
-      'auto_rejected': 'Auto Rejected',
-      'payment_rejected': 'Payment Rejected',
-      'cancelled': 'Cancelled'
-    };
-    return statusTexts[status] || status;
-  };
+  const transformBookingToProperty = (booking) => ({
+    id: booking.property_id,
+    booking_id: booking.id,
+    property_type: booking.property_type || 'Property',
+    unit_type: booking.unit_type || 'Unit',
+    address: booking.property_address || booking.address || 'Address not available',
+    price: booking.total_price || booking.price || 0,
+    images: booking.images,
+    amenities: booking.amenities,
+    facilities: booking.facilities,
+    description: booking.description,
+    booking_status: booking.status,
+    booking_date: booking.created_at,
+    check_in_date: booking.check_in_date,
+    check_out_date: booking.check_out_date,
+    advance_amount: booking.advance_amount,
+    service_fee: booking.service_fee,
+    owner_response_message: booking.owner_response_message,
+    payment_account_info: booking.payment_account_info,
+    payment_method: booking.payment_method,
+    owner_responded_at: booking.owner_responded_at,
+    payment_submitted_at: booking.payment_submitted_at,
+    payment_confirmed_at: booking.payment_confirmed_at,
+    owner_username: booking.owner_username
+  });
 
-  const getBookingSteps = (booking) => {
-    const steps = [
-      {
-        label: 'Request Submitted',
-        completed: true,
-        active: booking.status === 'pending'
-      },
-      {
-        label: 'Owner Response',
-        completed: ['approved', 'payment_submitted', 'confirmed'].includes(booking.status),
-        active: booking.status === 'pending',
-        rejected: ['rejected', 'auto_rejected'].includes(booking.status)
-      },
-      {
-        label: 'Payment',
-        completed: ['payment_submitted', 'confirmed'].includes(booking.status),
-        active: booking.status === 'approved',
-        rejected: booking.status === 'payment_rejected'
-      },
-      {
-        label: 'Booking Confirmed',
-        completed: booking.status === 'confirmed',
-        active: booking.status === 'payment_submitted'
+  const getFilteredBookings = (statusFilter) => {
+    return bookings.filter(booking => {
+      if (statusFilter === 'requested') {
+        return ['pending', 'approved'].includes(booking.status);
+      } else if (statusFilter === 'accepted') {
+        return ['confirmed', 'payment_submitted'].includes(booking.status);
       }
-    ];
-    return steps;
+      return true;
+    }).map(transformBookingToProperty);
   };
 
-  const handlePaymentClick = (booking) => {
-    setSelectedBooking(booking);
-    setShowPaymentModal(true);
+  const requestedProperties = getFilteredBookings('requested');
+  const acceptedProperties = getFilteredBookings('accepted');
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
   };
 
-  const handlePaymentComplete = async (paymentMethod, paymentData) => {
-    try {
-      setShowPaymentModal(false);
-      setSnackbar({
-        open: true,
-        message: 'Payment submitted successfully! Waiting for owner confirmation...',
-        severity: 'success'
-      });
-
-      // Refresh bookings to show updated status
-      setTimeout(() => {
-        fetchBookings(true);
-      }, 2000);
-      
-    } catch (error) {
-      setSnackbar({
-        open: true,
-        message: 'Payment processing failed. Please try again.',
-        severity: 'error'
-      });
-    }
+  const handleViewProperty = (property) => {
+    navigate(`/property/${property.id}`, {
+      state: { 
+        fromBookings: true, 
+        bookingId: property.booking_id,
+        bookingStatus: property.booking_status
+      }
+    });
   };
 
-  const renderBookingCard = (booking) => {
-    const steps = getBookingSteps(booking);
-    
+  if (!authenticated) {
     return (
-      <Card key={booking.id} sx={{ 
-        mb: 3, 
-        backgroundColor: isDark ? theme.cardBackground : '#ffffff',
-        border: isDark ? `1px solid ${theme.border}` : 'none'
-      }}>
-        <CardContent>
-          {/* Header */}
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                {booking.property_type} - {booking.unit_type}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                {booking.property_address}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Booking ID: #{booking.id}
-              </Typography>
-            </Box>
-            <Box sx={{ textAlign: 'right' }}>
-              <Chip
-                label={getStatusText(booking.status)}
-                color={getStatusColor(booking.status)}
-                sx={{ mb: 1 }}
-              />
-              <Typography variant="body2" color="text.secondary">
-                {new Date(booking.created_at).toLocaleDateString()}
-              </Typography>
-            </Box>
-          </Box>
-
-          <Divider sx={{ my: 2 }} />
-
-          {/* Booking Details */}
-          <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" color="text.secondary">Check-in</Typography>
-              <Typography variant="body1">
-                {new Date(booking.check_in_date).toLocaleDateString()}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" color="text.secondary">Check-out</Typography>
-              <Typography variant="body1">
-                {new Date(booking.check_out_date).toLocaleDateString()}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" color="text.secondary">Duration</Typography>
-              <Typography variant="body1">{booking.booking_days} days</Typography>
-            </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="body2" color="text.secondary">Total Amount</Typography>
-              <Typography variant="body1" color="primary">
-                LKR {booking.total_price?.toLocaleString()}
-              </Typography>
-            </Grid>
-          </Grid>
-
-          {/* Progress Stepper */}
-          <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>Booking Progress</Typography>
-            <Stepper activeStep={steps.findIndex(step => step.active)} orientation="horizontal">
-              {steps.map((step, index) => (
-                <Step key={step.label} completed={step.completed}>
-                  <StepLabel 
-                    error={step.rejected}
-                    icon={
-                      step.rejected ? <CancelIcon /> :
-                      step.completed ? <CheckCircleIcon /> :
-                      step.active ? <ScheduleIcon /> : undefined
-                    }
-                  >
-                    {step.label}
-                  </StepLabel>
-                </Step>
-              ))}
-            </Stepper>
-          </Paper>
-
-          {/* Action Messages and Buttons */}
-          {booking.status === 'pending' && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Your booking request has been sent to the property owner. You'll be notified once they respond.
-            </Alert>
-          )}
-
-          {booking.status === 'approved' && (
-            <Alert severity="success" sx={{ mb: 2 }} action={
-              <Button color="inherit" size="small" onClick={() => handlePaymentClick(booking)}>
-                Pay Now
-              </Button>
-            }>
-              Great! Your booking has been approved. Please proceed with payment to confirm your booking.
-              <br />
-              <strong>Advance Payment Required: LKR {booking.advance_amount?.toLocaleString()}</strong>
-            </Alert>
-          )}
-
-          {booking.status === 'payment_submitted' && (
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Payment submitted successfully! The property owner is reviewing your payment.
-              {booking.payment_method === 'stripe' && (
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  Payment processed via Stripe: {booking.stripe_payment_intent_id}
-                </Typography>
-              )}
-            </Alert>
-          )}
-
-          {booking.status === 'confirmed' && (
-            <Alert severity="success" sx={{ mb: 2 }} action={
-              <Button color="inherit" size="small" startIcon={<HomeIcon />}>
-                View Details
-              </Button>
-            }>
-              🎉 Congratulations! Your booking is confirmed. 
-              <Typography variant="body2" sx={{ mt: 1 }}>
-                You can now proceed with your travel plans. Check-in: {new Date(booking.check_in_date).toLocaleDateString()}
-              </Typography>
-            </Alert>
-          )}
-
-          {['rejected', 'auto_rejected', 'payment_rejected'].includes(booking.status) && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {booking.status === 'payment_rejected' 
-                ? 'Your payment was rejected by the property owner.' 
-                : 'Your booking request was not approved.'}
-              {booking.owner_response_message && (
-                <Typography variant="body2" sx={{ mt: 1 }}>
-                  <strong>Message:</strong> {booking.owner_response_message}
-                </Typography>
-              )}
-            </Alert>
-          )}
-
-          {booking.status === 'cancelled' && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              This booking has been cancelled.
-            </Alert>
-          )}
-
-          {/* Action Buttons */}
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            <Button 
-              variant="outlined" 
-              size="small" 
-              startIcon={<VisibilityIcon />}
-              onClick={() => {/* Navigate to booking details */}}
-            >
-              View Details
-            </Button>
-            
-            {booking.status === 'approved' && (
-              <Button
-                variant="contained"
-                size="small"
-                startIcon={<PaymentIcon />}
-                onClick={() => handlePaymentClick(booking)}
-              >
-                Make Payment
-              </Button>
-            )}
-
-            {booking.status === 'pending' && (
-              <Button
-                variant="outlined"
-                size="small"
-                color="error"
-                onClick={() => {/* Handle cancellation */}}
-              >
-                Cancel Request
-              </Button>
-            )}
-          </Box>
-        </CardContent>
-      </Card>
-    );
-  };
-
-  if (loading) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-          <CircularProgress />
-        </Box>
+      <Container maxWidth="lg" sx={{ mt: 4, textAlign: 'center' }}>
+        <Alert severity="warning">
+          Please log in to view your bookings.
+        </Alert>
+        <Button variant="contained" onClick={() => navigate('/login')} sx={{ mt: 2 }}>
+          Go to Login
+        </Button>
       </Container>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4">
-          My Bookings
-        </Typography>
-        <Tooltip title="Refresh">
-          <IconButton onClick={() => fetchBookings(true)} disabled={refreshing}>
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <HomeIcon sx={{ mr: 2, fontSize: 32 }} />
+          <Typography variant="h4" component="h1">
+            My Bookings
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          startIcon={<RefreshIcon />}
+          onClick={loadBookings}
+          disabled={loading}
+        >
+          Refresh
+        </Button>
       </Box>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
           {error}
         </Alert>
       )}
 
-      {refreshing && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-          <CircularProgress size={24} />
-          <Typography variant="body2" sx={{ ml: 2 }}>
-            Refreshing bookings...
-          </Typography>
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
+          <CircularProgress />
+          <Typography sx={{ ml: 2 }}>Loading your bookings...</Typography>
         </Box>
-      )}
-
-      {bookings.length === 0 ? (
-        <Card sx={{ textAlign: 'center', py: 6 }}>
-          <CardContent>
-            <HomeIcon sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" gutterBottom>
-              No Bookings Yet
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              You haven't made any booking requests yet.
-            </Typography>
-            <Button variant="contained" sx={{ mt: 2 }} href="/user-properties">
-              Browse Properties
-            </Button>
-          </CardContent>
-        </Card>
       ) : (
-        <Grid container>
-          <Grid item xs={12}>
-            {bookings.map(booking => renderBookingCard(booking))}
+        <>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            <Grid item xs={6} md={3}>
+              <Card>
+                <CardContent sx={{ textAlign: 'center', py: 2 }}>
+                  <Typography variant="h4" color="primary">
+                    {bookings.length}
+                  </Typography>
+                  <Typography variant="body2">Total Requests</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Card>
+                <CardContent sx={{ textAlign: 'center', py: 2 }}>
+                  <Typography variant="h4" color="success.main">
+                    {bookings.filter(b => ['confirmed', 'payment_submitted'].includes(b.status)).length}
+                  </Typography>
+                  <Typography variant="body2">Confirmed</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Card>
+                <CardContent sx={{ textAlign: 'center', py: 2 }}>
+                  <Typography variant="h4" color="warning.main">
+                    {bookings.filter(b => b.status === 'pending').length}
+                  </Typography>
+                  <Typography variant="body2">Pending</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Card>
+                <CardContent sx={{ textAlign: 'center', py: 2 }}>
+                  <Typography variant="h4" color="info.main">
+                    {bookings.filter(b => b.status === 'approved').length}
+                  </Typography>
+                  <Typography variant="body2">Approved</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
           </Grid>
-        </Grid>
-      )}
 
-      {/* Payment Options Modal */}
-      {showPaymentModal && selectedBooking && (
-        <PaymentOptionsModal
-          open={showPaymentModal}
-          onClose={() => setShowPaymentModal(false)}
-          booking={selectedBooking}
-          accountInfo={selectedBooking.payment_account_info || 'Payment account details will be provided by the property owner.'}
-          onPaymentComplete={handlePaymentComplete}
-        />
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <FilterIcon sx={{ mr: 1 }} />
+                <Typography variant="h6">Filters</Typography>
+              </Box>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <FormControl fullWidth size="small">
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      value={filters.status}
+                      label="Status"
+                      onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                    >
+                      <MenuItem value="all">All Statuses</MenuItem>
+                      <MenuItem value="pending">Pending</MenuItem>
+                      <MenuItem value="approved">Approved</MenuItem>
+                      <MenuItem value="payment_submitted">Payment Submitted</MenuItem>
+                      <MenuItem value="confirmed">Confirmed</MenuItem>
+                      <MenuItem value="rejected">Rejected</MenuItem>
+                      <MenuItem value="cancelled">Cancelled</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="date"
+                    label="From Date"
+                    InputLabelProps={{ shrink: true }}
+                    value={filters.date_from}
+                    onChange={(e) => setFilters(prev => ({ ...prev, date_from: e.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    type="date"
+                    label="To Date"
+                    InputLabelProps={{ shrink: true }}
+                    value={filters.date_to}
+                    onChange={(e) => setFilters(prev => ({ ...prev, date_to: e.target.value }))}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={2}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => setFilters({ status: 'all', date_from: '', date_to: '' })}
+                    fullWidth
+                    size="small"
+                  >
+                    Clear
+                  </Button>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+              <Tabs value={activeTab} onChange={handleTabChange}>
+                <Tab 
+                  icon={<RequestedIcon />} 
+                  label={`Requested (${requestedProperties.length})`}
+                  iconPosition="start"
+                />
+                <Tab 
+                  icon={<AcceptedIcon />} 
+                  label={`Confirmed (${acceptedProperties.length})`}
+                  iconPosition="start"
+                />
+              </Tabs>
+            </Box>
+
+            <Box sx={{ p: 3 }}>
+              {activeTab === 0 && (
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Properties I Requested
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    These are properties where you've submitted booking requests.
+                  </Typography>
+                  
+                  {requestedProperties.length > 0 ? (
+                    <PropertyGrid
+                      properties={requestedProperties}
+                      loading={false}
+                      onViewProperty={handleViewProperty}
+                      variant="bookings"
+                      emptyStateMessage="No requested properties found"
+                      emptyStateSubtitle="You haven't made any booking requests yet."
+                    />
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 6 }}>
+                      <RequestedIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary" gutterBottom>
+                        No booking requests found
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        You haven't made any booking requests yet.
+                      </Typography>
+                      <Button 
+                        variant="contained" 
+                        onClick={() => navigate('/properties')}
+                      >
+                        Browse Properties
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              )}
+
+              {activeTab === 1 && (
+                <Box>
+                  <Typography variant="h6" gutterBottom>
+                    Confirmed Bookings
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                    These are your confirmed bookings where payment has been approved.
+                  </Typography>
+                  
+                  {acceptedProperties.length > 0 ? (
+                    <PropertyGrid
+                      properties={acceptedProperties}
+                      loading={false}
+                      onViewProperty={handleViewProperty}
+                      variant="bookings"
+                      emptyStateMessage="No confirmed bookings found"
+                      emptyStateSubtitle="You don't have any confirmed bookings yet."
+                    />
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 6 }}>
+                      <AcceptedIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary" gutterBottom>
+                        No confirmed bookings found
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        You don't have any confirmed bookings yet.
+                      </Typography>
+                      <Button 
+                        variant="contained" 
+                        onClick={() => navigate('/properties')}
+                      >
+                        Browse Properties
+                      </Button>
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </Box>
+          </Card>
+        </>
       )}
 
       <AppSnackbar
