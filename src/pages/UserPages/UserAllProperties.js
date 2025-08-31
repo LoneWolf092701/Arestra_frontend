@@ -252,26 +252,50 @@ const UserAllProperties = () => {
       const newFilters = { ...prev, [key]: value };
       return newFilters;
     });
+    // Don't auto-search here, let user apply manually
   };
 
-  const clearAllFilters = () => {
-    setFilters({
-      property_type: '',
-      unit_type: '',
-      min_price: '',
-      max_price: '',
-      bedrooms: '',
-      bathrooms: '',
-      amenities: [],
-      facilities: [],
-      location: '',
-      available_from: '',
-      available_to: '',
-      sort: 'created_at_desc'
-    });
-    setSearchQuery('');
-    setCurrentPage(1);
+const countActiveFilters = useMemo(() => {
+  let count = 0;
+  Object.entries(filters).forEach(([key, value]) => {
+    if (key === 'sort') return; // Skip sort as it's not a filter
+    if (Array.isArray(value)) {
+      count += value.length; // Count each item in arrays like amenities and facilities
+    } else if (typeof value === 'string' && value.trim() !== '') {
+      count += 1; // Count non-empty strings
+    }
+  });
+  if (searchQuery.trim() !== '') count += 1; // Count non-empty search query
+  console.log('countActiveFilters:', count); // Debug log to verify count
+  return count;
+}, [filters, searchQuery]);
+
+useEffect(() => {
+  setActiveFiltersCount(countActiveFilters);
+}, [countActiveFilters]);
+
+const clearAllFilters = () => {
+  const resetFilters = {
+    property_type: '',
+    unit_type: '',
+    min_price: '',
+    max_price: '',
+    bedrooms: '',
+    bathrooms: '',
+    amenities: [],
+    facilities: [],
+    location: '',
+    available_from: '',
+    available_to: '',
+    sort: 'created_at_desc'
   };
+  setFilters(resetFilters);
+  setSearchQuery('');
+  setCurrentPage(1);
+  setActiveFiltersCount(0); // Explicitly reset count
+  setSearchParams({}); // Clear URL search params
+  fetchProperties(1);
+};
 
   const handlePropertyView = async (property) => {
     try {
@@ -285,20 +309,7 @@ const UserAllProperties = () => {
     navigate(`/user-property-view/${property.id}`);
   };
 
-  const countActiveFilters = useMemo(() => {
-    let count = 0;
-    Object.entries(filters).forEach(([key, value]) => {
-      if (key === 'sort') return;
-      if (Array.isArray(value) && value.length > 0) count++;
-      else if (value && value !== '') count++;
-    });
-    if (searchQuery.trim()) count++;
-    return count;
-  }, [filters, searchQuery]);
-
-  useEffect(() => {
-    setActiveFiltersCount(countActiveFilters);
-  }, [countActiveFilters]);
+  console.log({countActiveFilters})
 
   useEffect(() => {
     fetchProperties(currentPage);
@@ -557,13 +568,17 @@ const UserAllProperties = () => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {commonAmenities.map(amenity => (
                 <Chip
-                  key={amenity}
-                  label={amenity}
-                  onClick={() => toggleAmenity(amenity)}
-                  color={filters.amenities.includes(amenity) ? 'primary' : 'default'}
-                  variant={filters.amenities.includes(amenity) ? 'filled' : 'outlined'}
-                  size="small"
-                />
+  key={amenity}
+  label={amenity}
+  onClick={() => toggleAmenity(amenity)}
+  sx={{
+    backgroundColor: filters.amenities.includes(amenity) ? theme.success : undefined,
+    color: filters.amenities.includes(amenity) ? theme.successText : undefined,
+  }}
+  variant={filters.amenities.includes(amenity) ? 'filled' : 'outlined'}
+  clickable
+  size="small"
+/>
               ))}
             </Box>
           </Box>
@@ -575,13 +590,17 @@ const UserAllProperties = () => {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
               {commonFacilities.map(facility => (
                 <Chip
-                  key={facility}
-                  label={facility}
-                  onClick={() => toggleFacility(facility)}
-                  color={filters.facilities.includes(facility) ? 'primary' : 'default'}
-                  variant={filters.facilities.includes(facility) ? 'filled' : 'outlined'}
-                  size="small"
-                />
+  key={facility}
+  label={facility}
+  onClick={() => toggleFacility(facility)}
+  sx={{
+    backgroundColor: filters.facilities.includes(facility) ? theme.success : undefined,
+    color: filters.facilities.includes(facility) ? theme.successText : undefined,
+  }}
+  variant={filters.facilities.includes(facility) ? 'filled' : 'outlined'}
+  clickable
+  size="small"
+/>
               ))}
             </Box>
           </Box>
