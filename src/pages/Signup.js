@@ -1,27 +1,27 @@
 import React, { useState } from 'react';
 import {
-  Container,
-  Typography,
-  TextField,
-  Button,
-  Box,
-  Tabs,
-  Tab,
   Alert,
+  Box,
+  Button,
   CircularProgress,
+  Container,
+  Divider,
   FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Grid,
-  Divider
+  InputLabel,
+  MenuItem,
+  Select,
+  Tab,
+  Tabs,
+  TextField,
+  Typography
 } from '@mui/material';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import { useNavigate } from 'react-router-dom';
 import { registerUser } from '../api/authApi';
-import { useTheme } from '../contexts/ThemeContext';
 import AppSnackbar from '../components/common/AppSnackbar';
+import { useTheme } from '../contexts/ThemeContext';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -49,8 +49,8 @@ function TabPanel({ children, value, index, ...other }) {
 
 const today = new Date();
 
-// Minimum age: 18 years old
-const maxAgeDate = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+// Minimum age: 16 years old
+const maxAgeDate = new Date(today.getFullYear() - 16, today.getMonth(), today.getDate());
 
 // Maximum age: 100 years old
 const minAgeDate = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
@@ -333,7 +333,7 @@ const Signup = () => {
             }}
           >
             <Tab 
-              label="User/Tenant" 
+              label="Tenant" 
               {...a11yProps(0)}
               sx={{ flex: 1 }}
             />
