@@ -95,31 +95,69 @@ const PropertyCard = ({
   const primaryImage = getImageUrl(property.images);
 
   const getAmenitiesDisplay = () => {
-    if (!amenities) return [];
-    
-    if (Array.isArray(amenities)) {
-      return amenities;
+  if (!amenities) return [];
+  
+  // If amenities is already an array, return it
+  if (Array.isArray(amenities)) {
+    return amenities.filter(amenity => amenity && amenity.trim());
+  }
+  
+  // If amenities is an object, extract keys where value > 0
+  if (typeof amenities === 'object') {
+    return Object.keys(amenities).filter(key => 
+      amenities[key] && (amenities[key] === 1 || amenities[key] > 0)
+    );
+  }
+  
+  // If amenities is a string, try to parse or split
+  if (typeof amenities === 'string') {
+    try {
+      const parsed = JSON.parse(amenities);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(amenity => amenity && amenity.trim());
+      }
+      if (typeof parsed === 'object') {
+        return Object.keys(parsed).filter(key => 
+          parsed[key] && (parsed[key] === 1 || parsed[key] > 0)
+        );
+      }
+    } catch {
+      // If parsing fails, treat as comma-separated string
+      return amenities.split(',').map(item => item.trim()).filter(item => item.length > 0);
     }
-    
-    if (typeof amenities === 'object') {
-      return Object.keys(amenities).filter(key => amenities[key] > 0);
-    }
-    
-    return [];
-  };
+  }
+  
+  return [];
+};
 
   const getFacilitiesDisplay = () => {
-    if (!facilities || typeof facilities !== 'object') return {};
-    
-    const displayFacilities = {};
-    Object.entries(facilities).forEach(([key, value]) => {
-      if (value && parseInt(value) > 0) {
-        displayFacilities[key] = parseInt(value);
+  if (!facilities) return {};
+  
+  const displayFacilities = {};
+  
+  // If facilities is an array (like ["Bedrooms", "Bathrooms", "Living Area"])
+  if (Array.isArray(facilities)) {
+    if (facilities.length === 0) return {};
+    facilities.forEach(facility => {
+      if (facility && facility.trim()) {
+        displayFacilities[facility] = 1;
       }
     });
-    
     return displayFacilities;
-  };
+  }
+  
+  // If facilities is already an object
+  if (typeof facilities === 'object') {
+    Object.entries(facilities).forEach(([key, value]) => {
+      if (value > 0) {
+        displayFacilities[key] = value;
+      }
+    });
+    return displayFacilities;
+  }
+  
+  return {};
+};
 
   const handleDetailsOpen = () => {
     setDetailsOpen(true);

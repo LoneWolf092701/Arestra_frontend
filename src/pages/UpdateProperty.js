@@ -43,7 +43,7 @@ import ImageUpload from '../components/common/ImageUpload';
 import AppSnackbar from '../components/common/AppSnackbar';
 import MapSearch from '../components/specific/MapSearch';
 
-const propertyTypes = ['ROOMS', 'FLATS', 'HOTELS', 'VILLAS'];
+const propertyTypes = ['ROOMS', 'FLATS', 'HOTELS', 'VILLAS', 'Hostels', 'Apartments', 'Rooms', 'Flats', 'Villas'];
 
 const unitOptions = [
   { label: 'Annex', value: 'Annex' },
@@ -54,6 +54,7 @@ const unitOptions = [
   { label: 'One Bedroom', value: 'One Bedroom' },
   { label: 'Two Bedroom', value: 'Two Bedroom' },
   { label: 'Three Bedroom', value: 'Three Bedroom' },
+  { label: 'Rental unit', value: 'Rental unit' },
 ];
 
 const availableAmenities = [
@@ -312,8 +313,34 @@ const [longitude, setLongitude] = useState(null);
         
         if (propertyData) {
           // Parse JSON fields - handle both string and object formats
-          const amenities = propertyData.amenities || {};
-          const facilities = propertyData.facilities || {};
+          // const amenities = propertyData.amenities || {};
+          // const facilities = propertyData.facilities || {};
+
+          // Handle different data formats for facilities
+      let facilities = {};
+      if (propertyData.facilities) {
+        if (Array.isArray(propertyData.facilities)) {
+          // Convert array format to object format for editing
+          propertyData.facilities.forEach(facility => {
+            facilities[facility] = 1; // Default count
+          });
+        } else if (typeof propertyData.facilities === 'object') {
+          facilities = propertyData.facilities;
+        }
+      }
+      
+      // Handle amenities
+      let amenities = {};
+      if (propertyData.amenities) {
+        if (Array.isArray(propertyData.amenities)) {
+          propertyData.amenities.forEach(amenity => {
+            amenities[amenity] = 1;
+          });
+        } else if (typeof propertyData.amenities === 'object') {
+          amenities = propertyData.amenities;
+        }
+      }
+      
           const rules = Array.isArray(propertyData.rules) ? propertyData.rules : 
                        (propertyData.rules ? [propertyData.rules] : []);
           const roommates = Array.isArray(propertyData.roommates) ? propertyData.roommates : [];
@@ -501,60 +528,60 @@ const [longitude, setLongitude] = useState(null);
 
         <form onSubmit={handleSubmit(onSubmit)}>
           <EditableSection
-            title="Basic Information"
-            isEditing={editingSection === 'basic'}
-            onEdit={() => setEditingSection('basic')}
-            onSave={() => setEditingSection('')}
-            onCancel={handleCancelEdit}
-            error={errors.propertyType?.message || errors.unitType?.message}
-          >
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth disabled={editingSection !== 'basic'}>
-                  <InputLabel>Property Type</InputLabel>
-                  <Select
-                    value={watch('propertyType')}
-                    onChange={(e) => setValue('propertyType', e.target.value)}
-                    error={!!errors.propertyType}
-                  >
-                    {propertyTypes.map((type) => (
-                      <MenuItem key={type} value={type}>
-                        {type}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth disabled={editingSection !== 'basic'}>
-                  <InputLabel>Unit Type</InputLabel>
-                  <Select
-                    value={watch('unitType')}
-                    onChange={(e) => setValue('unitType', e.target.value)}
-                    error={!!errors.unitType}
-                  >
-                    {unitOptions.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
-                  type="number"
-                  variant="outlined"
-                  disabled={editingSection !== 'basic'}
-                  {...register('price')}
-                  error={!!errors.price}
-                  helperText={errors.price?.message}
-                />
-              </Grid>
-            </Grid>
-          </EditableSection>
+  title="Basic Information"
+  isEditing={editingSection === 'basic'}
+  onEdit={() => setEditingSection('basic')}
+  onSave={() => setEditingSection('')}
+  onCancel={handleCancelEdit}
+  error={errors.propertyType?.message || errors.unitType?.message}
+>
+  <Grid container spacing={3}>
+    <Grid item xs={12} sm={6}>
+      <FormControl fullWidth disabled={editingSection !== 'basic'}>
+        <InputLabel>Property Type</InputLabel>
+        <Select
+          value={watch('propertyType') || ''} // Ensure value is set even if undefined
+          onChange={(e) => setValue('propertyType', e.target.value)}
+          error={!!errors.propertyType}
+        >
+          {propertyTypes.map((type) => (
+            <MenuItem key={type} value={type}>
+              {type}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    </Grid>
+    <Grid item xs={12} sm={6}>
+      <FormControl fullWidth disabled={editingSection !== 'basic'}>
+        <InputLabel>Unit Type</InputLabel>
+        <Select
+          value={watch('unitType') || ''} // Ensure value is set even if undefined
+          onChange={(e) => setValue('unitType', e.target.value)}
+          error={!!errors.unitType}
+        >
+          {unitOptions.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    </Grid>
+    <Grid item xs={12}>
+      <TextField
+        fullWidth
+        label={<RequiredFieldLabel required>Monthly Rent (LKR)</RequiredFieldLabel>}
+        type="number"
+        variant="outlined"
+        disabled={editingSection !== 'basic'}
+        {...register('price')}
+        error={!!errors.price}
+        helperText={errors.price?.message}
+      />
+    </Grid>
+  </Grid>
+</EditableSection>
 
           <EditableSection
             title="Location & Description"
