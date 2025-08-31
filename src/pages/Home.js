@@ -63,11 +63,14 @@ const [properties, setProperties] = useState([]);
     navigate("/notifications");
   };
 
-  const handleViewProperty = (propertyId) => {
-    navigate(`/property/${propertyId}`);
+  const handleViewProperty = (property) => {
+    // Extract the property ID from the property object
+    const propertyId = property.id || property.property_id;
+    navigate(`/view-property/${propertyId}`);
   };
 
   const handleEditProperty = (propertyId) => {
+    // This receives propertyId directly from PropertyGrid
     navigate(`/update-property/${propertyId}`);
   };
 
@@ -165,7 +168,7 @@ const [properties, setProperties] = useState([]);
         showMyProperties={true}
         showActions={true}
         showEditButton={true}
-        limit={4}
+        limit={3}
         onViewProperty={handleViewProperty}
         onEditProperty={handleEditProperty}
         emptyStateMessage="You haven't added any properties yet"

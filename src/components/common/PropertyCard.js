@@ -95,69 +95,69 @@ const PropertyCard = ({
   const primaryImage = getImageUrl(property.images);
 
   const getAmenitiesDisplay = () => {
-  if (!amenities) return [];
-  
-  // If amenities is already an array, return it
-  if (Array.isArray(amenities)) {
-    return amenities.filter(amenity => amenity && amenity.trim());
-  }
-  
-  // If amenities is an object, extract keys where value > 0
-  if (typeof amenities === 'object') {
-    return Object.keys(amenities).filter(key => 
-      amenities[key] && (amenities[key] === 1 || amenities[key] > 0)
-    );
-  }
-  
-  // If amenities is a string, try to parse or split
-  if (typeof amenities === 'string') {
-    try {
-      const parsed = JSON.parse(amenities);
-      if (Array.isArray(parsed)) {
-        return parsed.filter(amenity => amenity && amenity.trim());
-      }
-      if (typeof parsed === 'object') {
-        return Object.keys(parsed).filter(key => 
-          parsed[key] && (parsed[key] === 1 || parsed[key] > 0)
-        );
-      }
-    } catch {
-      // If parsing fails, treat as comma-separated string
-      return amenities.split(',').map(item => item.trim()).filter(item => item.length > 0);
+    if (!amenities) return [];
+    
+    // If amenities is already an array, return it
+    if (Array.isArray(amenities)) {
+      return amenities.filter(amenity => amenity && amenity.trim());
     }
-  }
-  
-  return [];
-};
+    
+    // If amenities is an object, extract keys where value > 0
+    if (typeof amenities === 'object') {
+      return Object.keys(amenities).filter(key => 
+        amenities[key] && (amenities[key] === 1 || amenities[key] > 0)
+      );
+    }
+    
+    // If amenities is a string, try to parse or split
+    if (typeof amenities === 'string') {
+      try {
+        const parsed = JSON.parse(amenities);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(amenity => amenity && amenity.trim());
+        }
+        if (typeof parsed === 'object') {
+          return Object.keys(parsed).filter(key => 
+            parsed[key] && (parsed[key] === 1 || parsed[key] > 0)
+          );
+        }
+      } catch {
+        // If parsing fails, treat as comma-separated string
+        return amenities.split(',').map(item => item.trim()).filter(item => item.length > 0);
+      }
+    }
+    
+    return [];
+  };
 
   const getFacilitiesDisplay = () => {
-  if (!facilities) return {};
-  
-  const displayFacilities = {};
-  
-  // If facilities is an array (like ["Bedrooms", "Bathrooms", "Living Area"])
-  if (Array.isArray(facilities)) {
-    if (facilities.length === 0) return {};
-    facilities.forEach(facility => {
-      if (facility && facility.trim()) {
-        displayFacilities[facility] = 1;
-      }
-    });
-    return displayFacilities;
-  }
-  
-  // If facilities is already an object
-  if (typeof facilities === 'object') {
-    Object.entries(facilities).forEach(([key, value]) => {
-      if (value > 0) {
-        displayFacilities[key] = value;
-      }
-    });
-    return displayFacilities;
-  }
-  
-  return {};
-};
+    if (!facilities) return {};
+    
+    const displayFacilities = {};
+    
+    // If facilities is an array (like ["Bedrooms", "Living Area"])
+    if (Array.isArray(facilities)) {
+      if (facilities.length === 0) return {};
+      facilities.forEach(facility => {
+        if (facility && facility.trim()) {
+          displayFacilities[facility] = 1;
+        }
+      });
+      return displayFacilities;
+    }
+    
+    // If facilities is already an object
+    if (typeof facilities === 'object') {
+      Object.entries(facilities).forEach(([key, value]) => {
+        if (value > 0) {
+          displayFacilities[key] = value;
+        }
+      });
+      return displayFacilities;
+    }
+    
+    return {};
+  };
 
   const handleDetailsOpen = () => {
     setDetailsOpen(true);
@@ -165,6 +165,21 @@ const PropertyCard = ({
 
   const handleDetailsClose = () => {
     setDetailsOpen(false);
+  };
+
+  const handleCardClick = () => {
+    // Make the entire card clickable to view property
+    if (onView) {
+      onView(property);
+    }
+  };
+
+  const handleViewClick = (e) => {
+    // Prevent card click when view button is clicked
+    e.stopPropagation();
+    if (onView) {
+      onView(property);
+    }
   };
 
   const displayAmenities = getAmenitiesDisplay();
@@ -179,8 +194,14 @@ const PropertyCard = ({
           flexDirection: 'column',
           borderRadius: 2,
           boxShadow: 3,
-          '&:hover': { boxShadow: 6 }
+          cursor: 'pointer', // Make card appear clickable
+          transition: 'all 0.3s ease',
+          '&:hover': { 
+            boxShadow: 6,
+            transform: 'translateY(-2px)' // Add hover effect
+          }
         }}
+        onClick={handleCardClick} // Make entire card clickable
       >
         <CardMedia
           component="img"
@@ -215,13 +236,13 @@ const PropertyCard = ({
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <HomeIcon sx={{ fontSize: 16, mr: 0.5 }} />
               <Typography variant="caption">
-                {displayFacilities.Bedroom || property.bedrooms || 0} Bed
+                {displayFacilities.Bedroom || displayFacilities.bedroom || property.bedrooms || 0} Bed
               </Typography>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <BathtubIcon sx={{ fontSize: 16, mr: 0.5 }} />
               <Typography variant="caption">
-                {displayFacilities.Bathroom || property.bathrooms || 0} Bath
+                {displayFacilities.Bathroom || displayFacilities.bathroom || property.bathrooms || 0} Bath
               </Typography>
             </Box>
           </Box>
@@ -230,7 +251,8 @@ const PropertyCard = ({
             <Chip 
               label={property.approval_status.toUpperCase()} 
               color={
-                property.approval_status === 'approved' ? 'success' :
+                property.approval_status === 'approved' ? 
+                'success' :
                 property.approval_status === 'pending' ? 'warning' : 'error'
               }
               size="small"
@@ -238,12 +260,51 @@ const PropertyCard = ({
             />
           )}
 
+          {/* Fixed Amenities Display */}
           {displayAmenities.length > 0 && (
-            <Box sx={{ mb: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                Amenities: {displayAmenities.slice(0, 3).join(', ')}
-                {displayAmenities.length > 3 && '...'}
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Amenities:
               </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {displayAmenities.slice(0, 3).map((amenity, index) => (
+                  <Chip 
+                    key={index}
+                    label={amenity} 
+                    size="small" 
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem', height: '20px' }}
+                  />
+                ))}
+                {displayAmenities.length > 3 && (
+                  <Chip 
+                    label={`+${displayAmenities.length - 3} more`} 
+                    size="small" 
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem', height: '20px' }}
+                  />
+                )}
+              </Box>
+            </Box>
+          )}
+
+          {/* Fixed Facilities Display */}
+          {Object.keys(displayFacilities).length > 0 && (
+            <Box sx={{ mb: 1 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Facilities:
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {Object.entries(displayFacilities).map(([key, value]) => (
+                  <Chip
+                    key={key}
+                    label={`${value} ${key}`}
+                    size="small"
+                    variant="outlined"
+                    sx={{ fontSize: '0.7rem', height: '20px' }}
+                  />
+                ))}
+              </Box>
             </Box>
           )}
         </CardContent>
@@ -251,28 +312,52 @@ const PropertyCard = ({
         {showActions && (
           <Box sx={{ p: 2, pt: 0 }}>
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
+              {/* View Button - Always show */}
+              <Button
+                size="small"
+                variant="contained"
+                color="primary"
+                startIcon={<VisibilityIcon />}
+                onClick={handleViewClick}
+                sx={{ flexGrow: 1 }}
+              >
+                View
+              </Button>
+              
               <Button
                 size="small"
                 variant="outlined"
                 startIcon={<InfoIcon />}
-                onClick={handleDetailsOpen}
+                onClick={(e) => {
+                  e.stopPropagation(); // Prevent card click
+                  handleDetailsOpen();
+                }}
               >
                 Details
               </Button>
               
               <Box sx={{ display: 'flex', gap: 1 }}>
-                {onView && (
-                  <IconButton size="small" onClick={() => onView(property)} color="primary">
-                    <VisibilityIcon />
-                  </IconButton>
-                )}
                 {onEdit && (
-                  <IconButton size="small" onClick={() => onEdit(property)} color="info">
+                  <IconButton 
+                    size="small" 
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent card click
+                      onEdit(property);
+                    }} 
+                    color="info"
+                  >
                     <EditIcon />
                   </IconButton>
                 )}
                 {onDelete && (
-                  <IconButton size="small" onClick={() => onDelete(property)} color="error">
+                  <IconButton 
+                    size="small" 
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent card click
+                      onDelete(property);
+                    }} 
+                    color="error"
+                  >
                     <DeleteIcon />
                   </IconButton>
                 )}
@@ -282,7 +367,13 @@ const PropertyCard = ({
         )}
       </Card>
 
-      <Dialog open={detailsOpen} onClose={handleDetailsClose} maxWidth="md" fullWidth>
+      {/* Details Dialog */}
+      <Dialog 
+        open={detailsOpen} 
+        onClose={handleDetailsClose}
+        maxWidth="md"
+        fullWidth
+      >
         <DialogTitle>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             Property Details
@@ -293,45 +384,25 @@ const PropertyCard = ({
         </DialogTitle>
         
         <DialogContent>
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h5" gutterBottom>
-              {property.property_type} - {property.unit_type}
-            </Typography>
-            <Typography variant="body1" color="text.secondary" gutterBottom>
-              {property.address}
-            </Typography>
-            <Typography variant="h6" color="primary">
-              LKR {parseInt(property.price || 0).toLocaleString()} / month
-            </Typography>
-          </Box>
-
-          {property.description && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom>Description</Typography>
-              <Typography variant="body2">{property.description}</Typography>
-            </Box>
-          )}
-
-          <Grid container spacing={3}>
+          <Grid container spacing={2}>
             <Grid item xs={12} md={6}>
-              <Typography variant="h6" gutterBottom>Property Details</Typography>
               <List dense>
                 <ListItem>
                   <ListItemIcon><HomeIcon /></ListItemIcon>
                   <ListItemText 
                     primary="Bedrooms" 
-                    secondary={displayFacilities.Bedroom || property.bedrooms || 0}
+                    secondary={displayFacilities.Bedroom || displayFacilities.bedroom || property.bedrooms || 0}
                   />
                 </ListItem>
                 <ListItem>
                   <ListItemIcon><BathtubIcon /></ListItemIcon>
                   <ListItemText 
                     primary="Bathrooms" 
-                    secondary={displayFacilities.Bathroom || property.bathrooms || 0}
+                    secondary={displayFacilities.Bathroom || displayFacilities.bathroom || property.bathrooms || 0}
                   />
                 </ListItem>
                 {Object.entries(displayFacilities).map(([key, value]) => (
-                  key !== 'Bedroom' && key !== 'Bathroom' && (
+                  key !== 'Bedroom' && key !== 'Bathroom' && key !== 'bedroom' && key !== 'bathroom' && (
                     <ListItem key={key}>
                       <ListItemIcon><HomeIcon /></ListItemIcon>
                       <ListItemText primary={key} secondary={value} />
@@ -374,79 +445,6 @@ const PropertyCard = ({
               </Typography>
             </Grid>
           </Grid>
-
-          {rules && rules.length > 0 && (
-            <Accordion sx={{ mt: 2 }}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="h6">House Rules</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <List dense>
-                  {rules.map((rule, index) => (
-                    <ListItem key={index}>
-                      <ListItemIcon><RuleIcon /></ListItemIcon>
-                      <ListItemText primary={rule} />
-                    </ListItem>
-                  ))}
-                </List>
-              </AccordionDetails>
-            </Accordion>
-          )}
-
-          {contractPolicy && (
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="h6">Contract Policy</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2">{contractPolicy}</Typography>
-              </AccordionDetails>
-            </Accordion>
-          )}
-
-          {roommates && roommates.length > 0 && (
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography variant="h6">Roommate Preferences</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <List dense>
-                  {roommates.map((roommate, index) => (
-                    <ListItem key={index}>
-                      <ListItemIcon><PersonIcon /></ListItemIcon>
-                      <ListItemText 
-                        primary={`${roommate.gender || 'Any'} - ${roommate.age_range || 'Any age'}`}
-                        secondary={roommate.preferences || ''}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              </AccordionDetails>
-            </Accordion>
-          )}
-
-          {property.available_from && (
-            <Grid container spacing={2} sx={{ mt: 2 }}>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="body2" color="text.secondary">Available From</Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {property.available_from ? 
-                    new Date(property.available_from).toLocaleDateString() : 
-                    'Immediately'
-                  }
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Typography variant="body2" color="text.secondary">Available Until</Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {property.available_to ? 
-                    new Date(property.available_to).toLocaleDateString() : 
-                    'No end date'
-                  }
-                </Typography>
-              </Grid>
-            </Grid>
-          )}
         </DialogContent>
 
         <DialogActions>

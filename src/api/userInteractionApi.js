@@ -45,12 +45,50 @@ export const addToFavorites = async (propertyId) => {
  */
 export const removeFromFavorites = async (propertyId) => {
   try {
+    console.log('Removing property from favorites:', propertyId);
+    
     const response = await apiClient.post('/user-interactions/favorite', {
       property_id: propertyId
     });
+    
+    console.log('Remove from favorites response:', response.data);
+    
+    // The API returns action: 'removed' when successfully removed
+    if (response.data.action !== 'removed') {
+      console.warn('Expected "removed" action but got:', response.data.action);
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error removing from favorites:', error);
+    console.error('Error response:', error.response?.data);
+    throw new Error(error.response?.data?.message || 'Failed to remove from favorites');
+  }
+};
+
+/**
+ * Force remove property from favorites (for cases where toggle might not work)
+ * @param {number} propertyId - The property ID to unfavorite
+ * @returns {Promise} API response
+ */
+export const forceRemoveFromFavorites = async (propertyId) => {
+  try {
+    // First check if it's actually favorited
+    const status = await checkFavoriteStatus(propertyId);
+    
+    if (status.is_favorited) {
+      // If it's favorited, toggle to remove
+      return await removeFromFavorites(propertyId);
+    } else {
+      // Already not favorited
+      return {
+        message: 'Property not in favorites',
+        action: 'removed',
+        property_id: propertyId
+      };
+    }
+  } catch (error) {
+    console.error('Error force removing from favorites:', error);
     throw new Error(error.response?.data?.message || 'Failed to remove from favorites');
   }
 };
