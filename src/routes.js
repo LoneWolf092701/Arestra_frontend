@@ -35,6 +35,7 @@ import ProfilePage from './pages/ProfilePage';
 import EmailVerification from './pages/EmailVerification';
 import HelpSupport from './pages/HelpSupport';
 import SettingsPage from './components/settings/SettingsPage';
+import AboutUsPage from './pages/AboutUsPage';
 
 
 const PrivateRoute = ({ element }) => {
@@ -81,6 +82,8 @@ const AppRoutes = () => {
         <Route path="/verify-email" element={<EmailVerification />} />
         
         <Route path="/help-support" element={<HelpSupport />} />
+
+        <Route path="/about-us" element={<AboutUsPage />} />
         
         <Route 
   path="/settings" 

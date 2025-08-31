@@ -11,6 +11,8 @@
     "@mui/material": "^6.4.5",
     "@mui/x-date-pickers": "^7.27.0",
     "@react-google-maps/api": "^2.20.6",
+    "@stripe/react-stripe-js": "^3.9.2",
+    "@stripe/stripe-js": "^7.9.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
@@ -21,6 +23,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.8",
     "nuka-carousel": "^8.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -29,8 +32,7 @@
     "react-router-dom": "^7.2.0",
     "react-scripts": "5.0.1",
     "web-vitals": "^2.1.4",
-    "yup": "^1.6.1",
-    "nodemailer": "^6.9.8"
+    "yup": "^1.6.1"
   },
   "scripts": {
     "start": "react-scripts start",

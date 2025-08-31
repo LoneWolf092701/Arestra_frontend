@@ -69,7 +69,7 @@ const HamburgerMenuDropdown = () => {
       menuItems.push(
         { icon: <HomeIcon />, text: 'Home', path: '/user-home' },
         { icon: <SearchIcon />, text: 'Browse Properties', path: '/user-allproperties' },
-        { icon: <InfoIcon />, text: 'About Us', path: '/about' },
+        { icon: <InfoIcon />, text: 'About Us', path: '/about-us' },
         { icon: <HelpIcon />, text: 'Help', path: '/help-support' },
         { icon: <ContactIcon />, text: 'Contact', path: '/contact' }
       );
