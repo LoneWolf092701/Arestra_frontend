@@ -199,6 +199,57 @@ const openWhatsApp = (phone, propertyTitle) => {
       return {};
     }
   };
+  
+  const getAmenitiesForDisplay = (amenitiesData) => {
+  if (!amenitiesData) return {};
+  
+  // If it's already an object, return as is
+  if (typeof amenitiesData === 'object' && !Array.isArray(amenitiesData)) {
+    return amenitiesData;
+  }
+  
+  // If it's an array, convert to object format for this component
+  if (Array.isArray(amenitiesData)) {
+    const amenitiesObj = {};
+    amenitiesData.forEach(amenity => {
+      if (amenity && amenity.trim()) {
+        amenitiesObj[amenity] = 1;
+      }
+    });
+    return amenitiesObj;
+  }
+  
+  // If it's a string, try to parse
+  if (typeof amenitiesData === 'string') {
+    try {
+      const parsed = JSON.parse(amenitiesData);
+      if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+      if (Array.isArray(parsed)) {
+        const amenitiesObj = {};
+        parsed.forEach(amenity => {
+          if (amenity && amenity.trim()) {
+            amenitiesObj[amenity] = 1;
+          }
+        });
+        return amenitiesObj;
+      }
+    } catch {
+      // If parsing fails, treat as comma-separated string
+      const amenitiesObj = {};
+      amenitiesData.split(',').forEach(item => {
+        const amenity = item.trim();
+        if (amenity.length > 0) {
+          amenitiesObj[amenity] = 1;
+        }
+      });
+      return amenitiesObj;
+    }
+  }
+  
+  return {};
+};
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('en-LK', {
@@ -258,7 +309,7 @@ const openWhatsApp = (phone, propertyTitle) => {
     );
   }
 
-  const amenities = safeParse(property.amenities);
+const amenities = getAmenitiesForDisplay(property.amenities);
   const facilities = safeParse(property.facilities);
   const images = safeParse(property.images);
   const rules = safeParse(property.rules);
@@ -536,39 +587,39 @@ const openWhatsApp = (phone, propertyTitle) => {
             </Typography>
 
             {amenities && Object.keys(amenities).length > 0 && (
-              <Accordion>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Amenities ({Object.keys(amenities).length})
-                  </Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                  <Grid container spacing={2}>
-                    {Object.entries(amenities).map(([amenity, quantity], index) => (
-                      <Grid item xs={12} sm={6} md={4} key={index}>
-                        <Box sx={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'space-between',
-                          p: 2,
-                          border: '1px solid #e0e0e0',
-                          borderRadius: 2
-                        }}>
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            {amenity}
-                          </Typography>
-                          <Chip 
-                            label={quantity} 
-                            size="small" 
-                            color="primary"
-                          />
-                        </Box>
-                      </Grid>
-                    ))}
-                  </Grid>
-                </AccordionDetails>
-              </Accordion>
-            )}
+  <Accordion>
+    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+        Amenities ({Object.keys(amenities).length})
+      </Typography>
+    </AccordionSummary>
+    <AccordionDetails>
+      <Grid container spacing={2}>
+        {Object.entries(amenities).map(([amenity, quantity], index) => (
+          <Grid item xs={12} sm={6} md={4} key={index}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'space-between',
+              p: 2,
+              border: '1px solid #e0e0e0',
+              borderRadius: 2
+            }}>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {amenity}
+              </Typography>
+              <Chip 
+                label={quantity || 1} 
+                size="small" 
+                color="primary"
+              />
+            </Box>
+          </Grid>
+        ))}
+      </Grid>
+    </AccordionDetails>
+  </Accordion>
+)}
 
             {facilities && Object.keys(facilities).length > 0 && (
               <Accordion>

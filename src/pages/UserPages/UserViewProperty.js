@@ -474,14 +474,22 @@ const openWhatsApp = (phone, property) => {
 
 
   const parseJsonField = (field) => {
-    if (!field) return null;
-    if (typeof field === 'object') return field;
+  if (!field) return null;
+  
+  // If already parsed/object, return as is
+  if (typeof field === 'object') return field;
+  
+  // If string, try to parse
+  if (typeof field === 'string') {
     try {
       return JSON.parse(field);
     } catch {
       return null;
     }
-  };
+  }
+  
+  return field;
+};
 
   const formatPrice = (price) => {
     if (!price) return 'Price not set';
@@ -668,59 +676,55 @@ const openWhatsApp = (phone, property) => {
             </Paper>
           )}
 
-          {amenities.length > 0 && (
-            <Paper sx={{ p: 3, mt: 3 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
-                Amenities
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {(Array.isArray(amenities) ? amenities : []).map((amenity, index) => (
-                  <Chip
-                    key={index}
-                    label={amenity}
-                    variant="outlined"
-                    sx={{
-                      borderColor: theme.primary,
-                      color: theme.primary,
-                      '&:hover': {
-                        backgroundColor: theme.primary + '10'
-                      }
-                    }}
-                  />
-                ))}
-              </Box>
-            </Paper>
-          )}
+          {amenities && amenities.length > 0 && (
+  <Paper sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
+      Amenities
+    </Typography>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      {amenities.map((amenity, index) => (
+        <Chip
+          key={index}
+          label={amenity}
+          variant="outlined"
+          color="primary"
+          size="small"
+          sx={{
+            backgroundColor: 'rgba(25, 118, 210, 0.04)',
+            '&:hover': {
+              backgroundColor: 'rgba(25, 118, 210, 0.08)',
+            }
+          }}
+        />
+      ))}
+    </Box>
+  </Paper>
+)}
 
-          {facilities && Object.keys(facilities).length > 0 && (
-            <Paper sx={{ p: 3, mt: 3 }}>
-              <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
-                Facilities
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {Object.entries(facilities).map(([facility, available], index) => (
-                  available && (
-                    <Chip
-                      key={index}
-                      label={facility}
-                      variant="outlined"
-                      icon={<CheckIcon sx={{ fontSize: 16 }} />}
-                      sx={{
-                        borderColor: theme.secondary,
-                        color: theme.secondary,
-                        '& .MuiChip-icon': {
-                          color: theme.secondary
-                        },
-                        '&:hover': {
-                          backgroundColor: theme.secondary + '10'
-                        }
-                      }}
-                    />
-                  )
-                ))}
-              </Box>
-            </Paper>
-          )}
+          {facilities && facilities.length > 0 && (
+  <Paper sx={{ p: 3, mt: 3 }}>
+    <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
+      Facilities
+    </Typography>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      {facilities.map((facility, index) => (
+        <Chip
+          key={index}
+          label={facility}
+          variant="outlined"
+          color="secondary"
+          size="small"
+          sx={{
+            backgroundColor: 'rgba(156, 39, 176, 0.04)',
+            '&:hover': {
+              backgroundColor: 'rgba(156, 39, 176, 0.08)',
+            }
+          }}
+        />
+      ))}
+    </Box>
+  </Paper>
+)}
 
           {rules.length > 0 && (
             <Paper sx={{ p: 3, mt: 3 }}>
