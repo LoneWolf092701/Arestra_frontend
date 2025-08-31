@@ -61,13 +61,15 @@ import { submitBookingRequest } from '../../api/bookingApi';
 import { calculateBookingPricing, formatCurrency } from '../../utils/BookingCalculationUtils';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import { useTheme } from '../../contexts/ThemeContext';
+import PaymentOptionsModal from '../../components/bookings/PaymentOptionsModal';
+
 
 // Extend dayjs with required plugins
 dayjs.extend(isSameOrBefore);
 // dayjs.extend(isBefore);
 // dayjs.extend(isAfter);
 
-const steps = ['Booking Overview', 'Personal Details', 'Payment'];
+const steps = ['Booking Overview', 'Personal Details', 'Payment', 'Status'];
 
 const UserBookingPage = () => {
   const { id } = useParams();
@@ -79,6 +81,11 @@ const UserBookingPage = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const [bookingApproved, setBookingApproved] = useState(false);
+const [paymentAccountInfo, setPaymentAccountInfo] = useState('');
+const [showPaymentModal, setShowPaymentModal] = useState(false);
+const [currentBookingId, setCurrentBookingId] = useState(null);
   
   const [bookingData, setBookingData] = useState({
     check_in_date: null,
@@ -187,6 +194,26 @@ const UserBookingPage = () => {
       setLoading(false);
     }
   };
+  
+  useEffect(() => {
+  const checkBookingStatus = () => {
+    // In a real app, this would be done via WebSocket or periodic API calls
+    // For now, we'll check for updates in localStorage (you can implement real-time updates)
+    const bookingStatus = localStorage.getItem(`booking_${currentBookingId}_status`);
+    const accountInfo = localStorage.getItem(`booking_${currentBookingId}_account_info`);
+    
+    if (bookingStatus === 'approved' && accountInfo && !bookingApproved) {
+      setBookingApproved(true);
+      setPaymentAccountInfo(accountInfo);
+      setShowPaymentModal(true);
+    }
+  };
+
+  if (currentBookingId) {
+    const interval = setInterval(checkBookingStatus, 5000); // Check every 5 seconds
+    return () => clearInterval(interval);
+  }
+}, [currentBookingId, bookingApproved]);
 
   const calculatePricing = () => {
     if (!property || !bookingData.check_in_date || !bookingData.check_out_date) {
@@ -274,6 +301,8 @@ const UserBookingPage = () => {
   const handleBack = () => {
     setActiveStep(prev => prev - 1);
   };
+  
+  const handleSubmitOriginal = handleSubmit;
 
   const handleSubmit = async () => {
     if (!validateStep(1)) return;
@@ -287,10 +316,12 @@ const UserBookingPage = () => {
         ...personalDetails,
         check_in_date: dayjs(bookingData.check_in_date).format('YYYY-MM-DD'),
         check_out_date: dayjs(bookingData.check_out_date).format('YYYY-MM-DD'),
-        total_amount: pricingBreakdown?.total || 0
+        total_amount: pricingBreakdown?.total || 0,
+        advance_amount: pricingBreakdown?.advanceAmount || 0
       };
 
-      await submitBookingRequest(bookingRequest);
+      const response = await submitBookingRequest(bookingRequest);
+      setCurrentBookingId(response.booking_id);       
       
       setSnackbar({
         open: true,
@@ -313,6 +344,29 @@ const UserBookingPage = () => {
       setSubmitting(false);
     }
   };
+  
+  const handlePaymentComplete = async (paymentMethod, paymentData) => {
+  try {
+    setShowPaymentModal(false);
+    
+    setSnackbar({
+      open: true,
+      message: 'Payment submitted successfully! Waiting for owner confirmation...',
+      severity: 'success'
+    });
+
+    setTimeout(() => {
+      navigate('/user-bookings'); // Navigate to user bookings page
+    }, 3000);
+    
+  } catch (error) {
+    setSnackbar({
+      open: true,
+      message: 'Payment processing failed. Please try again.',
+      severity: 'error'
+    });
+  }
+};
 
   const renderStepContent = () => {
     switch (activeStep) {
@@ -322,6 +376,8 @@ const UserBookingPage = () => {
         return renderPersonalDetails();
       case 2:
         return renderPayment();
+      case 3:
+        return renderPaymentStatus();
       default:
         return null;
     }
@@ -1399,6 +1455,41 @@ const UserBookingPage = () => {
       </CardContent>
     </Card>
   );
+  
+  const renderPaymentStatus = () => (
+  <Card sx={{ backgroundColor: isDark ? theme.cardBackground : '#ffffff' }}>
+    <CardContent sx={{ textAlign: 'center', py: 4 }}>
+      {!bookingApproved && (
+        <>
+          <ScheduleIcon sx={{ fontSize: 60, color: 'warning.main', mb: 2 }} />
+          <Typography variant="h6" gutterBottom>
+            Waiting for Property Owner Approval
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Your booking request has been sent. You'll be notified when the owner responds.
+          </Typography>
+          <CircularProgress sx={{ mt: 2 }} />
+        </>
+      )}
+
+      {bookingApproved && (
+        <>
+          <CheckCircleIcon sx={{ fontSize: 60, color: 'success.main', mb: 2 }} />
+          <Typography variant="h6" gutterBottom>
+            Booking Approved! Choose Payment Method
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => setShowPaymentModal(true)}
+            sx={{ mt: 2 }}
+          >
+            Proceed to Payment
+          </Button>
+        </>
+      )}
+    </CardContent>
+  </Card>
+);
 
   if (loading) {
     return (
@@ -1543,6 +1634,21 @@ const UserBookingPage = () => {
         severity={snackbar.severity}
         onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
       />
+      
+      {/* Payment Options Modal */}
+{showPaymentModal && pricingBreakdown && (
+  <PaymentOptionsModal
+    open={showPaymentModal}
+    onClose={() => setShowPaymentModal(false)}
+    booking={{
+      id: currentBookingId,
+      advance_amount: pricingBreakdown.advanceAmount
+    }}
+    accountInfo={paymentAccountInfo}
+    onPaymentComplete={handlePaymentComplete}
+  />
+)}
+
     </Container>
   );
 };
