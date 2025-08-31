@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AppBar, Toolbar, Avatar, Box, IconButton, Tooltip, Button } from '@mui/material';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
@@ -9,6 +9,8 @@ import logo from '../../assets/images/Logo.png';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import { isAuthenticated } from '../../utils/auth';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import { getNotifications, getUnreadNotificationCount } from '../../api/notificationApi';
 
 const Header = () => {
   const { theme, toggleTheme, isDark } = useTheme();
@@ -71,13 +73,33 @@ const Header = () => {
     navigate('/signup');
   };
 
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const fetchNotifications = async () => {
+    if (authenticated) {
+      try {
+        const notifications = await getNotifications();
+        const countResponse = await getUnreadNotificationCount();
+        setUnreadCount(countResponse.unread_count || 0);
+      } catch (error) {
+        console.error('Error fetching notifications:', error);
+      }
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications(); // Fetch on mount
+    const interval = setInterval(fetchNotifications, 5 * 60 * 1000); // Fetch every 5 minutes
+    return () => clearInterval(interval); // Cleanup interval on unmount
+  }, [authenticated]);
+
   return (
     <AppBar
       position="static"
       elevation={0}
       sx={{ 
-        borderBottom: `1px solid ${theme.border}`,
-        background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.primary}dd 100%)`,
+        borderBottom: `1px solid ${theme.border || '#e0e0e0'}`,
+        background: `linear-gradient(135deg, ${theme.primary || '#1976d2'} 0%, ${theme.primary + 'dd' || '#1976d2dd'} 100%)`,
         transition: 'all 0.3s ease',
       }}
     >
@@ -103,6 +125,41 @@ const Header = () => {
 
         {!isAuthPage && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Tooltip title={`You have ${unreadCount} unread notifications`}>
+              <IconButton
+                onClick={() => navigate('/notifications')}
+                sx={{
+                  color: 'white',
+                  position: 'relative',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  },
+                }}
+              >
+                <NotificationsIcon />
+                {unreadCount > 0 && (
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      top: 0,
+                      right: 0,
+                      backgroundColor: 'red',
+                      color: 'white',
+                      borderRadius: '50%',
+                      width: 16,
+                      height: 16,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 10,
+                    }}
+                  >
+                    {unreadCount}
+                  </Box>
+                )}
+              </IconButton>
+            </Tooltip>
+            
             <Tooltip title={`Switch to ${isDark ? 'light' : 'dark'} theme`}>
               <IconButton
                 onClick={toggleTheme}
@@ -137,8 +194,8 @@ const Header = () => {
                   >
                     <Avatar
                       sx={{
-                        bgcolor: roleValue === 'admin' ? theme.accent : 
-                               roleValue === 'propertyowner' ? theme.secondary : theme.primary,
+                        bgcolor: roleValue === 'admin' ? theme.accent || '#f44336' : 
+                               roleValue === 'propertyowner' ? theme.secondary || '#ff9800' : theme.primary || '#1976d2',
                         color: 'white',
                         fontWeight: 'bold',
                         border: '2px solid rgba(255, 255, 255, 0.3)',
@@ -177,10 +234,10 @@ const Header = () => {
                   variant="contained"
                   onClick={handleSignupClick}
                   sx={{
-                    backgroundColor: theme.accent,
+                    backgroundColor: theme.accent || '#f44336',
                     color: 'white',
                     '&:hover': {
-                      backgroundColor: theme.secondary,
+                      backgroundColor: theme.secondary || '#ff9800',
                       transform: 'translateY(-1px)',
                     },
                     boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
