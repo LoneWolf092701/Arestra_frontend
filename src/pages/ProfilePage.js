@@ -357,7 +357,7 @@ const ProfilePage = () => {
                 label="Username"
                 value={profile.username}
                 onChange={(e) => handleInputChange('username', e.target.value)}
-                disabled={!isEditing}
+                disabled={true}
                 error={!!fieldErrors.username}
                 helperText={fieldErrors.username}
               />
@@ -370,7 +370,7 @@ const ProfilePage = () => {
                 type="email"
                 value={profile.email}
                 onChange={(e) => handleInputChange('email', e.target.value)}
-                disabled={!isEditing}
+                disabled={true}
                 error={!!fieldErrors.email}
                 helperText={fieldErrors.email}
               />
@@ -436,7 +436,7 @@ const ProfilePage = () => {
                 type="date"
                 value={profile.birthdate}
                 onChange={(e) => handleInputChange('birthdate', e.target.value)}
-                disabled={!isEditing}
+                disabled={true}
                 error={!!fieldErrors.birthdate}
                 helperText={fieldErrors.birthdate}
                 InputLabelProps={{
@@ -463,7 +463,7 @@ const ProfilePage = () => {
     label="NIC or Passport Number"
     value={profile.identification_number}
     onChange={(e) => handleInputChange('identification_number', e.target.value)}
-    disabled={!isEditing}
+    disabled={true}
     error={!!fieldErrors.identification_number}
     helperText={fieldErrors.identification_number || "National Identity Card or Passport Number"}
   />
@@ -524,7 +524,7 @@ const ProfilePage = () => {
                     label="Business Name"
                     value={profile.business_name}
                     onChange={(e) => handleInputChange('business_name', e.target.value)}
-                    disabled={!isEditing}
+                    disabled={true}
                     error={!!fieldErrors.business_name}
                     helperText={fieldErrors.business_name}
                   />
@@ -560,7 +560,7 @@ const ProfilePage = () => {
                     label="Business Registration"
                     value={profile.business_registration}
                     onChange={(e) => handleInputChange('business_registration', e.target.value)}
-                    disabled={!isEditing}
+                    disabled={true}
                     error={!!fieldErrors.business_registration}
                     helperText={fieldErrors.business_registration}
                   />

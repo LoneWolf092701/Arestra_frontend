@@ -122,36 +122,36 @@ const AboutUsPage = () => {
     }
   ];
 
-  const team = [
-    {
-      name: 'Sarah Johnson',
-      role: 'CEO & Founder',
-      image: '/images/team/ceo.jpg',
-      bio: 'Former real estate executive with 15+ years of experience in property management.',
-      icon: <BusinessCenterIcon />
-    },
-    {
-      name: 'Michael Chen',
-      role: 'CTO',
-      image: '/images/team/cto.jpg',
-      bio: 'Tech leader with expertise in scalable platform development and cloud architecture.',
-      icon: <CodeIcon />
-    },
-    {
-      name: 'Emily Rodriguez',
-      role: 'Head of Design',
-      image: '/images/team/design.jpg',
-      bio: 'UX/UI specialist focused on creating intuitive and accessible user experiences.',
-      icon: <DesignIcon />
-    },
-    {
-      name: 'David Kumar',
-      role: 'Head of Customer Success',
-      image: '/images/team/support.jpg',
-      bio: 'Customer service expert ensuring exceptional support and satisfaction.',
-      icon: <SupportIcon />
-    }
-  ];
+  // const team = [
+  //   {
+  //     name: 'Sarah Johnson',
+  //     role: 'CEO & Founder',
+  //     image: '/images/team/ceo.jpg',
+  //     bio: 'Former real estate executive with 15+ years of experience in property management.',
+  //     icon: <BusinessCenterIcon />
+  //   },
+  //   {
+  //     name: 'Michael Chen',
+  //     role: 'CTO',
+  //     image: '/images/team/cto.jpg',
+  //     bio: 'Tech leader with expertise in scalable platform development and cloud architecture.',
+  //     icon: <CodeIcon />
+  //   },
+  //   {
+  //     name: 'Emily Rodriguez',
+  //     role: 'Head of Design',
+  //     image: '/images/team/design.jpg',
+  //     bio: 'UX/UI specialist focused on creating intuitive and accessible user experiences.',
+  //     icon: <DesignIcon />
+  //   },
+  //   {
+  //     name: 'David Kumar',
+  //     role: 'Head of Customer Success',
+  //     image: '/images/team/support.jpg',
+  //     bio: 'Customer service expert ensuring exceptional support and satisfaction.',
+  //     icon: <SupportIcon />
+  //   }
+  // ];
 
   const values = [
     {
@@ -180,12 +180,12 @@ const AboutUsPage = () => {
     }
   ];
 
-  const achievements = [
-    { year: '2020', milestone: 'StayWise Founded', progress: 25 },
-    { year: '2021', milestone: 'First 1,000 Properties', progress: 50 },
-    { year: '2023', milestone: 'Mobile App Launch', progress: 75 },
-    { year: '2024', milestone: 'AI-Powered Matching', progress: 100 }
-  ];
+  // const achievements = [
+  //   { year: '2020', milestone: 'StayWise Founded', progress: 25 },
+  //   { year: '2021', milestone: 'First 1,000 Properties', progress: 50 },
+  //   { year: '2023', milestone: 'Mobile App Launch', progress: 75 },
+  //   { year: '2024', milestone: 'AI-Powered Matching', progress: 100 }
+  // ];
 
   return (
     <Box sx={{ backgroundColor: isDark ? theme.background : '#f8f9fa', minHeight: '100vh' }}>
@@ -476,7 +476,7 @@ const AboutUsPage = () => {
         </Box>
 
         {/* Team Section */}
-        <Box sx={{ mb: 8 }}>
+        {/* <Box sx={{ mb: 8 }}>
           <Typography variant="h4" align="center" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
             Meet Our Team
           </Typography>
@@ -519,10 +519,10 @@ const AboutUsPage = () => {
               </Grid>
             ))}
           </Grid>
-        </Box>
+        </Box> */}
 
         {/* Company Timeline */}
-        <Box sx={{ mb: 8 }}>
+        {/* <Box sx={{ mb: 8 }}>
           <Typography variant="h4" align="center" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
             Our Journey
           </Typography>
@@ -555,14 +555,15 @@ const AboutUsPage = () => {
               ))}
             </Grid>
           </Paper>
-        </Box>
+        </Box> */}
 
         {/* Technology Stack */}
+    {/* Technology Stack */}
         <Box sx={{ mb: 8 }}>
           <Typography variant="h4" align="center" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
             Built with Modern Technology
           </Typography>
-          <Grid container spacing={3}>
+          <Grid container spacing={3} justifyContent="center"> {/* Add justifyContent="center" */}
             <Grid item xs={12} sm={6} md={3}>
               <Card sx={{ 
                 p: 3, 
@@ -605,22 +606,9 @@ const AboutUsPage = () => {
                 </Typography>
               </Card>
             </Grid>
-            <Grid item xs={12} sm={6} md={3}>
-              <Card sx={{ 
-                p: 3, 
-                textAlign: 'center',
-                background: isDark ? theme.cardBackground : '#fff',
-                border: isDark ? `1px solid ${theme.border}` : 'none'
-              }}>
-                <ShieldIcon sx={{ fontSize: 40, color: 'warning.main', mb: 2 }} />
-                <Typography variant="h6" gutterBottom>Bank-level Security</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Advanced encryption and verification
-                </Typography>
-              </Card>
-            </Grid>
           </Grid>
         </Box>
+
 
         {/* Contact Information */}
         <Box sx={{ mb: 8 }}>
@@ -640,7 +628,7 @@ const AboutUsPage = () => {
                 </Avatar>
                 <Typography variant="h6" gutterBottom>Call Us</Typography>
                 <Typography variant="body1" color="primary.main" sx={{ fontWeight: 'medium' }}>
-                  +94 77 123 4567
+                  +94 76 172 3207
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Mon - Fri: 8AM - 8PM
@@ -659,7 +647,8 @@ const AboutUsPage = () => {
                 </Avatar>
                 <Typography variant="h6" gutterBottom>Email Us</Typography>
                 <Typography variant="body1" color="primary.main" sx={{ fontWeight: 'medium' }}>
-                  hello@staywise.lk
+                  staywise.lk.team@gmail.com
+
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   We'll reply within 24 hours

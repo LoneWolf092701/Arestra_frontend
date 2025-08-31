@@ -449,9 +449,9 @@ const Signup = () => {
                   }}
                   inputProps={{
                     min: formattedMinDate, // oldest allowed birthdate (e.g., 100 years ago)
-                    max: formattedMaxDate, // youngest allowed birthdate (18 years ago)
+                    max: formattedMaxDate, // youngest allowed birthdate (16 years ago)
                   }}
-                  helperText="You must be at least 18 years old"
+                  helperText="You must be at least 16 years old"
                 />
 
               </Grid>
@@ -631,9 +631,9 @@ const Signup = () => {
                       }}
                       inputProps={{
                         min: formattedMinDate, // oldest allowed birthdate (e.g., 100 years ago)
-                        max: formattedMaxDate, // youngest allowed birthdate (18 years ago)
+                        max: formattedMaxDate, // youngest allowed birthdate (16 years ago)
                       }}
-                      helperText="You must be at least 18 years old"
+                      helperText="You must be at least 16 years old"
                     />
 
               </Grid>
@@ -899,7 +899,7 @@ const Signup = () => {
                 shrink: true,
               }}
               inputProps={{
-                max: formattedMaxDate,  // enforce 18+ years
+                max: formattedMaxDate,  // enforce 16+ years
               }}
               //helperText="You must be at least 16 years old"
             />
