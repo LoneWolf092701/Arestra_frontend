@@ -85,6 +85,7 @@ import {
 import { isAuthenticated, getUserId } from '../../utils/auth';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import MapSearch from '../../components/specific/MapSearch';
+import { getUserRole } from '../../api/loginApi';
 
 const ImageCarousel = ({ images, propertyTitle }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -118,14 +119,15 @@ const ImageCarousel = ({ images, propertyTitle }) => {
   if (validImages.length === 0) {
     return (
       <Card sx={{ mb: 3 }}>
-        <Box sx={{ 
-          height: 400, 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center',
-          backgroundColor: theme.cardBackground,
-          color: theme.textSecondary
-        }}>
+        <Box sx={ 
+          { 
+            height: 400, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            backgroundColor: theme.cardBackground,
+            color: theme.textSecondary
+          }}>
           <Typography variant="h6">No images available</Typography>
         </Box>
       </Card>
@@ -342,10 +344,12 @@ const UserViewProperty = () => {
 
   const isLoggedIn = isAuthenticated();
   const currentUserId = getUserId();
-  const isPropertyOwner = property && property.user_id && currentUserId && 
-    parseInt(property.user_id) === parseInt(currentUserId);
 
-    console.log({property})
+  const userRole = getUserRole();
+
+  const isPropertyOwner = userRole === 'propertyowner';
+
+  console.log({property})
   useEffect(() => {
     const fetchProperty = async () => {
       try {
@@ -439,57 +443,56 @@ const UserViewProperty = () => {
   }, [id, isLoggedIn]);
   
   const formatPhoneForWhatsApp = (phone) => {
-  if (!phone) return null;
-  return phone.replace(/\D/g, '');
-};
+    if (!phone) return null;
+    return phone.replace(/\D/g, '');
+  };
 
-const openWhatsApp = (phone, property) => {
-  if (!phone) return;
-  const formattedPhone = formatPhoneForWhatsApp(phone);
-  
-  // Create comprehensive property message
-  const propertyTitle = `${property?.property_type} - ${property?.unit_type}`;
-  const location = property?.address;
-  const price = `LKR ${property?.price?.toLocaleString()}`;
-  const bedrooms = property?.bedrooms > 0 ? `${property?.bedrooms} Bed` : '';
-  const bathrooms = property?.bathrooms > 0 ? `${property?.bathrooms} Bath` : '';
-  const availableFrom = property?.available_from ? `Available from ${property?.available_from}` : '';
-  
-  let message = `Hi! I'm interested in this property:\n\n`;
-  message += `🏠 ${propertyTitle}\n`;
-  message += `📍 ${location}\n`;
-  message += `💰 ${price}\n`;
-  if (bedrooms || bathrooms) {
-    message += `🛏️ ${[bedrooms, bathrooms].filter(Boolean).join(', ')}\n`;
-  }
-  if (availableFrom) {
-    message += `📅 ${availableFrom}\n`;
-  }
-  message += `\nCould you please provide more details?`;
-  
-  const encodedMessage = encodeURIComponent(message);
-  const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
-  window.open(whatsappUrl, '_blank');
-};
-
+  const openWhatsApp = (phone, property) => {
+    if (!phone) return;
+    const formattedPhone = formatPhoneForWhatsApp(phone);
+    
+    // Create comprehensive property message
+    const propertyTitle = `${property?.property_type} - ${property?.unit_type}`;
+    const location = property?.address;
+    const price = `LKR ${property?.price?.toLocaleString()}`;
+    const bedrooms = property?.bedrooms > 0 ? `${property?.bedrooms} Bed` : '';
+    const bathrooms = property?.bathrooms > 0 ? `${property?.bathrooms} Bath` : '';
+    const availableFrom = property?.available_from ? `Available from ${property?.available_from}` : '';
+    
+    let message = `Hi! I'm interested in this property:\n\n`;
+    message += `🏠 ${propertyTitle}\n`;
+    message += `📍 ${location}\n`;
+    message += `💰 ${price}\n`;
+    if (bedrooms || bathrooms) {
+      message += `🛏️ ${[bedrooms, bathrooms].filter(Boolean).join(', ')}\n`;
+    }
+    if (availableFrom) {
+      message += `📅 ${availableFrom}\n`;
+    }
+    message += `\nCould you please provide more details?`;
+    
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/${formattedPhone}?text=${encodedMessage}`;
+    window.open(whatsappUrl, '_blank');
+  };
 
   const parseJsonField = (field) => {
-  if (!field) return null;
-  
-  // If already parsed/object, return as is
-  if (typeof field === 'object') return field;
-  
-  // If string, try to parse
-  if (typeof field === 'string') {
-    try {
-      return JSON.parse(field);
-    } catch {
-      return null;
+    if (!field) return null;
+    
+    // If already parsed/object, return as is
+    if (typeof field === 'object') return field;
+    
+    // If string, try to parse
+    if (typeof field === 'string') {
+      try {
+        return JSON.parse(field);
+      } catch {
+        return null;
+      }
     }
-  }
-  
-  return field;
-};
+    
+    return field;
+  };
 
   const formatPrice = (price) => {
     if (!price) return 'Price not set';
@@ -624,6 +627,12 @@ const openWhatsApp = (phone, property) => {
     navigate(`/user-booking/${id}`);
   };
 
+  const handleEdit = () => {
+    if (isPropertyOwner) {
+      navigate(`/update-property/${id}`);
+    }
+  };
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
@@ -701,16 +710,16 @@ const openWhatsApp = (phone, property) => {
   </Paper>
 )}
 
-          {facilities && facilities.length > 0 && (
+          {facilities && Object.keys(facilities).length > 0 && (
   <Paper sx={{ p: 3, mt: 3 }}>
     <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
       Facilities
     </Typography>
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-      {facilities.map((facility, index) => (
+      {Object.entries(facilities).map(([key, value], index) => (
         <Chip
           key={index}
-          label={facility}
+          label={`${key}: ${value}`}
           variant="outlined"
           color="secondary"
           size="small"
@@ -736,12 +745,14 @@ const openWhatsApp = (phone, property) => {
                 {rules.map((rule, index) => (
                   <ListItem key={index} sx={{ py: 0.5 }}>
                     <ListItemIcon sx={{ minWidth: 36 }}>
-                      <Box sx={{ 
-                        width: 6, 
-                        height: 6, 
-                        borderRadius: '50%', 
-                        backgroundColor: theme.primary 
-                      }} />
+                      <Box sx={ 
+                        { 
+                          width: 6, 
+                          height: 6, 
+                          borderRadius: '50%', 
+                          backgroundColor: theme.primary 
+                        } 
+                      } />
                     </ListItemIcon>
                     <ListItemText primary={rule} />
                   </ListItem>
@@ -1036,9 +1047,29 @@ const openWhatsApp = (phone, property) => {
             )}
 
             {isPropertyOwner && (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                This is your property listing.
-              </Alert>
+              <>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  This is your property listing.
+                </Alert>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  size="large"
+                  onClick={handleEdit}
+                  sx={{
+                    backgroundColor: theme.secondary,
+                    mt: 2,
+                    py: 1.5,
+                    fontSize: '1.1rem',
+                    fontWeight: 600,
+                    '&:hover': {
+                      backgroundColor: theme.secondaryDark
+                    }
+                  }}
+                >
+                  Edit Property
+                </Button>
+              </>
             )}
 
             {(property.created_at || property.updated_at) && (
@@ -1058,7 +1089,7 @@ const openWhatsApp = (phone, property) => {
                 )}
               </Paper>
             )}
-           {property.owner_info && !isPropertyOwner && (
+            {!isPropertyOwner && property.owner_info && (
   <Paper elevation={2} sx={{ p: 3, mt: 3 }}>
     <Typography variant="h6" gutterBottom sx={{ color: theme.primary, fontWeight: 600 }}>
       Contact Property Owner
