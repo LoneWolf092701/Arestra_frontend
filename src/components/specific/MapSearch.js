@@ -44,6 +44,14 @@ const MapSearch = ({
     }
   }, [latitude, longitude]);
 
+  // Cleanup on unmount to prevent state issues
+  useEffect(() => {
+    return () => {
+      setIsMapLoaded(false);
+      setError('');
+    };
+  }, []);
+
   const geocodeLocation = useCallback((location, callback) => {
     if (!window.google?.maps) {
       callback(null, 'Google Maps not loaded');
@@ -146,15 +154,13 @@ const MapSearch = ({
     }
   }, [readonly, isMapLoaded, reverseGeocode]);
 
-  console.log({isMapLoaded});
-
-  if (!apiKey || apiKey === 'AIzaSyCjQZnGoOVXwd2M2Lp3cwvfGgTRfCViuaM') {
-  return (
-    <Alert severity="error">
-      Google Maps API key not configured or invalid. Please set a valid API key in environment variables.
-    </Alert>
-  );
-}
+  if (!apiKey || apiKey.trim() === '') {
+    return (
+      <Alert severity="error">
+        Google Maps API key not configured. Please set a valid API key in environment variables.
+      </Alert>
+    );
+  }
 
   return (
     <Box>
@@ -192,30 +198,33 @@ const MapSearch = ({
         googleMapsApiKey={apiKey}
         libraries={libraries}
         onLoad={() => setIsMapLoaded(true)}
-        onError={() => setError('Failed to load Google Maps')}
+        onError={(error) => {
+          console.error('Failed to load Google Maps:', error);
+          setError('Failed to load Google Maps. Please check your internet connection and API key.');
+          setIsMapLoaded(false);
+        }}
         loadingElement={
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
             <CircularProgress />
             <Typography sx={{ ml: 2 }}>Loading Google Maps...</Typography>
           </Box>
         }
-      > 
+      >
         <GoogleMap
-  mapContainerStyle={containerStyle}
-  center={mapCenter}
-  zoom={markerPosition ? 15 : 10}
-  onClick={handleMapClick}
-  options={{
-    disableDefaultUI: readonly,
-    zoomControl: !readonly,
-    mapTypeControl: false,
-    scaleControl: true,
-    streetViewControl: !readonly,
-    rotateControl: false,
-    fullscreenControl: !readonly
-  }}
-  onLoad={() => setIsMapLoaded(true)}
->
+          mapContainerStyle={containerStyle}
+          center={mapCenter}
+          zoom={markerPosition ? 15 : 10}
+          onClick={handleMapClick}
+          options={{
+            disableDefaultUI: readonly,
+            zoomControl: !readonly,
+            mapTypeControl: false,
+            scaleControl: true,
+            streetViewControl: !readonly,
+            rotateControl: false,
+            fullscreenControl: !readonly
+          }}
+        >
           {markerPosition && (
             <Marker 
               position={markerPosition} 
