@@ -145,6 +145,8 @@ const MapSearch = ({
     }
   }, [readonly, isMapLoaded, reverseGeocode]);
 
+  console.log({isMapLoaded});
+
   if (!apiKey) {
     return (
       <Alert severity="error">
@@ -187,7 +189,7 @@ const MapSearch = ({
 
       <LoadScript 
         googleMapsApiKey={apiKey}
-        libraries={libraries}
+        // libraries={libraries}
         onLoad={() => setIsMapLoaded(true)}
         onError={() => setError('Failed to load Google Maps')}
         loadingElement={

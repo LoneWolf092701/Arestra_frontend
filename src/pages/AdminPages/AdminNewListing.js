@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import HotelIcon from '@mui/icons-material/Hotel';
 import BathtubIcon from '@mui/icons-material/Bathtub';
+import KitchenIcon from '@mui/icons-material/Kitchen';
 import PeopleIcon from '@mui/icons-material/People';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
@@ -53,8 +54,16 @@ const PropertyDetailsDialog = ({ open, onClose, property, onApprove, onReject })
 
   if (!property) return null;
 
-  const amenities = safeParse(property.amenities);
-  const facilities = safeParse(property.facilities);
+  const amenities = property.amenities ? 
+  Object.entries(property.amenities)
+    .filter(([key, value]) => value === 1 || value === true)
+    .map(([key]) => key) : [];
+
+    const facilities = property.facilities ? 
+  Object.entries(property.facilities)
+    .filter(([key, value]) => value === 1 || value === true)
+    .map(([key]) => key) : [];
+
   const roommates = safeParse(property.roommates);
   const rules = safeParse(property.rules);
   const billsInclusive = safeParse(property.bills_inclusive);
@@ -171,92 +180,73 @@ const PropertyDetailsDialog = ({ open, onClose, property, onApprove, onReject })
             </List>
           </Grid>
 
-          {/* Facility Information */}
-          <Grid item xs={12} md={6}>
-            <Typography variant="h6" gutterBottom>Facilities</Typography>
-            <List dense>
-              <ListItem>
-                <ListItemIcon>
-                  <HotelIcon />
-                </ListItemIcon>
-                <ListItemText 
-                  primary="Bedrooms" 
-                  secondary={property.bedrooms || 'Not specified'} 
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemIcon>
-                  <BathtubIcon />
-                </ListItemIcon>
-                <ListItemText 
-                  primary="Bathrooms" 
-                  secondary={property.bathrooms || 'Not specified'} 
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemIcon>
-                  <PeopleIcon />
-                </ListItemIcon>
-                <ListItemText 
-                  primary="Max Occupancy" 
-                  secondary={property.occupancy || 'Not specified'} 
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemIcon>
-                  <InfoIcon />
-                </ListItemIcon>
-                <ListItemText 
-                  primary="Floor Area" 
-                  secondary={property.floor_area ? `${property.floor_area} sq ft` : 'Not specified'} 
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemIcon>
-                  <InfoIcon />
-                </ListItemIcon>
-                <ListItemText 
-                  primary="Furnished" 
-                  secondary={property.furnished === 1 ? 'Yes' : property.furnished === 0 ? 'No' : 'Not specified'} 
-                />
-              </ListItem>
-            </List>
-          </Grid>
+        {/* Facility Information */}
+<Grid item xs={12} md={6}>
+  <Typography variant="h6" gutterBottom>Facilities</Typography>
+  <List dense>
+    <ListItem>
+      <ListItemIcon>
+        <HotelIcon />
+      </ListItemIcon>
+      <ListItemText 
+        primary="Bedrooms" 
+        secondary={property.bedrooms || 'Not specified'} 
+      />
+    </ListItem>
+    <ListItem>
+      <ListItemIcon>
+        <BathtubIcon />
+      </ListItemIcon>
+      <ListItemText 
+        primary="Bathrooms" 
+        secondary={property.bathrooms || 'Not specified'} 
+      />
+    </ListItem>
+    <ListItem>
+  <ListItemIcon>
+    <KitchenIcon />
+  </ListItemIcon>
+  <ListItemText 
+    primary="Kitchen" 
+    secondary={typeof property.facilities?.Kitchen === 'number' ? property.facilities.Kitchen : 'Not specified'} 
+  />
+</ListItem>
+  </List>
+</Grid>
 
           {/* Amenities */}
           {amenities && amenities.length > 0 && (
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>Amenities</Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {amenities.map((amenity, index) => (
-                  <Chip 
-                    key={index} 
-                    label={amenity} 
-                    size="small" 
-                    color="primary"
-                  />
-                ))}
-              </Box>
-            </Grid>
-          )}
+  <Grid item xs={12}>
+    <Typography variant="h6" gutterBottom>Amenities</Typography>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      {amenities.map((amenity, index) => (
+        <Chip 
+          key={index} 
+          label={amenity} 
+          size="small" 
+          color="primary"
+        />
+      ))}
+    </Box>
+  </Grid>
+)}
 
           {/* Facilities */}
-          {facilities && facilities.length > 0 && (
-            <Grid item xs={12}>
-              <Typography variant="h6" gutterBottom>Additional Facilities</Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {facilities.map((facility, index) => (
-                  <Chip 
-                    key={index} 
-                    label={facility} 
-                    size="small" 
-                    color="secondary"
-                  />
-                ))}
-              </Box>
-            </Grid>
-          )}
-
+{facilities && facilities.length > 0 && (
+  <Grid item xs={12}>
+    <Typography variant="h6" gutterBottom>Facilities</Typography>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      {facilities.map((facility, index) => (
+        <Chip 
+          key={index} 
+          label={facility} 
+          size="small" 
+          color="primary"
+        />
+      ))}
+    </Box>
+  </Grid>
+)}
           {/* Property Description */}
           {property.description && (
             <Grid item xs={12}>
