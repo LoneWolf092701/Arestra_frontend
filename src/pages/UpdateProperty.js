@@ -388,21 +388,45 @@ const [longitude, setLongitude] = useState(null);
   }, [id, reset]);
   
   const handleLocationSelect = (lat, lng, formattedAddress) => {
+  console.log('Location updated:', { lat, lng, formattedAddress });
+  
+  // Validate coordinates
+  if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+    console.error('Invalid coordinates received');
+    return;
+  }
+  
+  // Validate coordinate ranges
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    console.error('Coordinates out of valid range');
+    return;
+  }
+  
   setLatitude(lat);
   setLongitude(lng);
-  setValue('address', formattedAddress);
+  
+  if (formattedAddress) {
+    setValue('address', formattedAddress);
+  }
 };
 
   const onSubmit = async (data) => {
     try {
       setLoading(true);
       
+      if (editingSection === 'location' && (!latitude || !longitude)) {
+      setSnackbarMessage('Please select a valid location on the map');
+      setSnackbarOpen(true);
+      setLoading(false);
+      return;
+    }
+      
       const updateData = {
         property_type: data.propertyType,
         unit_type: data.unitType,
         address: data.address,
-        latitude: latitude,
-        longitude: longitude,
+        latitude: latitude ? parseFloat(latitude) : null,
+        longitude: longitude ? parseFloat(longitude) : null,
         description: data.description,
         price: parseFloat(data.price),
         amenities: data.amenities,
@@ -673,7 +697,14 @@ const addCustomAmenitySimple = () => {
         {latitude && longitude && (
           <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(76, 175, 80, 0.1)', borderRadius: 1 }}>
             <Typography variant="body2" color="success.main">
-              📍 Current location: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+              Current location: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+            </Typography>
+          </Box>
+        )}
+        {(!latitude || !longitude) && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(255, 152, 0, 0.1)', borderRadius: 1 }}>
+            <Typography variant="body2" color="warning.main">
+              Please select a location on the map to save coordinates
             </Typography>
           </Box>
         )}

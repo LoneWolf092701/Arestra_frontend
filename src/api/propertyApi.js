@@ -191,11 +191,42 @@ export const getPublicPropertyById = async (propertyId) => {
 
 export const createProperty = async (propertyData) => {
   try {
+    
+    if ((propertyData.latitude || propertyData.longitude) && 
+        (!propertyData.latitude || !propertyData.longitude)) {
+      throw new Error('Both latitude and longitude must be provided together');
+    }
+    
+    if (propertyData.latitude && propertyData.longitude) {
+      const lat = parseFloat(propertyData.latitude);
+      const lng = parseFloat(propertyData.longitude);
+      
+      if (isNaN(lat) || isNaN(lng)) {
+        throw new Error('Invalid coordinate format');
+      }
+      
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        throw new Error('Coordinates out of valid range');
+      }
+    }
+
+    const payload = {
+      ...propertyData,
+      latitude: propertyData.latitude ? parseFloat(propertyData.latitude) : null,
+      longitude: propertyData.longitude ? parseFloat(propertyData.longitude) : null
+    };
+
+    console.log('Creating property with coordinates:', {
+      latitude: payload.latitude,
+      longitude: payload.longitude,
+      address: payload.address
+    });
+
     if (!propertyData || typeof propertyData !== 'object') {
       throw new Error('Property data is required');
     }
 
-    const response = await apiClient.post('/properties', propertyData);
+    const response = await apiClient.post('/properties', payload);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -214,8 +245,32 @@ export const updateProperty = async (propertyId, updateData) => {
     if (!updateData || typeof updateData !== 'object') {
       throw new Error('Update data is required');
     }
+    
+    if ((updateData.latitude || updateData.longitude) && 
+        (!updateData.latitude || !updateData.longitude)) {
+      throw new Error('Both latitude and longitude must be provided together');
+    }
+    
+    if (updateData.latitude && updateData.longitude) {
+      const lat = parseFloat(updateData.latitude);
+      const lng = parseFloat(updateData.longitude);
+      
+      if (isNaN(lat) || isNaN(lng)) {
+        throw new Error('Invalid coordinate format');
+      }
+      
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        throw new Error('Coordinates out of valid range');
+      }
+    }
 
-    const response = await apiClient.put(`/properties/${validatedId}`, updateData);
+    const payload = {
+      ...updateData,
+      latitude: updateData.latitude ? parseFloat(updateData.latitude) : null,
+      longitude: updateData.longitude ? parseFloat(updateData.longitude) : null
+    };
+
+    const response = await apiClient.put(`/properties/${validatedId}`, payload);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
