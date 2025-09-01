@@ -128,6 +128,8 @@ const AddPropertyDetails = () => {
   const [addressValue, setAddressValue] = useState('');
 const [latitude, setLatitude] = useState(null);
 const [longitude, setLongitude] = useState(null);
+const [locationError, setLocationError] = useState('');
+const [isLocationValid, setIsLocationValid] = useState(false);
 
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm({
     resolver: yupResolver(validationSchema),
@@ -172,13 +174,50 @@ const [longitude, setLongitude] = useState(null);
   const facilitiesValue = watch('facilities') || {};
   
   const handleLocationSelect = (lat, lng, formattedAddress) => {
+  console.log('Location selected:', { lat, lng, formattedAddress });
+  
+  // Validate coordinates
+  if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
+    setLocationError('Invalid coordinates received');
+    setIsLocationValid(false);
+    return;
+  }
+  
+  // Validate coordinate ranges
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    setLocationError('Coordinates out of valid range');
+    setIsLocationValid(false);
+    return;
+  }
+  
   setLatitude(lat);
   setLongitude(lng);
-  setValue('address', formattedAddress);
-  setAddressValue(formattedAddress);
+  setIsLocationValid(true);
+  setLocationError('');
+  
+  if (formattedAddress) {
+    setValue('address', formattedAddress);
+    setAddressValue(formattedAddress);
+  }
+};
+
+const validateLocationData = () => {
+  if (!latitude || !longitude) {
+    setLocationError('Please select a location on the map');
+    return false;
+  }
+  
+  if (!isLocationValid) {
+    setLocationError('Invalid location data');
+    return false;
+  }
+  
+  return true;
 };
 
   const onSubmit = async (data) => {
+    
+
     if (selectedAmenities.length === 0) {
       setSnackbarMessage('Please select at least one amenity');
       setSnackbarOpen(true);
@@ -191,12 +230,21 @@ const [longitude, setLongitude] = useState(null);
       return;
     }
 
+     setLocationError('');
+  
+  // Validate location
+  if (!validateLocationData()) {
+    setSnackbarMessage('Please select a valid location on the map');
+    setSnackbarOpen(true);
+    return;
+  }
+
     const formattedData = {
       property_type: propertyType,
       unit_type: data.unitType,
       address: data.address,
-      latitude: latitude,
-      longitude: longitude,
+      latitude: parseFloat(latitude),
+      longitude: parseFloat(longitude),
       description: data.description,
       price: parseFloat(data.price),
       advance_percentage: parseFloat(data.advancePercentage) || 30.00, 
@@ -498,10 +546,18 @@ const [longitude, setLongitude] = useState(null);
     showSearch={true}
   />
   
-  {latitude && longitude && (
+  {latitude && longitude && isLocationValid && (
     <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(76, 175, 80, 0.1)', borderRadius: 1 }}>
       <Typography variant="body2" color="success.main">
-        📍 Location selected: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+        Location confirmed: {latitude.toFixed(6)}, {longitude.toFixed(6)}
+      </Typography>
+    </Box>
+  )}
+
+  {locationError && (
+    <Box sx={{ mt: 2, p: 2, bgcolor: 'rgba(244, 67, 54, 0.1)', borderRadius: 1 }}>
+      <Typography variant="body2" color="error.main">
+        {locationError}
       </Typography>
     </Box>
   )}
