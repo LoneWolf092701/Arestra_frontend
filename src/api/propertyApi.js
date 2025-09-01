@@ -590,6 +590,22 @@ export const getPropertyById = async (propertyId) => {
  * @param {number|string} propertyId - The property ID
  * @returns {Promise} Property data
  */
+// export const getOwnerPropertyById = async (propertyId) => {
+//   return getPropertyById(propertyId);
+// };
+
 export const getOwnerPropertyById = async (propertyId) => {
-  return getPropertyById(propertyId);
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    
+    const response = await apiClient.get(`/properties/owner/${validatedId}`);
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return processPropertyData(response.data);
+  } catch (error) {
+    handleApiError(error, 'fetching owner property');
+  }
 };

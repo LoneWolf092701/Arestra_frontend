@@ -25,6 +25,7 @@ import UserFavouriteProperties from './pages/UserPages/UserFavouriteProperties';
 import UserNotifications from './pages/UserPages/UserNotifications';
 import MyBookingsPage from './pages/UserPages/MyBookingsPage';
 import PaymentPage from './pages/UserPages/PaymentPage';
+import OwnerPropertyView from './pages/OwnerPropertyView';
 
 
 import AdminHome from './pages/AdminPages/AdminHome';
@@ -183,6 +184,16 @@ const AppRoutes = () => {
             />
           } 
         />
+        <Route 
+  path="/owner-property/:id" 
+  element={
+    <ProtectedRoute>
+      <RoleProtectedRoute allowedRoles={['propertyowner']}>
+        <OwnerPropertyView />
+      </RoleProtectedRoute>
+    </ProtectedRoute>
+  } 
+/>
         <Route 
           path="/view-property/:id" 
           element={
