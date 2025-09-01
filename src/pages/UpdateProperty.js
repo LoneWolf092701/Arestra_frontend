@@ -1219,3 +1219,4 @@ const addCustomAmenitySimple = () => {
 };
 
 export default UpdateProperty;
+

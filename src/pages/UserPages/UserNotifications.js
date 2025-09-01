@@ -199,7 +199,7 @@ const UserNotifications = () => {
   }
 
   if (notification.booking_id) {
-    navigate(`/bookings/${notification.booking_id}`);
+    navigate(`/payment/${notification.booking_id}`);
   } else if (notification.property_id) {
     navigate(`/user-property-view/${notification.property_id}`);
   }
