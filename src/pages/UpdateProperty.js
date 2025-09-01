@@ -62,10 +62,7 @@ const availableAmenities = [
   'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished', 'Recreation Room'
 ];
 
-const availableFacilities = [
-  'Swimming Pool', 'Recreation Room', 'Bed Linens', 'Hot Water', 'Air Conditioning', 'Kitchen',
-  'Washing Machine', 'WiFi', 'TV', 'Parking', 'Security', 'Garden', 'Bedrooms', 'Bathrooms', 'Living Area', 'Balcony'
-];
+const availableFacilities = ['Bedrooms', 'Bathrooms', 'Kitchen', 'Balcony', 'Living Area'];
 
 const schema = yup.object().shape({
   propertyType: yup.string().required('Property type is required'),

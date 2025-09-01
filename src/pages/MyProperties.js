@@ -387,28 +387,29 @@ const MyProperties = () => {
                         >
                           Delete
                         </Button>
-                        <Button
-                          size="small"
-                          startIcon={<EditIcon />}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditProperty(property);
-                          }}
-                          sx={{
-                            minWidth: 'auto',
-                            px: 1,
-                            py: 0.5,
-                            backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)',
-                            color: isDark ? theme.textPrimary : theme.textPrimary,
-                            fontSize: '0.75rem',
-                            '&:hover': { 
-                              backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,1)',
-                              transform: 'scale(1.05)'
-                            }
-                          }}
-                        >
-                          Edit
-                        </Button>
+                        {property.approval_status !== 'rejected' && (
+  <Button
+    size="small"
+    startIcon={<EditIcon />}
+    onClick={(e) => {
+      e.stopPropagation();
+      handleEditProperty(property);
+    }}
+    sx={{
+      minWidth: 'auto',
+      px: 1,
+      py: 0.5,
+      backgroundColor: isDark ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.9)',
+      color: theme.primary,
+      fontSize: '0.75rem',
+      '&:hover': { 
+        backgroundColor: isDark ? 'rgba(0,0,0,0.9)' : 'rgba(255,255,255,1)'
+      }
+    }}
+  >
+    Edit
+  </Button>
+)}
                       </Box>
                     </Box>
 

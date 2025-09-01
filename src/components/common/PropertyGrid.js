@@ -168,7 +168,9 @@ const PropertyGrid = ({
     }
   };
 
-  const handleEdit = (propertyId) => {
+  const handleEdit = (property) => {
+    const propertyId = property.id || property.property_id;
+
     if (onEditProperty) {
       onEditProperty(propertyId);
     } else {
@@ -549,27 +551,27 @@ const PropertyGrid = ({
                   View Details
                 </Button>
 
-                {showMyProperties && (
-                  <Button
-                    variant="outlined"
-                    startIcon={<EditIcon />}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleEdit(propertyId);
-                    }}
-                    sx={{
-                      ml: 1,
-                      borderColor: theme.primary,
-                      color: theme.primary,
-                      '&:hover': {
-                        backgroundColor: theme.primary,
-                        color: 'white'
-                      }
-                    }}
-                  >
-                    Edit
-                  </Button>
-                )}
+                {showMyProperties && property.approval_status !== 'rejected' && (
+  <Button
+    variant="outlined"
+    startIcon={<EditIcon />}
+    onClick={(e) => {
+      e.stopPropagation();
+      handleEdit(property);
+    }}
+    sx={{
+      ml: 1,
+      borderColor: theme.primary,
+      color: theme.primary,
+      '&:hover': {
+        backgroundColor: theme.primary,
+        color: 'white'
+      }
+    }}
+  >
+    Edit
+  </Button>
+)}
               </CardActions>
             </Card>
           </Grid>
