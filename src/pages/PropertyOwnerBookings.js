@@ -64,6 +64,14 @@ import {
 import { getMyProperties } from '../api/propertyApi';
 import { useTheme } from '../contexts/ThemeContext';
 import AppSnackbar from '../components/common/AppSnackbar';
+import {
+  CardMedia
+} from '@mui/material';
+import {
+  AccountBalance as AccountBalanceIcon,
+  Receipt as ReceiptIcon,
+  PhotoCamera as PhotoCameraIcon
+} from '@mui/icons-material';
 
 const getStatusColor = (status) => {
   const statusColors = {

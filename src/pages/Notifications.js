@@ -73,6 +73,8 @@ const Notifications = () => {
   loading: false
 });
 
+const [accountInfo, setAccountInfo] = useState('');
+
   useEffect(() => {
     loadNotifications();
     loadUnreadCount();
@@ -140,6 +142,32 @@ const Notifications = () => {
     });
     setResponseMessage('');
   };
+
+  const handleActionSubmit = async () => {
+  if (actionDialog.action === 'accepted' && !accountInfo.trim()) {
+    setError('Please provide bank account information for payment');
+    return;
+  }
+
+  try {
+    const response = await takeNotificationAction(actionDialog.notificationId, {
+      action: actionDialog.action,
+      message: responseMessage, // Changed from actionMessage to responseMessage
+      account_info: actionDialog.action === 'accepted' ? accountInfo : undefined
+    });
+    
+    // Reset form
+    setAccountInfo('');
+    setResponseMessage(''); // Changed from setActionMessage to setResponseMessage
+    setActionDialog({ open: false, notificationId: null, action: null, booking: null });
+    
+    // Reload notifications
+    loadNotifications();
+    
+  } catch (error) {
+    setError(error.message || 'Failed to process action');
+  }
+};
 
   const handleActionConfirm = async () => {
     try {
@@ -738,6 +766,44 @@ const Notifications = () => {
               </Box>
             )}
             
+            {actionDialog.action === 'accepted' && (
+  <Box sx={{ mt: 2 }}>
+    <TextField
+      fullWidth
+      multiline
+      rows={4}
+      label="Bank Account Information *"
+      placeholder="Example:
+Bank: Commercial Bank
+Account Name: John Doe  
+Account Number: 12345678901
+Branch: Colombo 03
+
+Or for mobile payments:
+Dialog Pay: 0771234567
+Account Name: John Doe"
+      value={accountInfo}
+      onChange={(e) => setAccountInfo(e.target.value)}
+      required
+      sx={{ mt: 2 }}
+      helperText="Provide your bank account or mobile payment details for the tenant to make payment"
+      InputProps={{
+        endAdornment: (
+          <Button
+            variant="contained"
+            color="primary"
+            size="small"
+            onClick={handleActionSubmit}
+            sx={{ mr: 1 }}
+          >
+            Send
+          </Button>
+        ),
+      }}
+    />
+  </Box>
+)}
+
             <TextField
               fullWidth
               multiline

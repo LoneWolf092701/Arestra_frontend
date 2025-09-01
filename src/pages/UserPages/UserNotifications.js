@@ -188,19 +188,22 @@ const UserNotifications = () => {
 
   // Handle notification click
   const handleNotificationClick = (notification) => {
-    if (!notification.read_at) {
-      handleMarkAsRead(notification.id);
-    }
+  if (notification.type === 'booking_approved_payment') {
+    handlePaymentNotificationClick(notification);
+    return;
+  }
+  
+  // Existing click handling...
+  if (!notification.read_at) {
+    handleMarkAsRead(notification.id);
+  }
 
-    // Navigate based on notification type
-    if (notification.booking_id) {
-      navigate(`/bookings/${notification.booking_id}`);
-    } else if (notification.property_id) {
-      navigate(`/user-property-view/${notification.property_id}`);
-    }
-    
-    setDetailDialogOpen(false);
-  };
+  if (notification.booking_id) {
+    navigate(`/bookings/${notification.booking_id}`);
+  } else if (notification.property_id) {
+    navigate(`/user-property-view/${notification.property_id}`);
+  }
+};
 
   // Mark all as read
   const markAllAsRead = async () => {
@@ -225,6 +228,18 @@ const UserNotifications = () => {
       });
     }
   };
+
+  const handlePaymentNotificationClick = (notification) => {
+  if (notification.type === 'booking_approved_payment') {
+    // Navigate to payment page
+    navigate(`/payment/${notification.booking_id}`);
+  }
+  
+  // Mark as read if not already read
+  if (!notification.read_at) {
+    handleMarkAsRead(notification.id);
+  }
+};
 
   // Menu handlers
   const handleMenuOpen = (event, notification) => {

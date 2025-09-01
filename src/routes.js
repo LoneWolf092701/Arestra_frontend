@@ -24,6 +24,8 @@ import UserBookingPage from "./pages/UserPages/UserBookingPage";
 import UserFavouriteProperties from './pages/UserPages/UserFavouriteProperties';
 import UserNotifications from './pages/UserPages/UserNotifications';
 import MyBookingsPage from './pages/UserPages/MyBookingsPage';
+import PaymentPage from './pages/UserPages/PaymentPage';
+
 
 import AdminHome from './pages/AdminPages/AdminHome';
 import AdminNewListings from './pages/AdminPages/AdminNewListing';
@@ -143,6 +145,16 @@ const AppRoutes = () => {
             />
           } 
         />
+
+        <Route 
+  path="/payment/:bookingId" 
+  element={
+    <RoleProtectedRoute 
+      allowedRoles={['user']} 
+      element={<PaymentPage />} 
+    />
+  } 
+/>
         
         <Route 
           path="/home" 
