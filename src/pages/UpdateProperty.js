@@ -262,6 +262,7 @@ const UpdateProperty = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [selectedAmenityToAdd, setSelectedAmenityToAdd] = useState('');
   const [selectedFacilityToAdd, setSelectedFacilityToAdd] = useState('');
+  const [customAmenity, setCustomAmenity] = useState('');
 
   const [latitude, setLatitude] = useState(null);
 const [longitude, setLongitude] = useState(null);
@@ -468,6 +469,21 @@ const [longitude, setLongitude] = useState(null);
       setSelectedAmenityToAdd('');
     }
   };
+
+  const addAmenitySimple = (amenity) => {
+  if (amenity && !amenitiesValue[amenity]) {
+    const currentAmenities = { ...amenitiesValue };
+    currentAmenities[amenity] = 1;
+    setValue('amenities', currentAmenities);
+  }
+};
+
+const addCustomAmenitySimple = () => {
+  if (customAmenity.trim() && !amenitiesValue[customAmenity.trim()]) {
+    addAmenitySimple(customAmenity.trim());
+    setCustomAmenity('');
+  }
+};
 
   const updateFacilityCount = (facility, increment) => {
     const currentValue = facilitiesValue[facility] || 0;
@@ -697,50 +713,92 @@ const [longitude, setLongitude] = useState(null);
 </EditableSection>
 
           <EditableSection
-            title="Property Amenities"
-            isEditing={editingSection === 'amenities'}
-            onEdit={() => setEditingSection('amenities')}
-            onSave={() => setEditingSection('')}
-            onCancel={handleCancelEdit}
-            error={errors.amenities?.message}
-          >
-            {Object.keys(amenitiesValue).length > 0 && (
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                {Object.entries(amenitiesValue).map(([amenity, quantity]) => (
-                  <Grid item xs={12} sm={6} md={4} key={amenity}>
-                    <AmenityQuantitySelector
-                      amenity={amenity}
-                      quantity={quantity}
-                      onQuantityChange={(newQuantity) => updateAmenityQuantity(amenity, newQuantity)}
-                      onRemove={() => removeAmenity(amenity)}
-                      disabled={editingSection !== 'amenities'}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            )}
+  title="Property Amenities"
+  isEditing={editingSection === 'amenities'}
+  onEdit={() => setEditingSection('amenities')}
+  onSave={() => setEditingSection('')}
+  onCancel={handleCancelEdit}
+  error={errors.amenities?.message}
+>
+  {Object.keys(amenitiesValue).length > 0 && (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="body1" sx={{ mb: 2 }}>
+        Selected Amenities:
+      </Typography>
+      <Grid container spacing={1}>
+        {Object.keys(amenitiesValue).map((amenity) => (
+          <Grid item key={amenity}>
+            <Chip
+              label={amenity}
+              variant="filled"
+              color="primary"
+              onClick={() => editingSection === 'amenities' ? removeAmenity(amenity) : null}
+              onDelete={editingSection === 'amenities' ? () => removeAmenity(amenity) : undefined}
+              sx={{ 
+                m: 0.5, 
+                cursor: editingSection === 'amenities' ? 'pointer' : 'default',
+                backgroundColor: theme.primary,
+                color: 'white'
+              }}
+            />
+          </Grid>
+        ))}
+      </Grid>
+    </Box>
+  )}
 
-            {editingSection === 'amenities' && (
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
-                <FormControl sx={{ minWidth: 200 }}>
-                  <InputLabel>Add Amenity</InputLabel>
-                  <Select
-                    value={selectedAmenityToAdd}
-                    onChange={(e) => setSelectedAmenityToAdd(e.target.value)}
-                  >
-                    {availableAmenities.filter(amenity => !amenitiesValue[amenity]).map(amenity => (
-                      <MenuItem key={amenity} value={amenity}>
-                        {amenity}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <Button variant="contained" onClick={addAmenity} disabled={!selectedAmenityToAdd}>
-                  Add
-                </Button>
-              </Box>
-            )}
-          </EditableSection>
+  {editingSection === 'amenities' && (
+    <>
+      <Typography variant="body1" sx={{ mb: 2 }}>
+        Available Amenities:
+      </Typography>
+      <Grid container spacing={1} sx={{ mb: 3 }}>
+        {availableAmenities
+          .filter(amenity => !amenitiesValue[amenity])
+          .map((amenity) => (
+            <Grid item key={amenity}>
+              <Chip
+                label={amenity}
+                variant="outlined"
+                onClick={() => addAmenitySimple(amenity)}
+                sx={{ 
+                  m: 0.5, 
+                  cursor: 'pointer',
+                  '&:hover': {
+                    backgroundColor: `${theme.primary}20`
+                  }
+                }}
+              />
+            </Grid>
+          ))}
+      </Grid>
+      
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <TextField
+          value={customAmenity}
+          onChange={(e) => setCustomAmenity(e.target.value)}
+          placeholder="Add custom amenity"
+          size="small"
+          sx={{ flexGrow: 1 }}
+          onKeyPress={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addCustomAmenitySimple();
+            }
+          }}
+        />
+        <Button
+          variant="outlined"
+          startIcon={<AddIcon />}
+          onClick={addCustomAmenitySimple}
+          disabled={!customAmenity.trim()}
+        >
+          Add Custom
+        </Button>
+      </Box>
+    </>
+  )}
+</EditableSection>
 
           <EditableSection
             title="Property Facilities"
