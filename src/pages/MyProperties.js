@@ -202,8 +202,11 @@ const MyProperties = () => {
   };
 
   const handleViewProperty = (property) => {
-    navigate(`/view-property/${property.id}`);
-  };
+  const propertyId = property.id || property.property_id;
+  
+  // Use owner route for all properties in MyProperties to ensure owners can view their pending properties
+  navigate(`/owner-property/${propertyId}`);
+};
 
   const handleEditProperty = (property) => {
     navigate(`/update-property/${property.id}`);

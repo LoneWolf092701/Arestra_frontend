@@ -64,10 +64,17 @@ const [properties, setProperties] = useState([]);
   };
 
   const handleViewProperty = (property) => {
-    // Extract the property ID from the property object
-    const propertyId = property.id || property.property_id;
+  const propertyId = property.id || property.property_id;
+  
+  // Check if the property is approved - use public route, otherwise use owner route
+  if (property.approval_status === 'approved') {
     navigate(`/view-property/${propertyId}`);
-  };
+  } else {
+    // For pending/rejected properties, use the owner route
+    navigate(`/owner-property/${propertyId}`);
+  }
+};
+
 
   const handleEditProperty = (propertyId) => {
     // This receives propertyId directly from PropertyGrid
