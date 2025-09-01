@@ -4,7 +4,8 @@ import { GoogleMap, LoadScript, Marker } from '@react-google-maps/api';
 
 const containerStyle = {
   width: '100%',
-  height: '300px'
+  height: '300px',
+  borderRadius: '8px'
 };
 
 const defaultCenter = {
@@ -147,13 +148,13 @@ const MapSearch = ({
 
   console.log({isMapLoaded});
 
-  if (!apiKey) {
-    return (
-      <Alert severity="error">
-        Google Maps API key not configured. Please check environment variables.
-      </Alert>
-    );
-  }
+  if (!apiKey || apiKey === 'AIzaSyCjQZnGoOVXwd2M2Lp3cwvfGgTRfCViuaM') {
+  return (
+    <Alert severity="error">
+      Google Maps API key not configured or invalid. Please set a valid API key in environment variables.
+    </Alert>
+  );
+}
 
   return (
     <Box>
@@ -189,7 +190,7 @@ const MapSearch = ({
 
       <LoadScript 
         googleMapsApiKey={apiKey}
-        // libraries={libraries}
+        libraries={libraries}
         onLoad={() => setIsMapLoaded(true)}
         onError={() => setError('Failed to load Google Maps')}
         loadingElement={
@@ -200,20 +201,21 @@ const MapSearch = ({
         }
       > 
         <GoogleMap
-          mapContainerStyle={containerStyle}
-          center={mapCenter}
-          zoom={markerPosition ? 15 : 10}
-          onClick={handleMapClick}
-          options={{
-            disableDefaultUI: readonly,
-            zoomControl: !readonly,
-            mapTypeControl: false,
-            scaleControl: true,
-            streetViewControl: !readonly,
-            rotateControl: false,
-            fullscreenControl: !readonly
-          }}
-        >
+  mapContainerStyle={containerStyle}
+  center={mapCenter}
+  zoom={markerPosition ? 15 : 10}
+  onClick={handleMapClick}
+  options={{
+    disableDefaultUI: readonly,
+    zoomControl: !readonly,
+    mapTypeControl: false,
+    scaleControl: true,
+    streetViewControl: !readonly,
+    rotateControl: false,
+    fullscreenControl: !readonly
+  }}
+  onLoad={() => setIsMapLoaded(true)}
+>
           {markerPosition && (
             <Marker 
               position={markerPosition} 

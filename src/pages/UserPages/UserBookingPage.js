@@ -876,118 +876,148 @@ const [currentBookingId, setCurrentBookingId] = useState(null);
 
         {/* Booking Summary for Right Side */}
         {pricingBreakdown && (
-          <Card sx={{ 
-            backgroundColor: isDark ? theme.cardBackground : '#ffffff',
-            border: isDark ? `1px solid ${theme.border}` : 'none',
-            position: 'sticky',
-            top: 20
-          }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ 
-                mb: 2, 
-                fontWeight: 600,
-                color: isDark ? theme.textPrimary : 'inherit'
-              }}>
-                Cozy Private Room for Rent Near Colombo City Center
-              </Typography>
-              
-              <Typography variant="body2" sx={{ 
-                mb: 2,
-                color: isDark ? theme.textSecondary : 'inherit'
-              }}>
-                100, Sea Street, Colombo 02
-              </Typography>
+  <Card sx={{ 
+    backgroundColor: isDark ? theme.cardBackground : '#ffffff',
+    border: isDark ? `1px solid ${theme.border}` : 'none',
+    position: 'sticky',
+    top: 20
+  }}>
+    <CardContent>
+      <Typography variant="h6" sx={{ 
+        mb: 2, 
+        fontWeight: 600,
+        color: isDark ? theme.textPrimary : 'inherit'
+      }}>
+        {property?.property_type} - {property?.unit_type}
+      </Typography>
+      
+      <Typography variant="body2" sx={{ 
+        mb: 2,
+        color: isDark ? theme.textSecondary : 'inherit'
+      }}>
+        {property?.address}
+      </Typography>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <BedIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
-                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
-                  {property?.bedrooms || 3} Bedrooms
-                </Typography>
-              </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <BedIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+        <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+          {property?.bedrooms || 0} Bedrooms
+        </Typography>
+      </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <BathtubIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
-                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
-                  {property?.bathrooms || 2} Bathrooms
-                </Typography>
-              </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+        <BathtubIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+        <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+          {property?.bathrooms || 0} Bathrooms
+        </Typography>
+      </Box>
 
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <HomeIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
-                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
-                  1 Parking
-                </Typography>
-              </Box>
+      {property?.parking && (
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+          <HomeIcon sx={{ mr: 1, fontSize: 18, color: theme.primary }} />
+          <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+            {property?.parking} Parking
+          </Typography>
+        </Box>
+      )}
 
-              <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+      <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
 
-              <Typography variant="h6" sx={{ 
-                mb: 2, 
-                fontWeight: 600,
-                color: isDark ? theme.textPrimary : 'inherit'
-              }}>
-                Price Details
-              </Typography>
+      <Typography variant="h6" sx={{ 
+        mb: 2, 
+        fontWeight: 600,
+        color: isDark ? theme.textPrimary : 'inherit'
+      }}>
+        Price Details
+      </Typography>
 
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
-                  Rental for the first Month:
-                </Typography>
-                <Typography variant="body2" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Rs. {pricingBreakdown.subtotal.toLocaleString()}
-                </Typography>
-              </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+          Rental for the first Month:
+        </Typography>
+        <Typography variant="body2" sx={{ 
+          fontWeight: 600,
+          color: isDark ? theme.textPrimary : 'inherit'
+        }}>
+          Rs. {pricingBreakdown.subtotal.toLocaleString()}
+        </Typography>
+      </Box>
 
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
-                  One time service fee:
-                </Typography>
-                <Typography variant="body2" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Rs. {pricingBreakdown.serviceFee.toLocaleString()}
-                </Typography>
-              </Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+          One time service fee:
+        </Typography>
+        <Typography variant="body2" sx={{ 
+          fontWeight: 600,
+          color: isDark ? theme.textPrimary : 'inherit'
+        }}>
+          Rs. {pricingBreakdown.serviceFee.toLocaleString()}
+        </Typography>
+      </Box>
 
-              <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" sx={{ color: isDark ? theme.textSecondary : 'inherit' }}>
+          Advance Payment ({pricingBreakdown.advancePercentage || 30}%):
+        </Typography>
+        <Typography variant="body2" sx={{ 
+          fontWeight: 600,
+          color: isDark ? theme.textPrimary : 'inherit'
+        }}>
+          Rs. {pricingBreakdown.advanceAmount.toLocaleString()}
+        </Typography>
+      </Box>
 
-              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                <Typography variant="h6" sx={{ 
-                  fontWeight: 600,
-                  color: isDark ? theme.textPrimary : 'inherit'
-                }}>
-                  Sub Total
-                </Typography>
-                <Typography variant="h6" sx={{ 
-                  fontWeight: 600,
-                  color: theme.primary
-                }}>
-                  Rs. {pricingBreakdown.total.toLocaleString()}
-                </Typography>
-              </Box>
+      <Divider sx={{ mb: 2, borderColor: isDark ? theme.divider : 'rgba(0, 0, 0, 0.12)' }} />
 
-              <Alert 
-                severity="info" 
-                sx={{ 
-                  mt: 2,
-                  backgroundColor: isDark ? theme.surfaceBackground : undefined,
-                  color: isDark ? theme.textPrimary : undefined,
-                  '& .MuiAlert-icon': {
-                    color: isDark ? theme.info : undefined,
-                  }
-                }}
-              >
-                <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
-                  You will be charged once the owner accepts your request
-                </Typography>
-              </Alert>
-            </CardContent>
-          </Card>
-        )}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+    <Typography variant="h7" sx={{ 
+      fontWeight: 600,
+      color: isDark ? theme.textPrimary : 'inherit'
+    }}>
+      Total Amount
+    </Typography>
+    <Typography variant="h7" sx={{ 
+      fontWeight: 600,
+      color: theme.primary
+    }}>
+      Rs. {pricingBreakdown.total.toLocaleString()}
+    </Typography>
+  </Box>
+  <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+    <Typography variant="h6" sx={{ 
+      fontWeight: 600,
+      color: isDark ? theme.textPrimary : 'inherit'
+    }}>
+      Advance Amount
+    </Typography>
+    <Typography variant="h6" sx={{ 
+      fontWeight: 600,
+      color: theme.primary
+    }}>
+      Rs. {pricingBreakdown.advanceAmount.toLocaleString()}
+    </Typography>
+  </Box>
+</Box>
+
+      <Alert 
+        severity="info" 
+        sx={{ 
+          mt: 2,
+          backgroundColor: isDark ? theme.surfaceBackground : undefined,
+          color: isDark ? theme.textPrimary : undefined,
+          '& .MuiAlert-icon': {
+            color: isDark ? theme.info : undefined,
+          }
+        }}
+      >
+        <Typography variant="body2" sx={{ color: isDark ? theme.textPrimary : 'inherit' }}>
+          You will be charged once the owner accepts your request
+        </Typography>
+      </Alert>
+    </CardContent>
+  </Card>
+)}
       </Grid>
     </Grid>
   );

@@ -339,6 +339,9 @@ const UserViewProperty = () => {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportDescription, setReportDescription] = useState('');
+
+  const [propertyBookings, setPropertyBookings] = useState([]);
+
   
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
@@ -439,6 +442,7 @@ const UserViewProperty = () => {
 
     if (id) {
       fetchProperty();
+      checkPropertyBookings();
     }
   }, [id, isLoggedIn]);
   
@@ -627,6 +631,64 @@ const UserViewProperty = () => {
     navigate(`/user-booking/${id}`);
   };
 
+  const checkPropertyBookings = async () => {
+  try {
+    const response = await fetch(`/api/bookings/property/${id}/status`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      const bookings = await response.json();
+      setPropertyBookings(bookings.active_bookings || []);
+    }
+  } catch (error) {
+    console.error('Error checking property bookings:', error);
+  }
+};
+
+const renderBookingButton = () => {
+  const hasActiveBooking = propertyBookings.some(booking => 
+    booking.status === 'confirmed' || booking.status === 'payment_submitted'
+  );
+  
+  if (hasActiveBooking) {
+    return (
+      <Button
+        variant="outlined"
+        fullWidth
+        disabled
+        sx={{ mt: 2 }}
+      >
+        Currently Booked
+      </Button>
+    );
+  }
+  
+  return (
+    <Button
+                variant="contained"
+                fullWidth
+                size="large"
+                onClick={handleBooking}
+                sx={{
+                  backgroundColor: theme.primary,
+                  py: 1.5,
+                  fontSize: '1.1rem',
+                  fontWeight: 600,
+                  '&:hover': {
+                    backgroundColor: theme.primaryDark
+                  }
+                }}
+              >
+                Book Now
+              </Button>
+  );
+};
+
+
   const handleEdit = () => {
     if (isPropertyOwner) {
       navigate(`/update-property/${id}`);
@@ -710,27 +772,35 @@ const UserViewProperty = () => {
   </Paper>
 )}
 
-          {facilities && Object.keys(facilities).length > 0 && (
+         {facilities && Object.keys(facilities).length > 0 && (
   <Paper sx={{ p: 3, mt: 3 }}>
     <Typography variant="h5" sx={{ fontWeight: 600, mb: 2 }}>
       Facilities
     </Typography>
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-      {Object.entries(facilities).map(([key, value], index) => (
-        <Chip
-          key={index}
-          label={`${key}: ${value}`}
-          variant="outlined"
-          color="secondary"
-          size="small"
-          sx={{
-            backgroundColor: 'rgba(156, 39, 176, 0.04)',
-            '&:hover': {
-              backgroundColor: 'rgba(156, 39, 176, 0.08)',
-            }
-          }}
-        />
-      ))}
+      {facilities.map((facility, index) => {
+        let count = 1; // Default count if not specified
+        if (facility === 'Bedrooms' && property.bedrooms !== undefined) {
+          count = property.bedrooms;
+        } else if (facility === 'Bathrooms' && property.bathrooms !== undefined) {
+          count = property.bathrooms;
+        }
+        return (
+          <Chip
+            key={index}
+            label={`${facility}: ${count}`}
+            variant="outlined"
+            color="secondary"
+            size="small"
+            sx={{
+              backgroundColor: 'rgba(156, 39, 176, 0.04)',
+              '&:hover': {
+                backgroundColor: 'rgba(156, 39, 176, 0.08)',
+              }
+            }}
+          />
+        );
+      })}
     </Box>
   </Paper>
 )}
@@ -1027,24 +1097,10 @@ const UserViewProperty = () => {
             </Box>
 
             {!isPropertyOwner && (
-              <Button
-                variant="contained"
-                fullWidth
-                size="large"
-                onClick={handleBooking}
-                sx={{
-                  backgroundColor: theme.primary,
-                  py: 1.5,
-                  fontSize: '1.1rem',
-                  fontWeight: 600,
-                  '&:hover': {
-                    backgroundColor: theme.primaryDark
-                  }
-                }}
-              >
-                Book Now
-              </Button>
-            )}
+  <>
+    {renderBookingButton()}
+  </>
+)}
 
             {isPropertyOwner && (
               <>

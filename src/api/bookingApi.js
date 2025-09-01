@@ -671,6 +671,30 @@ export const validateBookingRequest = (bookingData) => {
   };
 };
 
+export const submitPaymentReceipt = async (bookingId, receiptFile, nicFile) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const formData = new FormData();
+    formData.append('payment_receipt', receiptFile);
+    formData.append('nic_document', nicFile);
+
+    const response = await apiClient.post(`/bookings/${validatedId}/payment-receipt`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'submitting payment receipt');
+  }
+};
+
 export default {
   submitBookingRequest,
   getUserBookings,
@@ -678,6 +702,7 @@ export default {
   respondToBookingRequest,
   submitPayment,
   verifyPayment,
+  submitPaymentReceipt,
   getBookingDetails,
   getPropertyAvailability,
   getPropertyAvailabilityStatus,
