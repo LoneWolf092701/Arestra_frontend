@@ -20,7 +20,7 @@ import {
   PhotoCamera as PhotoCameraIcon,
   CreditCard as CreditCardIcon
 } from '@mui/icons-material';
-import { getBookingDetails } from '../../api/bookingApi';
+import { getBookingDetails, submitPaymentReceipt } from '../../api/bookingApi'; // Import submitPaymentReceipt
 
 const PaymentPage = () => {
   const { bookingId } = useParams();
@@ -73,30 +73,14 @@ const PaymentPage = () => {
     setError('');
 
     try {
-      const formData = new FormData();
-      formData.append('payment_receipt', files.payment_receipt);
-      formData.append('nic_document', files.nic_document);
-
-      const response = await fetch(`/api/bookings/${bookingId}/payment-receipt`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: formData
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        setSuccess('Payment receipt and documents uploaded successfully! The property owner will review and confirm your payment.');
-        setTimeout(() => {
-          navigate('/user-bookings');
-        }, 3000);
-      } else {
-        throw new Error(result.message || 'Upload failed');
-      }
+      // Use submitPaymentReceipt from bookingApi.js
+      const response = await submitPaymentReceipt(bookingId, files.payment_receipt, files.nic_document);
+      setSuccess('Payment receipt and documents uploaded successfully! The property owner will review and confirm your payment.');
+      setTimeout(() => {
+        navigate('/user-bookings');
+      }, 3000);
     } catch (error) {
-      setError(error.message);
+      setError(error.message || 'Upload failed');
     } finally {
       setUploading(false);
     }
