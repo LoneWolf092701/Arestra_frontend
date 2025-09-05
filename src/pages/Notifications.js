@@ -49,6 +49,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import PaymentIcon from '@mui/icons-material/Payment';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { Grid, } from '@mui/material';
+import AppSnackbar from '../components/common/AppSnackbar';
 
 const Notifications = () => {
   const navigate = useNavigate();
@@ -74,6 +75,8 @@ const Notifications = () => {
 });
 
 const [accountInfo, setAccountInfo] = useState('');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
 
   useEffect(() => {
     loadNotifications();
@@ -143,53 +146,57 @@ const [accountInfo, setAccountInfo] = useState('');
     setResponseMessage('');
   };
 
-  const handleActionSubmit = async () => {
+  const handleActionConfirm = async () => {
+  // Validate account info if accepting booking
   if (actionDialog.action === 'accepted' && !accountInfo.trim()) {
-    setError('Please provide bank account information for payment');
+    setError('Bank account information is required to accept booking');
     return;
   }
 
   try {
-    const response = await takeNotificationAction(actionDialog.notificationId, {
-      action: actionDialog.action,
-      message: responseMessage, // Changed from actionMessage to responseMessage
-      account_info: actionDialog.action === 'accepted' ? accountInfo : undefined
-    });
+    const { notificationId, action } = actionDialog;
     
-    // Reset form
-    setAccountInfo('');
-    setResponseMessage(''); // Changed from setActionMessage to setResponseMessage
+    // Call the API with account info if accepting
+    await takeNotificationAction(
+      notificationId, 
+      action, 
+      responseMessage,
+      action === 'accepted' ? accountInfo : undefined
+    );
+    
     setActionDialog({ open: false, notificationId: null, action: null, booking: null });
+    setResponseMessage('');
+    setAccountInfo('');
     
-    // Reload notifications
-    loadNotifications();
+    setNotifications(prev => 
+      prev.map(notification => 
+        notification.id === notificationId 
+          ? { ...notification, action_taken: action, read_at: new Date().toISOString() }
+          : notification
+      )
+    );
+    
+    loadUnreadCount();
+    
+    // Show success message
+    setError('');
+    setSnackbar({
+        open: true,
+        message: action === 'accepted' 
+      ? 'Booking accepted successfully! Account details sent to tenant.' 
+      : 'Booking rejected successfully.',
+        severity: 'success'
+      });
     
   } catch (error) {
     setError(error.message || 'Failed to process action');
+    setSnackbar({
+        open: true,
+        message: error.message || 'Failed to process action',
+        severity: 'error'
+      });
   }
 };
-
-  const handleActionConfirm = async () => {
-    try {
-      const { notificationId, action } = actionDialog;
-      await takeNotificationAction(notificationId, action, responseMessage);
-      
-      setActionDialog({ open: false, notificationId: null, action: null, booking: null });
-      setResponseMessage('');
-      
-      setNotifications(prev => 
-        prev.map(notification => 
-          notification.id === notificationId 
-            ? { ...notification, action_taken: action, read_at: new Date().toISOString() }
-            : notification
-        )
-      );
-      
-      loadUnreadCount();
-    } catch (error) {
-      setError(error.message || 'Failed to process action');
-    }
-  };
   
   const handleViewBookingDetails = async (notification) => {
   if (!notification.booking_id) return;
@@ -303,6 +310,7 @@ const [accountInfo, setAccountInfo] = useState('');
   }
 
   return (
+    <>
     <Box sx={{ 
       backgroundColor: theme.background, 
       minHeight: '100vh',
@@ -771,35 +779,18 @@ const [accountInfo, setAccountInfo] = useState('');
     <TextField
       fullWidth
       multiline
-      rows={4}
+      rows={5}
       label="Bank Account Information *"
-      placeholder="Example:
+      placeholder="Example: 
 Bank: Commercial Bank
 Account Name: John Doe  
-Account Number: 12345678901
-Branch: Colombo 03
-
-Or for mobile payments:
-Dialog Pay: 0771234567
-Account Name: John Doe"
+Account Number: 12345678
+Branch: Colombo 03"
       value={accountInfo}
       onChange={(e) => setAccountInfo(e.target.value)}
       required
       sx={{ mt: 2 }}
       helperText="Provide your bank account or mobile payment details for the tenant to make payment"
-      InputProps={{
-        endAdornment: (
-          <Button
-            variant="contained"
-            color="primary"
-            size="small"
-            onClick={handleActionSubmit}
-            sx={{ mr: 1 }}
-          >
-            Send
-          </Button>
-        ),
-      }}
     />
   </Box>
 )}
@@ -1027,6 +1018,13 @@ Account Name: John Doe"
   </DialogActions>
 </Dialog>
     </Box>
+    <AppSnackbar
+            open={snackbar.open}
+            message={snackbar.message}
+            severity={snackbar.severity}
+            onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+          />
+          </>
   );
 };
 

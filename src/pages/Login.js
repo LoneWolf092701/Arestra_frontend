@@ -15,6 +15,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { loginApi } from '../api/loginApi';
 import RoleSelection from '../components/common/RoleSelection';
 import { useTheme } from '../contexts/ThemeContext';
+import { loginUser, resendEmailVerification } from '../api/authApi';
+import AppSnackbar from '../components/common/AppSnackbar';
 
 const Login = () => {
   const [step, setStep] = useState(1); 
@@ -26,6 +28,11 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { theme, isDark } = useTheme();
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+
+  
+  const [verificationError, setVerificationError] = useState(null);
+const [resendingVerification, setResendingVerification] = useState(false);
 
   // Get return URL from query parameters
   const queryParams = new URLSearchParams(location.search);
@@ -69,41 +76,112 @@ const Login = () => {
   };
 
   const handleLoginSubmit = async (e) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setError('');
+  e.preventDefault();
+  setIsLoading(true);
+  setError('');
+  setVerificationError(null);
+  
+  try {
+    const data = await loginApi({ username, password });
+    console.log('Login successful:', data);
     
-    try {
-      const data = await loginApi({ username, password });
-      console.log('Login successful:', data);
-      
-      if (data.user.role !== selectedRole) {
-        setError(
-          `Role mismatch. You selected "${selectedRole}" but your account is "${data.user.role}".`
-        );
-        return;
-      }
-      
-      // Save token and user role
-      localStorage.setItem('token', data.token);
-      localStorage.setItem('userRole', data.user.role);
-      
-      // Set expiry to 8 hours from now
-      const expiryTime = Date.now() + 8 * 60 * 60 * 1000;
-      localStorage.setItem('tokenExpiry', expiryTime);
-      
-      // Handle successful login with potential redirect
-      handleSuccessfulLogin(data.user.role);
-      
-    } catch (err) {
-      console.error(err);
-      setError('Login failed. Check your credentials.');
-    } finally {
-      setIsLoading(false);
+    if (data.user.role !== selectedRole) {
+      setError(
+        `Role mismatch. You selected "${selectedRole}" but your account is "${data.user.role}".`
+      );
+      setSnackbar({
+        open: true,
+        message: 'Role mismatch. Please select the correct role for your account.',
+        severity: 'error'
+      });
+      return;
     }
-  };
+    
+    // Save token and user role
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('userRole', data.user.role);
+    
+    // Set expiry to 8 hours from now
+    const expiryTime = Date.now() + 8 * 60 * 60 * 1000;
+    localStorage.setItem('tokenExpiry', expiryTime);
+    
+    // Show success message
+    setSnackbar({
+      open: true,
+      message: 'Login successful! Welcome back.',
+      severity: 'success'
+    });
+    
+    // Handle successful login with potential redirect
+    setTimeout(() => {
+      handleSuccessfulLogin(data.user.role);
+    }, 1000);
+    
+  } catch (err) {
+    console.error(err);
+    
+    // Handle rate limiting (429 error)
+    if (err.response?.status === 429 || err.status === 429) {
+      const errorData = err.response?.data || {};
+      const message = `${errorData.message || 'Too many login attempts'}. Please wait ${errorData.retryAfter || '15 minutes'} before trying again.`;
+      setError(message);
+      setSnackbar({
+        open: true,
+        message: 'Too many login attempts. Please wait before trying again.',
+        severity: 'warning'
+      });
+    }
+    // Handle email verification error (403)
+    else if (err.response?.status === 403 && err.response?.data?.requiresVerification) {
+      setVerificationError({
+        email: err.response.data.email,
+        message: err.response.data.message
+      });
+      setSnackbar({
+        open: true,
+        message: 'Please verify your email address before logging in.',
+        severity: 'warning'
+      });
+    }
+    // Handle other errors  
+    else {
+      const errorMessage = err.response?.data?.message || err.message || 'Login failed. Check your credentials.';
+      setError(errorMessage);
+      setSnackbar({
+        open: true,
+        message: 'Login failed. Please check your credentials and try again.',
+        severity: 'error'
+      });
+    }
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+const handleResendVerification = async () => {
+  if (!verificationError?.email) return;
+
+  setResendingVerification(true);
+  setError('');
+  
+  try {
+    await resendEmailVerification(verificationError.email);
+    setError('');
+    setVerificationError(null);
+    setSnackbar({
+      open: true,
+      message: 'Verification email sent! Please check your email and verify before logging in.',
+      severity: 'success'
+    });
+  } catch (error) {
+    setError('Failed to resend verification email. Please try again.');
+  } finally {
+    setResendingVerification(false);
+  }
+};
 
   return (
+    <>
     <Box
       sx={{
         minHeight: '100vh',
@@ -291,6 +369,30 @@ const Login = () => {
                     },
                   }}
                 />
+                
+                {verificationError && (
+  <Alert 
+    severity="warning" 
+    sx={{ mt: 2 }}
+    action={
+      <Button 
+        color="inherit" 
+        size="small" 
+        onClick={handleResendVerification}
+        disabled={resendingVerification}
+        sx={{ color: 'inherit' }}
+      >
+        {resendingVerification ? (
+          <CircularProgress size={16} color="inherit" />
+        ) : (
+          'Resend Email'
+        )}
+      </Button>
+    }
+  >
+    {verificationError.message}
+  </Alert>
+)}
 
                 {/* Login Button with Loading State and Theme Integration */}
                 <Button 
@@ -423,6 +525,13 @@ const Login = () => {
         </Box>
       </Container>
     </Box>
+    <AppSnackbar
+        open={snackbar.open}
+        message={snackbar.message}
+        severity={snackbar.severity}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+      />
+      </>
   );
 };
 

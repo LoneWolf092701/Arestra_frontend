@@ -16,10 +16,13 @@ import {
   TextField,
   Typography
 } from '@mui/material';
+import { CheckBoxOutlineBlank, ErrorOutline } from '@mui/icons-material';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import { useNavigate } from 'react-router-dom';
-import { registerUser } from '../api/authApi';
+import { registerUser, validateEmployeeId } from '../api/authApi';
+import { useTheme } from '../contexts/ThemeContext';
 import AppSnackbar from '../components/common/AppSnackbar';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -114,22 +117,53 @@ const Signup = () => {
   });
 
   const [adminForm, setAdminForm] = useState({
-    username: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    firstName: '',
-    lastName: '',
-    phone: '',
-    gender: '',
-    birthdate: '',
-    nationality: '',
-    department: '',
-    adminLevel: '',
-    identificationNumber: ''
-  });
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: '',
+  firstName: '',
+  lastName: '',
+  phone: '',
+  gender: '',
+  birthdate: '',
+  nationality: '',
+  department: '',
+  adminLevel: '',
+  identificationNumber: '',
+  employeeId: ''
+});
 
-  
+const [employeeIdValidation, setEmployeeIdValidation] = useState({
+  isValidating: false,
+  isValid: null,
+  message: ''
+});
+
+const validateEmployeeIdField = async (employeeId) => {
+  if (!employeeId) {
+    setEmployeeIdValidation({ isValidating: false, isValid: null, message: '' });
+    return;
+  }
+
+  setEmployeeIdValidation({ isValidating: true, isValid: null, message: '' });
+
+  try {
+    const result = await validateEmployeeId(employeeId);
+    
+    setEmployeeIdValidation({
+      isValidating: false,
+      isValid: result.valid,
+      message: result.message
+    });
+  } catch (error) {
+    setEmployeeIdValidation({
+      isValidating: false,
+      isValid: false,
+      message: 'Failed to validate Employee ID. Please try again.'
+    });
+  }
+};
+
 
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
@@ -151,11 +185,17 @@ const Signup = () => {
   };
 
   const handleAdminChange = (field) => (event) => {
-    setAdminForm(prev => ({
-      ...prev,
-      [field]: event.target.value
-    }));
-  };
+  const value = event.target.value;
+  setAdminForm(prev => ({
+    ...prev,
+    [field]: value
+  }));
+
+  // Validate Employee ID on change using the API function
+  if (field === 'employeeId') {
+    validateEmployeeIdField(value);
+  }
+};
 
   const validateForm = () => {
     const currentForm = activeTab === 0 ? tenantForm : activeTab === 1 ? ownerForm : adminForm;
@@ -164,6 +204,17 @@ const Signup = () => {
       setError('Please fill in all required fields');
       return false;
     }
+    
+    if (activeTab === 2) {
+    if (!currentForm.employeeId) {
+      setError('Employee ID is required for admin registration');
+      return false;
+    }
+    if (employeeIdValidation.isValid !== true) {
+      setError('Please enter a valid Employee ID');
+      return false;
+    }
+  }
 
     if (currentForm.username.length < 3) {
       setError('Username must be at least 3 characters long');
@@ -247,7 +298,8 @@ const Signup = () => {
         nationality: currentForm.nationality,
         identification_number: currentForm.identificationNumber,
         department: currentForm.department,
-        admin_level: currentForm.adminLevel
+        admin_level: currentForm.adminLevel,
+        employee_id: currentForm.employeeId
       };
     }
     
@@ -960,6 +1012,32 @@ const Signup = () => {
                 
               </Select>
             </FormControl>
+
+            <TextField
+    fullWidth
+    name="employeeId"
+    label="Employee ID"
+    type="text"
+    margin="normal"
+    value={adminForm.employeeId}
+    onChange={handleAdminChange('employeeId')}
+    required
+    error={employeeIdValidation.isValid === false}
+    helperText={
+      employeeIdValidation.isValidating ? 'Validating...' :
+      employeeIdValidation.message || 'Enter your authorized Employee ID'
+    }
+    inputProps={{ maxLength: 10 }}
+    InputProps={{
+      endAdornment: employeeIdValidation.isValidating ? (
+        <CircularProgress size={20} />
+      ) : employeeIdValidation.isValid === true ? (
+        <CheckBoxOutlineBlank color="success" />
+      ) : employeeIdValidation.isValid === false ? (
+        <ErrorOutline color="error" />
+      ) : null
+    }}
+  />
 
             <Divider sx={{ my: 3 }} />
 

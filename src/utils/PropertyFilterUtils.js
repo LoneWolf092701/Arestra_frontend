@@ -107,23 +107,39 @@ export const applyPropertyFilters = (properties, filters) => {
 
     // Bedroom count filter - must have at least specified number
     if (filters.bedrooms && filters.bedrooms > 0) {
-      const facilities = safeParse(property.facilities, {});
-      const bedroomCount = parseInt(facilities.Bedroom || facilities.bedroom || 0);
-      
-      if (bedroomCount < filters.bedrooms) {
-        return false;
-      }
-    }
+  const facilities = safeParse(property.facilities, {});
+  
+  // Try multiple possible keys for bedroom count
+  const bedroomCount = parseInt(
+    facilities.Bedrooms || 
+    facilities.bedrooms || 
+    facilities.Bedroom || 
+    facilities.bedroom || 
+    0
+  );
+  
+  if (bedroomCount < filters.bedrooms) {
+    return false;
+  }
+}
 
     // Bathroom count filter - must have at least specified number
     if (filters.bathrooms && filters.bathrooms > 0) {
-      const facilities = safeParse(property.facilities, {});
-      const bathroomCount = parseInt(facilities.Bathroom || facilities.bathroom || 0);
-      
-      if (bathroomCount < filters.bathrooms) {
-        return false;
-      }
-    }
+  const facilities = safeParse(property.facilities, {});
+  
+  // Try multiple possible keys for bathroom count
+  const bathroomCount = parseInt(
+    facilities.Bathrooms || 
+    facilities.bathrooms || 
+    facilities.Bathroom || 
+    facilities.bathroom || 
+    0
+  );
+  
+  if (bathroomCount < filters.bathrooms) {
+    return false;
+  }
+}
 
     // Required amenities filter - property must have ALL specified amenities
     if (filters.requiredAmenities && Array.isArray(filters.requiredAmenities) && filters.requiredAmenities.length > 0) {

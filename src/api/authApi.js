@@ -98,7 +98,7 @@ export const loginUser = async (credentials) => {
       username: credentials.username.trim(),
       password: credentials.password
     });
-    
+
     if (!response.data) {
       throw new Error('Invalid response from server');
     }
@@ -109,9 +109,34 @@ export const loginUser = async (credentials) => {
       setAuthData({ token, user, expires_in });
     }
     
-    return response.data;
+    return {
+      success: true,
+      ...response.data
+    };
+
   } catch (error) {
-    handleAuthError(error, 'logging in');
+    console.error('Login error:', error);
+    
+    // Handle email verification error specifically
+    if (error.response?.status === 403 && error.response?.data?.requiresVerification) {
+      return {
+        success: false,
+        error: 'Email not verified',
+        message: error.response.data.message,
+        email: error.response.data.email,
+        requiresVerification: true
+      };
+    }
+    
+    if (error.response?.status === 401) {
+      throw new Error('Invalid username or password');
+    } else if (error.response?.status === 400) {
+      throw new Error(error.response.data?.message || 'Please provide username and password');
+    } else if (error.response?.status >= 500) {
+      throw new Error('Server error. Please try again later.');
+    }
+    
+    throw new Error(error.message || 'Login failed. Please try again.');
   }
 };
 
@@ -217,6 +242,59 @@ export const resetPassword = async (resetData) => {
     return response.data;
   } catch (error) {
     handleAuthError(error, 'resetting password');
+  }
+};
+
+// Add this function to your existing authApi.js file
+
+export const validateEmployeeId = async (employeeId) => {
+  try {
+    if (!employeeId || typeof employeeId !== 'string') {
+      throw new Error('Employee ID is required');
+    }
+
+    const response = await apiClient.post('/auth/validate-employee-id', {
+      employee_id: employeeId.trim()
+    });
+
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+
+    return {
+      success: true,
+      valid: response.data.valid,
+      message: response.data.message
+    };
+
+  } catch (error) {
+    console.error('Employee ID validation error:', error);
+    
+    if (error.response?.status === 400) {
+      return {
+        success: false,
+        valid: false,
+        message: 'Employee ID is required'
+      };
+    } else if (error.response?.status === 500) {
+      return {
+        success: false,
+        valid: false,
+        message: 'Server error. Please try again later.'
+      };
+    } else if (error.response?.data?.message) {
+      return {
+        success: false,
+        valid: false,
+        message: error.response.data.message
+      };
+    }
+    
+    return {
+      success: false,
+      valid: false,
+      message: error.message || 'Failed to validate Employee ID'
+    };
   }
 };
 

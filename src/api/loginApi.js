@@ -80,8 +80,12 @@ export const loginApi = async (credentials) => {
       throw new Error(error.response.data.message || 'Invalid login data');
     } else if (error.response?.status >= 500) {
       throw new Error('Server error. Please try again later.');
-    } else if (error.message) {
-      throw new Error(error.message);
+    } else if (error.response) {
+      console.error('Login error response:', error.response.data.message);
+      const enhancedError = new Error(error.message);
+      enhancedError.response = error.response;
+      enhancedError.status = error.response.status;
+      throw enhancedError;
     } else {
       throw new Error('Login failed. Please try again.');
     }

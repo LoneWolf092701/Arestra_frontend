@@ -1,14 +1,10 @@
 import axios from 'axios';
+import { createApiClient, createUploadClient } from './apiConfig';
+
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
-const apiClient = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+const apiClient = createApiClient();
 
 apiClient.interceptors.request.use(
   (config) => {
@@ -490,24 +486,12 @@ export const getBookingStatistics = async (options = {}) => {
   }
 };
 
-export const uploadBookingDocuments = async (bookingId, documents) => {
+export const uploadBookingDocuments = async (bookingId, formData) => {
   try {
     const validatedId = validateBookingId(bookingId);
     
-    if (!documents || !Array.isArray(documents) || documents.length === 0) {
-      throw new Error('At least one document is required');
-    }
-
-    const formData = new FormData();
-    documents.forEach((doc, index) => {
-      formData.append('documents', doc);
-    });
-
-    const response = await apiClient.post(`/bookings/${validatedId}/documents`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    const uploadClient = createUploadClient();
+    const response = await uploadClient.post(`/bookings/${validatedId}/upload-documents`, formData);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -515,7 +499,7 @@ export const uploadBookingDocuments = async (bookingId, documents) => {
     
     return response.data;
   } catch (error) {
-    handleBookingError(error, 'uploading booking documents');
+    handleBookingError(error, 'uploading documents');
   }
 };
 
@@ -695,6 +679,61 @@ export const submitPaymentReceipt = async (bookingId, receiptFile, nicFile) => {
   }
 };
 
+export const createStripePaymentIntent = async (bookingId, amount, paymentMethodId) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const response = await apiClient.post('/payments/create-payment-intent', {
+      booking_id: validatedId,
+      amount: amount,
+      payment_method_id: paymentMethodId
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'creating payment intent');
+  }
+};
+
+export const updateBookingStripePayment = async (bookingId, paymentIntentId, paymentMethodId) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const response = await apiClient.post(`/bookings/${validatedId}/stripe-payment`, {
+      payment_intent_id: paymentIntentId,
+      payment_method_id: paymentMethodId
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'updating stripe payment');
+  }
+};
+
+export const verifyStripePayment = async (paymentIntentId) => {
+  try {
+    const response = await apiClient.post('/payments/verify-stripe-payment', {
+      payment_intent_id: paymentIntentId
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'verifying stripe payment');
+  }
+};
+
 export default {
   submitBookingRequest,
   getUserBookings,
@@ -713,5 +752,8 @@ export default {
   getBookingsByDateRange,
   getBookingHistory,
   exportBookingData,
-  validateBookingRequest
+  validateBookingRequest,
+  createStripePaymentIntent,
+  updateBookingStripePayment,
+  verifyStripePayment
 };

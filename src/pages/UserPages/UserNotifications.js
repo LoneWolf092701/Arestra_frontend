@@ -22,7 +22,7 @@ import {
   ListItemIcon,
   Divider,
   Badge,
-  Tooltip
+  Tooltip,
 } from '@mui/material';
 import {
   Notifications as NotificationsIcon,
@@ -38,6 +38,7 @@ import {
   Report as ReportIcon,
   MoreVert as MoreVertIcon
 } from '@mui/icons-material';
+import { Payment, LocationOn } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../../contexts/ThemeContext';
 import AppSnackbar from '../../components/common/AppSnackbar';
@@ -202,6 +203,16 @@ const UserNotifications = () => {
     navigate(`/payment/${notification.booking_id}`);
   } else if (notification.property_id) {
     navigate(`/user-property-view/${notification.property_id}`);
+  }
+};
+
+const getNotificationData = (notification) => {
+  try {
+    return typeof notification.data === 'string' 
+      ? JSON.parse(notification.data) 
+      : notification.data || {};
+  } catch {
+    return {};
   }
 };
 
@@ -637,93 +648,238 @@ const UserNotifications = () => {
                 </Box>
               </DialogTitle>
               
-              <DialogContent sx={{ pt: 3 }}>
-                <Typography 
-                  variant="body1" 
-                  sx={{ 
-                    color: theme.textPrimary,
-                    mb: 2,
-                    lineHeight: 1.6
-                  }}
-                >
-                  {selectedNotification.message}
-                </Typography>
-                
-                {selectedNotification.data && (
-                  <Box sx={{ 
-                    backgroundColor: theme.surfaceBackground,
-                    p: 2, 
-                    borderRadius: 1,
-                    border: `1px solid ${theme.border}`
-                  }}>
+              <DialogContent sx={{ p: 3 }}>
+  <Box sx={{ mb: 3 }}>
+    <Typography 
+      variant="h6" 
+      sx={{ 
+        color: theme.textPrimary,
+        mb: 1,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1
+      }}
+    >
+      {getNotificationIcon(selectedNotification.type)}
+      {selectedNotification.title}
+    </Typography>
+    
+    <Chip 
+      label={selectedNotification.type.replace('_', ' ')}
+      size="small"
+      color={getNotificationColor(selectedNotification.type)}
+      sx={{ textTransform: 'capitalize', mb: 2 }}
+    />
+    
+    <Typography 
+      variant="body1" 
+      sx={{ 
+        color: theme.textSecondary,
+        lineHeight: 1.6,
+        mb: 3
+      }}
+    >
+      {selectedNotification.message}
+    </Typography>
+
+    {/* Account Details Card for Payment Notifications */}
+    {(selectedNotification.type === 'booking_approved_payment' || 
+      (selectedNotification.type === 'booking_response' && selectedNotification.data)) && (
+      <Card sx={{ 
+        mb: 3, 
+        backgroundColor: theme.surfaceBackground,
+        border: `1px solid ${theme.border}`,
+        borderLeft: `4px solid ${theme.success}`
+      }}>
+        <CardContent sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <Payment sx={{ color: theme.success }} />
+            <Typography 
+              variant="h6" 
+              sx={{ 
+                color: theme.textPrimary,
+                fontWeight: 600
+              }}
+            >
+              Payment Details
+            </Typography>
+          </Box>
+          
+          {(() => {
+            const notificationData = getNotificationData(selectedNotification);
+            const accountInfo = notificationData.account_info || selectedNotification.payment_account_info;
+            
+            return (
+              <>
+                {/* Payment Amount */}
+                {notificationData.amount && (
+                  <Box sx={{ mb: 2, p: 2, backgroundColor: theme.cardBackground, borderRadius: 1 }}>
+                    <Typography variant="subtitle2" sx={{ color: theme.textSecondary }}>
+                      Amount to Pay:
+                    </Typography>
+                    <Typography variant="h6" sx={{ color: theme.success, fontWeight: 600 }}>
+                      LKR {notificationData.amount.toLocaleString()}
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Account Information */}
+                {accountInfo && (
+                  <Box sx={{ mb: 2 }}>
                     <Typography 
                       variant="subtitle2" 
                       sx={{ 
-                        color: theme.textPrimary,
-                        mb: 1,
-                        fontWeight: 600
+                        color: theme.textPrimary, 
+                        fontWeight: 600,
+                        mb: 1
                       }}
                     >
-                      Additional Information:
+                      Owner's Payment Information:
                     </Typography>
-                    <pre style={{ 
-                      color: theme.textSecondary,
-                      fontSize: '0.875rem',
-                      fontFamily: 'inherit',
-                      whiteSpace: 'pre-wrap',
-                      margin: 0
+                    <Box sx={{ 
+                      p: 2, 
+                      backgroundColor: theme.inputBackground,
+                      borderRadius: 1,
+                      border: `1px solid ${theme.border}`,
+                      fontFamily: 'monospace'
                     }}>
-                      {JSON.stringify(selectedNotification.data, null, 2)}
-                    </pre>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: theme.textPrimary,
+                          whiteSpace: 'pre-line',
+                          lineHeight: 1.4
+                        }}
+                      >
+                        {accountInfo}
+                      </Typography>
+                    </Box>
                   </Box>
                 )}
-                
-                <Typography 
-                  variant="caption" 
+
+                {/* Property Address */}
+                {notificationData.property_address && (
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                    <LocationOn sx={{ color: theme.textSecondary, fontSize: 20, mt: 0.2 }} />
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ color: theme.textSecondary }}>
+                        Property:
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: theme.textPrimary }}>
+                        {notificationData.property_address}
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+
+                {/* Payment Instructions */}
+                <Alert 
+                  severity="info" 
                   sx={{ 
-                    color: theme.textDisabled,
                     mt: 2,
-                    display: 'block'
+                    backgroundColor: `${theme.info}10`,
+                    border: `1px solid ${theme.info}30`
                   }}
                 >
-                  Received: {formatDate(selectedNotification.created_at)}
-                </Typography>
-              </DialogContent>
+                  <Typography variant="body2">
+                    Please make the payment using the above details and upload your payment receipt 
+                    through the booking page for verification.
+                  </Typography>
+                </Alert>
+              </>
+            );
+          })()}
+        </CardContent>
+      </Card>
+    )}
+
+    {/* Booking Information Card */}
+    {selectedNotification.booking_id && (
+      <Card sx={{ 
+        mb: 2, 
+        backgroundColor: theme.cardBackground,
+        border: `1px solid ${theme.border}`
+      }}>
+        <CardContent sx={{ p: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <BookingIcon sx={{ color: theme.primary, fontSize: 20 }} />
+            <Typography variant="subtitle2" sx={{ color: theme.textPrimary, fontWeight: 600 }}>
+              Booking ID: {selectedNotification.booking_id}
+            </Typography>
+          </Box>
+          <Typography variant="body2" sx={{ color: theme.textSecondary }}>
+            Click "View Booking" to see full details or make payment
+          </Typography>
+        </CardContent>
+      </Card>
+    )}
+    
+    <Typography 
+      variant="caption" 
+      sx={{ 
+        color: theme.textDisabled,
+        display: 'block'
+      }}
+    >
+      Received: {formatDate(selectedNotification.created_at)}
+    </Typography>
+  </Box>
+</DialogContent>
               
               <DialogActions sx={{ 
-                borderTop: `1px solid ${theme.divider}`,
-                p: 3
-              }}>
-                <Button 
-                  onClick={() => setDetailDialogOpen(false)}
-                  sx={{ 
-                    color: theme.textSecondary,
-                    '&:hover': {
-                      backgroundColor: theme.hover
-                    }
-                  }}
-                >
-                  Close
-                </Button>
-                
-                {selectedNotification.booking_id && (
-                  <Button 
-                    variant="contained"
-                    onClick={() => {
-                      navigate(`/bookings/${selectedNotification.booking_id}`);
-                      setDetailDialogOpen(false);
-                    }}
-                    sx={{
-                      backgroundColor: theme.primary,
-                      '&:hover': {
-                        backgroundColor: theme.primary + 'dd'
-                      }
-                    }}
-                  >
-                    View Booking
-                  </Button>
-                )}
-              </DialogActions>
+  borderTop: `1px solid ${theme.divider}`,
+  p: 3,
+  gap: 1
+}}>
+  <Button 
+    onClick={() => setDetailDialogOpen(false)}
+    sx={{ 
+      color: theme.textSecondary,
+      '&:hover': {
+        backgroundColor: theme.hover
+      }
+    }}
+  >
+    Close
+  </Button>
+  
+  {selectedNotification.booking_id && (
+    <Button 
+      variant="outlined"
+      onClick={() => {
+        navigate(`/user/bookings`);
+        setDetailDialogOpen(false);
+      }}
+      sx={{
+        borderColor: theme.primary,
+        color: theme.primary,
+        '&:hover': {
+          backgroundColor: `${theme.primary}10`
+        }
+      }}
+    >
+      View Booking
+    </Button>
+  )}
+  
+  {selectedNotification.type === 'booking_approved_payment' && selectedNotification.booking_id && (
+    <Button 
+      variant="contained"
+      onClick={() => {
+        navigate(`/user/payment/${selectedNotification.booking_id}`);
+        setDetailDialogOpen(false);
+      }}
+      sx={{
+        backgroundColor: theme.success,
+        '&:hover': {
+          backgroundColor: `${theme.success}dd`
+        }
+      }}
+    >
+      Make Payment
+    </Button>
+  )}
+</DialogActions>
             </>
           )}
         </Dialog>
