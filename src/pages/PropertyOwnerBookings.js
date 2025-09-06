@@ -202,6 +202,7 @@ const PropertyOwnerBookings = () => {
       setBookings(response.bookings || []);
     } catch (error) {
       console.error('Error loading bookings:', error);
+      console.log('Error loading bookings:', error);
       setSnackbar({
         open: true,
         message: 'Error loading bookings',

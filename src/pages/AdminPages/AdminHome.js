@@ -39,6 +39,7 @@ import { getDashboardStats } from '../../api/adminAPI';
 import { useTheme } from '../../contexts/ThemeContext';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import { useNavigate } from 'react-router-dom';
+import { getDashboardData } from '../../api/adminAPI';
 
 const StatCard = ({ title, value, icon, color = 'primary', trend, subtitle, loading = false }) => (
   <Card sx={{ height: '100%' }}>
@@ -99,47 +100,39 @@ const AdminHome = () => {
   }, []);
 
   const loadDashboardData = async () => {
-    try {
-      setLoading(true);
-      
-      const [statsResponse, dashboardResponse] = await Promise.allSettled([
-        getDashboardStats(),
-        fetch('/api/admin/dashboard', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            'Cache-Control': 'no-cache'
-          }
-        }).then(res => {
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return res.json();
-        })
-      ]);
+  try {
+    setLoading(true);
+    
+    // Use the proper API function instead of direct fetch
+    const data = await getDashboardData();
+    console.log('Dashboard data received:', data);
 
-      if (statsResponse.status === 'fulfilled') {
-        setDashboardData(prev => ({ ...prev, stats: statsResponse.value }));
-      }
+    setDashboardData(data);
 
-      if (dashboardResponse.status === 'fulfilled') {
-        setDashboardData(prev => ({ 
-          ...prev, 
-          ...dashboardResponse.value,
-          stats: prev?.stats || dashboardResponse.value.stats
-        }));
-      } else {
-        console.error('Dashboard response error:', dashboardResponse.reason);
-      }
-
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      setSnackbar({
-        open: true,
-        message: 'Error loading admin dashboard data',
-        severity: 'error'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (error) {
+    console.error('Error loading dashboard data:', error);
+    setSnackbar({
+      open: true,
+      message: 'Error loading admin dashboard data',
+      severity: 'error'
+    });
+    
+    // Set empty data to prevent UI errors
+    setDashboardData({
+      stats: {
+        users: { total: 0, active: 0, new_this_month: 0 },
+        properties: { total: 0, pending: 0, approved: 0 },
+        bookings: { total: 0, pending: 0, confirmed: 0 },
+        revenue: { total: 0, this_month: 0 }
+      },
+      recent_bookings: [],
+      recent_properties: [],
+      recent_users: []
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleRefresh = async () => {
     setRefreshing(true);

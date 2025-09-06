@@ -92,6 +92,42 @@ export const getDashboardStats = async () => {
   }
 };
 
+export const getDashboardData = async () => {
+  try {
+    const response = await apiClient.get('/admin/dashboard');
+    
+    if (!response.data) {
+      return {
+        stats: {
+          users: { total: 0, active: 0, new_this_month: 0 },
+          properties: { total: 0, pending: 0, approved: 0 },
+          bookings: { total: 0, pending: 0, confirmed: 0 },
+          revenue: { total: 0, this_month: 0 }
+        },
+        recent_properties: [],
+        recent_bookings: [],
+        recent_users: []
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+    
+    return {
+      stats: {
+        users: { total: 0, active: 0, new_this_month: 0 },
+        properties: { total: 0, pending: 0, approved: 0 },
+        bookings: { total: 0, pending: 0, confirmed: 0 },
+        revenue: { total: 0, this_month: 0 }
+      },
+      recent_properties: [],
+      recent_bookings: [],
+      recent_users: []
+    };
+  }
+};
+
 export const getUsers = async (options = {}) => {
   try {
     const { page = 1, limit = 20, role = 'all', status = 'all', search, sort_by = 'created_at', sort_order = 'desc' } = options;
