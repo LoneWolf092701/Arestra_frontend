@@ -122,6 +122,7 @@ import {
 // Admin Management API imports
 import {
   getDashboardStats,
+  getDashboardData,
   getUsers,
   updateUserStatus,
   getUserDetails,
@@ -284,6 +285,7 @@ export {
 
 export {
   getDashboardStats,
+  getDashboardData,
   getUsers,
   updateUserStatus,
   getUserDetails,

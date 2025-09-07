@@ -87,7 +87,7 @@ const handleBookingError = (error, operation) => {
     throw new Error('Server error. Please try again later.');
   }
   
-  throw new Error(error.response?.data?.message || `Failed to ${operation}`);
+  throw new Error(error.response?.data?.message || `Failed to ${operation.replace('fetching', 'fetch').replace('updating', 'update').replace('creating', 'create').replace('submitting', 'submit').replace('uploading', 'upload').replace('verifying', 'verify').replace('responding', 'respond').replace('cancelling', 'cancel')}`);
 };
 
 export const submitBookingRequest = async (bookingData) => {
