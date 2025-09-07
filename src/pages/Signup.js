@@ -19,12 +19,10 @@ import {
 import { CheckBoxOutlineBlank, ErrorOutline } from '@mui/icons-material';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import { useNavigate } from 'react-router-dom';
 import { registerUser, validateEmployeeId } from '../api/authApi';
 import { useTheme } from '../contexts/ThemeContext';
 import AppSnackbar from '../components/common/AppSnackbar';
-import { useTheme } from '../contexts/ThemeContext';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
