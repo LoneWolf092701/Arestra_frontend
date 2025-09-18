@@ -436,7 +436,9 @@ const AdminNewListings = () => {
   };
 
   const handleApproveProperty = async (propertyId) => {
-    try {
+    try 
+    {
+      // api call to approve property
       await approveProperty(propertyId);
       setSnackbarMessage('Property approved successfully');
       setSnackbarOpen(true);

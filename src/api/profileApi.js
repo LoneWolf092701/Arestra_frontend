@@ -110,7 +110,7 @@ export const changePassword = async (passwordData) => {
       confirm_password: passwordData.confirmPassword || passwordData.newPassword
     };
 
-    const response = await apiClient.put('/profile/password', payload);
+    const response = await apiClient.put('/reset-password', payload);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
