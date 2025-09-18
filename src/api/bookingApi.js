@@ -695,7 +695,37 @@ export const createStripePaymentIntent = async (bookingId, amount, paymentMethod
     
     return response.data;
   } catch (error) {
+    // Check if it's an API key error from the backend
+    if (error.response?.data?.error === 'STRIPE_API_KEY_ERROR') {
+      // Return the error with the special code so frontend can handle it
+      return {
+        success: false,
+        error: 'STRIPE_API_KEY_ERROR',
+        message: error.response.data.message
+      };
+    }
+    
     handleBookingError(error, 'creating payment intent');
+  }
+};
+
+export const updateBookingDummyPayment = async (bookingId, paymentIntentId, paymentMethodId) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const response = await apiClient.post(`/bookings/${validatedId}/dummy-payment`, {
+      payment_intent_id: paymentIntentId,
+      payment_method_id: paymentMethodId,
+      dummy_payment: true
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'processing dummy payment');
   }
 };
 
@@ -734,10 +764,40 @@ export const verifyStripePayment = async (paymentIntentId) => {
   }
 };
 
+export const getPropertyBookingStatus = async (propertyId) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    if (!validatedId) {
+      throw new Error('Valid property ID is required');
+    }
+    
+    const response = await apiClient.get(`/bookings/property/${validatedId}/status`);
+    
+    if (!response.data) {
+      return {
+        success: false,
+        active_bookings: [],
+        is_available: true
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching property booking status:', error);
+    
+    return {
+      success: false,
+      active_bookings: [],
+      is_available: true
+    };
+  }
+};
+
 export default {
   submitBookingRequest,
   getUserBookings,
   getOwnerBookings,
+  getPropertyBookingStatus,
   respondToBookingRequest,
   submitPayment,
   verifyPayment,
@@ -755,5 +815,6 @@ export default {
   validateBookingRequest,
   createStripePaymentIntent,
   updateBookingStripePayment,
-  verifyStripePayment
+  verifyStripePayment,
+  updateBookingDummyPayment
 };

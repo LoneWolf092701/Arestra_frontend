@@ -25,6 +25,8 @@ import UserFavouriteProperties from './pages/UserPages/UserFavouriteProperties';
 import UserNotifications from './pages/UserPages/UserNotifications';
 import MyBookingsPage from './pages/UserPages/MyBookingsPage';
 import PaymentPage from './pages/UserPages/PaymentPage';
+import PaymentSuccessPage from './pages/PaymentSuccessPage';
+import PaymentFailurePage from './pages/PaymentFailurePage';
 import OwnerPropertyView from './pages/OwnerPropertyView';
 
 
@@ -33,6 +35,7 @@ import AdminNewListings from './pages/AdminPages/AdminNewListing';
 import AdminAllProperties from './pages/AdminPages/AdminAllProperties';
 import AdminPropertyView from './pages/AdminPages/AdminPropertyView';
 import AdminUserManagement from './pages/AdminPages/AdminUserManagement';
+import AdminBookingManagement from './pages/AdminPages/AdminBookingManagement';
 
 import ProfilePage from './pages/ProfilePage';
 
@@ -156,6 +159,36 @@ const AppRoutes = () => {
     />
   } 
 />
+
+<Route 
+          path="/payment/success/:paymentIntentId" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['user']} 
+              element={<PaymentSuccessPage />} 
+            />
+          } 
+        />
+        
+        <Route 
+          path="/payment/failure/:paymentIntentId" 
+          element={
+            <RoleProtectedRoute 
+              allowedRoles={['user']} 
+              element={<PaymentFailurePage />} 
+            />
+          } 
+        />
+        
+        <Route 
+          path="/payment/success" 
+          element={<PaymentSuccessPage />} 
+        />
+        
+        <Route 
+          path="/payment/failure" 
+          element={<PaymentFailurePage />} 
+        />
         
         <Route 
           path="/home" 
@@ -298,6 +331,15 @@ const AppRoutes = () => {
             />
           } 
         />
+        <Route 
+  path="/admin/booking-management" 
+  element={
+    <RoleProtectedRoute 
+      allowedRoles={['admin']} 
+      element={<AdminBookingManagement />} 
+    />
+  } 
+/>
         <Route 
           path="/admin/new-listings" 
           element={

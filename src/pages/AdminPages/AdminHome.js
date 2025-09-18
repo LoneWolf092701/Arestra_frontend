@@ -381,13 +381,13 @@ const AdminHome = () => {
                   Pending Approvals ({stats.properties?.pending || 0})
                 </Button>
                 <Button
-                  variant="outlined"
-                  startIcon={<BookingIcon />}
-                  fullWidth
-                  onClick={() => navigate('/admin/home')}
-                >
-                  Booking Management
-                </Button>
+  variant="outlined"
+  startIcon={<BookingIcon />}
+  fullWidth
+  onClick={() => navigate('/admin/booking-management')}
+>
+  Booking Management
+</Button>
               </Box>
             </CardContent>
           </Card>

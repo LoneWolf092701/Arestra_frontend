@@ -57,7 +57,7 @@ import {
 } from '@mui/icons-material';
 import { getPublicPropertyById } from '../../api/propertyApi';
 import { getUserProfile } from '../../api/profileApi';
-import { submitBookingRequest } from '../../api/bookingApi';
+import { getPropertyBookingStatus, submitBookingRequest } from '../../api/bookingApi';
 import { calculateBookingPricing, formatCurrency } from '../../utils/BookingCalculationUtils';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -86,6 +86,8 @@ const UserBookingPage = () => {
 const [paymentAccountInfo, setPaymentAccountInfo] = useState('');
 const [showPaymentModal, setShowPaymentModal] = useState(false);
 const [currentBookingId, setCurrentBookingId] = useState(null);
+
+const [blockedDates, setBlockedDates] = useState([]);
   
   const [bookingData, setBookingData] = useState({
     check_in_date: null,
@@ -136,6 +138,8 @@ const [currentBookingId, setCurrentBookingId] = useState(null);
       ]);
       
       setProperty(propertyData);
+      
+      await fetchBlockedDates(id);
       
       // Auto-fill user profile information when available
       if (userProfile) {
@@ -195,10 +199,34 @@ const [currentBookingId, setCurrentBookingId] = useState(null);
     }
   };
   
+  const fetchBlockedDates = async (propertyId) => {
+  try {
+    const data = await getPropertyBookingStatus(propertyId);
+    if (data.success && data.active_bookings) {
+      const blocked = data.active_bookings
+        .filter(booking => ['approved', 'confirmed', 'payment_submitted'].includes(booking.status))
+        .map(booking => ({
+          start: dayjs(booking.check_in_date),
+          end: dayjs(booking.check_out_date)
+        }));
+      setBlockedDates(blocked);
+    }
+  } catch (error) {
+    console.error('Error fetching blocked dates:', error);
+  }
+};
+
+const shouldDisableDate = (date) => {
+  const checkDate = dayjs(date);
+  
+  return blockedDates.some(period => {
+    // Disable dates that fall within any booked period (inclusive of check-in, exclusive of check-out)
+    return checkDate.isSameOrAfter(period.start, 'day') && checkDate.isBefore(period.end, 'day');
+  });
+};
+  
   useEffect(() => {
   const checkBookingStatus = () => {
-    // In a real app, this would be done via WebSocket or periodic API calls
-    // For now, we'll check for updates in localStorage (you can implement real-time updates)
     const bookingStatus = localStorage.getItem(`booking_${currentBookingId}_status`);
     const accountInfo = localStorage.getItem(`booking_${currentBookingId}_account_info`);
     
@@ -496,76 +524,78 @@ const [currentBookingId, setCurrentBookingId] = useState(null);
               <Grid container spacing={3}>
                 <Grid item xs={12} sm={6}>
                   <DatePicker
-                    label="Move In"
-                    value={bookingData.check_in_date}
-                    onChange={(newValue) => {
-                      setBookingData(prev => ({ ...prev, check_in_date: newValue }));
-                      if (errors.check_in_date) {
-                        setErrors(prev => ({ ...prev, check_in_date: '' }));
-                      }
-                    }}
-                    minDate={dayjs()}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        fullWidth
-                        error={!!errors.check_in_date}
-                        helperText={errors.check_in_date}
-                        sx={{
-                          '& .MuiInputBase-root': {
-                            backgroundColor: isDark ? theme.inputBackground : '#ffffff',
-                            color: isDark ? theme.textPrimary : 'inherit',
-                          },
-                          '& .MuiInputLabel-root': {
-                            color: isDark ? theme.textSecondary : 'inherit',
-                          },
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
-                          },
-                          '& .MuiFormHelperText-root': {
-                            color: isDark ? theme.textSecondary : 'inherit',
-                          }
-                        }}
-                      />
-                    )}
-                  />
+  label="Move In"
+  value={bookingData.check_in_date}
+  onChange={(newValue) => {
+    setBookingData(prev => ({ ...prev, check_in_date: newValue }));
+    if (errors.check_in_date) {
+      setErrors(prev => ({ ...prev, check_in_date: '' }));
+    }
+  }}
+  minDate={dayjs()}
+  shouldDisableDate={shouldDisableDate}
+  renderInput={(params) => (
+    <TextField
+      {...params}
+      fullWidth
+      error={!!errors.check_in_date}
+      helperText={errors.check_in_date}
+      sx={{
+        '& .MuiInputBase-root': {
+          backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+          color: isDark ? theme.textPrimary : 'inherit',
+        },
+        '& .MuiInputLabel-root': {
+          color: isDark ? theme.textSecondary : 'inherit',
+        },
+        '& .MuiOutlinedInput-notchedOutline': {
+          borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+        },
+        '& .MuiFormHelperText-root': {
+          color: isDark ? theme.textSecondary : 'inherit',
+        }
+      }}
+    />
+  )}
+/>
                 </Grid>
                 
                 <Grid item xs={12} sm={6}>
                   <DatePicker
-                    label="Move Out"
-                    value={bookingData.check_out_date}
-                    onChange={(newValue) => {
-                      setBookingData(prev => ({ ...prev, check_out_date: newValue }));
-                      if (errors.check_out_date) {
-                        setErrors(prev => ({ ...prev, check_out_date: '' }));
-                      }
-                    }}
-                    minDate={bookingData.check_in_date ? dayjs(bookingData.check_in_date).add(1, 'day') : dayjs().add(1, 'day')}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        fullWidth
-                        error={!!errors.check_out_date}
-                        helperText={errors.check_out_date}
-                        sx={{
-                          '& .MuiInputBase-root': {
-                            backgroundColor: isDark ? theme.inputBackground : '#ffffff',
-                            color: isDark ? theme.textPrimary : 'inherit',
-                          },
-                          '& .MuiInputLabel-root': {
-                            color: isDark ? theme.textSecondary : 'inherit',
-                          },
-                          '& .MuiOutlinedInput-notchedOutline': {
-                            borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
-                          },
-                          '& .MuiFormHelperText-root': {
-                            color: isDark ? theme.textSecondary : 'inherit',
-                          }
-                        }}
-                      />
-                    )}
-                  />
+  label="Move Out"
+  value={bookingData.check_out_date}
+  onChange={(newValue) => {
+    setBookingData(prev => ({ ...prev, check_out_date: newValue }));
+    if (errors.check_out_date) {
+      setErrors(prev => ({ ...prev, check_out_date: '' }));
+    }
+  }}
+  minDate={bookingData.check_in_date ? dayjs(bookingData.check_in_date).add(1, 'day') : dayjs().add(1, 'day')}
+  shouldDisableDate={shouldDisableDate}
+  renderInput={(params) => (
+    <TextField
+      {...params}
+      fullWidth
+      error={!!errors.check_out_date}
+      helperText={errors.check_out_date}
+      sx={{
+        '& .MuiInputBase-root': {
+          backgroundColor: isDark ? theme.inputBackground : '#ffffff',
+          color: isDark ? theme.textPrimary : 'inherit',
+        },
+        '& .MuiInputLabel-root': {
+          color: isDark ? theme.textSecondary : 'inherit',
+        },
+        '& .MuiOutlinedInput-notchedOutline': {
+          borderColor: isDark ? theme.inputBorder : 'rgba(0, 0, 0, 0.23)',
+        },
+        '& .MuiFormHelperText-root': {
+          color: isDark ? theme.textSecondary : 'inherit',
+        }
+      }}
+    />
+  )}
+/>
                 </Grid>
               </Grid>
             </LocalizationProvider>
