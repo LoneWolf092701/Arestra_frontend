@@ -147,7 +147,10 @@ import {
   resolveReport,
   exportAdminData,
   getSystemHealth,
-  getFinancialReports
+  getFinancialReports,
+  getBookingExportStats,
+  generateBookingReport,
+  exportBookingPayments
 } from './adminAPI';
 
 // Image Upload API imports
@@ -680,7 +683,12 @@ const api = {
     resolveReport,
     exportAdminData,
     getSystemHealth,
-    getFinancialReports
+    getFinancialReports,
+    getDashboardData,
+    exportBookingData,
+    getBookingExportStats,
+    exportBookingPayments,
+    generateBookingReport,
   },
   
   uploads: {

@@ -749,3 +749,211 @@ export const getFinancialReports = async (options = {}) => {
     };
   }
 };
+
+/**
+ * Export booking requests data in various formats
+ */
+export const exportBookingData = async (options = {}) => {
+  try {
+    const { 
+      format = 'csv',
+      status = 'all',
+      date_from,
+      date_to,
+      include_guest_details = true,
+      include_property_details = true,
+      include_payment_details = true,
+      include_owner_details = false
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('format', format);
+    
+    if (status && status !== 'all') params.append('status', status);
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+    if (include_guest_details) params.append('include_guest_details', 'true');
+    if (include_property_details) params.append('include_property_details', 'true');
+    if (include_payment_details) params.append('include_payment_details', 'true');
+    if (include_owner_details) params.append('include_owner_details', 'true');
+
+    const response = await apiClient.get(`/admin/booking-requests/export?${params.toString()}`, {
+      responseType: 'blob'
+    });
+    
+    const contentType = response.headers['content-type'] || 'application/octet-stream';
+    const blob = new Blob([response.data], { type: contentType });
+    
+    // Extract filename from response headers or create default
+    let filename = 'booking_requests_export';
+    const contentDisposition = response.headers['content-disposition'];
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+      }
+    } else {
+      // Create filename with timestamp and format
+      const timestamp = new Date().toISOString().split('T')[0];
+      filename = `booking_requests_${timestamp}.${format}`;
+    }
+    
+    // Create download link
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return { 
+      success: true, 
+      message: 'Booking data exported successfully',
+      filename: filename 
+    };
+  } catch (error) {
+    console.error('Error exporting booking data:', error);
+    throw new Error('Failed to export booking data. Please try again.');
+  }
+};
+
+/**
+ * Get booking export statistics
+ */
+export const getBookingExportStats = async (options = {}) => {
+  try {
+    const { status = 'all', date_from, date_to } = options;
+    
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.append('status', status);
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+
+    const response = await apiClient.get(`/admin/booking-requests/export-stats?${params.toString()}`);
+    
+    if (!response.data) {
+      return {
+        total_records: 0,
+        total_revenue: 0,
+        status_breakdown: {},
+        date_range: null
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching booking export stats:', error);
+    
+    return {
+      total_records: 0,
+      total_revenue: 0,
+      status_breakdown: {},
+      date_range: null
+    };
+  }
+};
+
+/**
+ * Generate booking analytics report
+ */
+export const generateBookingReport = async (options = {}) => {
+  try {
+    const { 
+      report_type = 'summary',
+      format = 'pdf',
+      date_from,
+      date_to,
+      include_charts = true
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('report_type', report_type);
+    params.append('format', format);
+    
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+    if (include_charts) params.append('include_charts', 'true');
+
+    const response = await apiClient.get(`/admin/booking-reports/generate?${params.toString()}`, {
+      responseType: 'blob'
+    });
+    
+    const contentType = response.headers['content-type'] || 'application/pdf';
+    const blob = new Blob([response.data], { type: contentType });
+    
+    // Create filename
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `booking_report_${report_type}_${timestamp}.${format}`;
+    
+    // Create download link
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return { 
+      success: true, 
+      message: 'Report generated successfully',
+      filename: filename 
+    };
+  } catch (error) {
+    console.error('Error generating booking report:', error);
+    throw new Error('Failed to generate report. Please try again.');
+  }
+};
+/**
+ * Export booking payments data
+ */
+export const exportBookingPayments = async (options = {}) => {
+  try {
+    const { 
+      format = 'csv',
+      payment_method = 'all',
+      date_from,
+      date_to
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('format', format);
+    
+    if (payment_method && payment_method !== 'all') params.append('payment_method', payment_method);
+    if (date_from) params.append('date_from', date_from);
+    if (date_to) params.append('date_to', date_to);
+
+    const response = await apiClient.get(`/admin/booking-payments/export?${params.toString()}`, {
+      responseType: 'blob'
+    });
+    
+    const contentType = response.headers['content-type'] || 'application/octet-stream';
+    const blob = new Blob([response.data], { type: contentType });
+    
+    // Create filename
+    const timestamp = new Date().toISOString().split('T')[0];
+    const filename = `booking_payments_${timestamp}.${format}`;
+    
+    // Create download link
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    
+    return { 
+      success: true, 
+      message: 'Payment data exported successfully',
+      filename: filename 
+    };
+  } catch (error) {
+    console.error('Error exporting payment data:', error);
+    throw new Error('Failed to export payment data. Please try again.');
+  }
+};

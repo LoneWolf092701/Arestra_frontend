@@ -143,7 +143,7 @@ export const getUserBookings = async (options = {}) => {
       params.append('status', status);
     }
     
-    if (property_id) {
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -209,7 +209,7 @@ export const getOwnerBookings = async (options = {}) => {
       params.append('status', status);
     }
     
-    if (property_id) {
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -263,12 +263,18 @@ export const respondToBookingRequest = async (bookingId, responseData) => {
       throw new Error('Action must be either "approve" or "reject"');
     }
 
+        const backendAction = responseData.action === 'approve' ? 'approved' : 'rejected';
+
+        
     if (responseData.action === 'reject' && !responseData.message) {
       throw new Error('Rejection reason is required');
     }
 
-    const response = await apiClient.put(`/bookings/${validatedId}/respond`, responseData);
-    
+const response = await apiClient.put(`/bookings/${validatedId}/respond`, {
+      ...responseData,
+      action: backendAction
+    });
+
     if (!response.data) {
       throw new Error('Invalid response from server');
     }
@@ -448,7 +454,7 @@ export const getBookingStatistics = async (options = {}) => {
     const { property_id, date_from, date_to } = options;
     
     const params = new URLSearchParams();
-    if (property_id) {
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -510,7 +516,8 @@ export const getBookingsByDateRange = async (options = {}) => {
     const params = new URLSearchParams();
     if (date_from) params.append('date_from', date_from);
     if (date_to) params.append('date_to', date_to);
-    if (property_id) {
+
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -586,7 +593,8 @@ export const exportBookingData = async (options = {}) => {
     params.append('format', format);
     if (date_from) params.append('date_from', date_from);
     if (date_to) params.append('date_to', date_to);
-    if (property_id) {
+    
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -695,7 +703,37 @@ export const createStripePaymentIntent = async (bookingId, amount, paymentMethod
     
     return response.data;
   } catch (error) {
+    // Check if it's an API key error from the backend
+    if (error.response?.data?.error === 'STRIPE_API_KEY_ERROR') {
+      // Return the error with the special code so frontend can handle it
+      return {
+        success: false,
+        error: 'STRIPE_API_KEY_ERROR',
+        message: error.response.data.message
+      };
+    }
+    
     handleBookingError(error, 'creating payment intent');
+  }
+};
+
+export const updateBookingDummyPayment = async (bookingId, paymentIntentId, paymentMethodId) => {
+  try {
+    const validatedId = validateBookingId(bookingId);
+    
+    const response = await apiClient.post(`/bookings/${validatedId}/dummy-payment`, {
+      payment_intent_id: paymentIntentId,
+      payment_method_id: paymentMethodId,
+      dummy_payment: true
+    });
+    
+    if (!response.data) {
+      throw new Error('Invalid response from server');
+    }
+    
+    return response.data;
+  } catch (error) {
+    handleBookingError(error, 'processing dummy payment');
   }
 };
 
@@ -734,10 +772,40 @@ export const verifyStripePayment = async (paymentIntentId) => {
   }
 };
 
+export const getPropertyBookingStatus = async (propertyId) => {
+  try {
+    const validatedId = validatePropertyId(propertyId);
+    if (!validatedId) {
+      throw new Error('Valid property ID is required');
+    }
+    
+    const response = await apiClient.get(`/bookings/property/${validatedId}/status`);
+    
+    if (!response.data) {
+      return {
+        success: false,
+        active_bookings: [],
+        is_available: true
+      };
+    }
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching property booking status:', error);
+    
+    return {
+      success: false,
+      active_bookings: [],
+      is_available: true
+    };
+  }
+};
+
 export default {
   submitBookingRequest,
   getUserBookings,
   getOwnerBookings,
+  getPropertyBookingStatus,
   respondToBookingRequest,
   submitPayment,
   verifyPayment,
@@ -755,5 +823,6 @@ export default {
   validateBookingRequest,
   createStripePaymentIntent,
   updateBookingStripePayment,
-  verifyStripePayment
+  verifyStripePayment,
+  updateBookingDummyPayment
 };

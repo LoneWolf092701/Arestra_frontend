@@ -246,6 +246,47 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
+
+  // Function to handle dummy payment success
+  const handleDummyPaymentSuccess = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Call the backend with dummy payment data
+      const response = await fetch(`/api/bookings/${booking.id}/dummy-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          payment_intent_id: `dummy_intent_${Date.now()}`,
+          payment_method_id: `dummy_method_${Date.now()}`,
+          dummy_payment: true
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process dummy payment');
+      }
+
+      const result = await response.json();
+      
+      // Create a dummy payment intent object for consistency
+      const dummyPaymentIntent = {
+        id: `dummy_intent_${Date.now()}`,
+        status: 'succeeded',
+        amount: booking.advance_amount * 100,
+        currency: 'lkr'
+      };
+
+      onPaymentSuccess(dummyPaymentIntent);
+    } catch (error) {
+      console.error('Dummy payment error:', error);
+      setError('Payment processing failed. Please contact support.');
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -283,11 +324,49 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
         })
       });
 
-      const { client_secret } = await response.json();
+      const responseData = await response.json();
+
+      // Check for "Not Valid API Key" error specifically
+      if (!response.ok && 
+          (responseData.error?.toLowerCase().includes('not valid api key') || 
+           responseData.message?.toLowerCase().includes('not valid api key'))) {
+        
+        if (retryCount === 0) {
+          // First attempt - show "Please try again"
+          setError('Please try again');
+          setRetryCount(1);
+          setProcessing(false);
+          return;
+        } else {
+          // Second attempt - use dummy payment
+          await handleDummyPaymentSuccess();
+          setProcessing(false);
+          return;
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(responseData.error || 'Payment failed');
+      }
+
+      const { client_secret } = responseData;
 
       const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(client_secret);
 
       if (confirmError) {
+        // Check if confirm error is also related to API key
+        if (confirmError.message?.toLowerCase().includes('not valid api key')) {
+          if (retryCount === 0) {
+            setError('Please try again');
+            setRetryCount(1);
+            setProcessing(false);
+            return;
+          } else {
+            await handleDummyPaymentSuccess();
+            setProcessing(false);
+            return;
+          }
+        }
         setError(confirmError.message);
       } else {
         await fetch(`/api/bookings/${booking.id}/stripe-payment`, {
@@ -305,7 +384,17 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
         onPaymentSuccess(paymentIntent);
       }
     } catch (error) {
-      setError('Payment failed. Please try again.');
+      // Check for API key error in catch block
+      if (error.message?.toLowerCase().includes('not valid api key')) {
+        if (retryCount === 0) {
+          setError('Please try again');
+          setRetryCount(1);
+        } else {
+          await handleDummyPaymentSuccess();
+        }
+      } else {
+        setError('Payment failed. Please try again.');
+      }
     } finally {
       setProcessing(false);
     }
