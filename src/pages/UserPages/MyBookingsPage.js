@@ -27,7 +27,6 @@ import {
 } from '@mui/icons-material';
 import { getUserBookings } from '../../api/bookingApi';
 import PropertyGrid from '../../components/common/PropertyGrid';
-import BookingGrid from '../../components/bookings/BookingGrid';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import { isAuthenticated, getUserId } from '../../utils/auth';
 
@@ -78,16 +77,7 @@ const MyBookingsPage = () => {
     if (authenticated) {
       loadBookings();
     }
-  }, [authenticated]);
-
-  // Check for refresh flag from payment success page
-  useEffect(() => {
-    const shouldRefresh = localStorage.getItem('refreshBookings');
-    if (shouldRefresh === 'true') {
-      localStorage.removeItem('refreshBookings');
-      loadBookings();
-    }
-  }, []);
+  }, [authenticated, filters]);
 
   const transformBookingToProperty = (booking) => ({
     id: booking.property_id,
@@ -132,22 +122,6 @@ const MyBookingsPage = () => {
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
-  
-  const handleRefresh = () => {
-    loadBookings();
-  };
-
-  const handlePaymentComplete = (method, data) => {
-    setSnackbar({
-      open: true,
-      message: 'Payment completed successfully!',
-      severity: 'success'
-    });
-    // Refresh bookings after payment
-    setTimeout(() => {
-      loadBookings();
-    }, 1000);
-  };
 
   const handleViewProperty = (property) => {
     navigate(`/property/${property.id}`, {
@@ -184,7 +158,7 @@ const MyBookingsPage = () => {
         <Button
           variant="outlined"
           startIcon={<RefreshIcon />}
-          onClick={handleRefresh}
+          onClick={loadBookings}
           disabled={loading}
         >
           Refresh
@@ -334,14 +308,32 @@ const MyBookingsPage = () => {
                     These are properties where you've submitted booking requests.
                   </Typography>
                   
-                  <BookingGrid
-                    bookings={requestedProperties}
-                    loading={false}
-                    onRefresh={handleRefresh}
-                    onPaymentComplete={handlePaymentComplete}
-                    emptyStateMessage="No booking requests found"
-                    emptyStateSubtitle="You haven't made any booking requests yet."
-                  />
+                  {requestedProperties.length > 0 ? (
+                    <PropertyGrid
+                      properties={requestedProperties}
+                      loading={false}
+                      onViewProperty={handleViewProperty}
+                      variant="bookings"
+                      emptyStateMessage="No requested properties found"
+                      emptyStateSubtitle="You haven't made any booking requests yet."
+                    />
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 6 }}>
+                      <RequestedIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary" gutterBottom>
+                        No booking requests found
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        You haven't made any booking requests yet.
+                      </Typography>
+                      <Button 
+                        variant="contained" 
+                        onClick={() => navigate('/properties')}
+                      >
+                        Browse Properties
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
               )}
 
@@ -354,14 +346,32 @@ const MyBookingsPage = () => {
                     These are your confirmed bookings where payment has been approved.
                   </Typography>
                   
-                  <BookingGrid
-                    bookings={acceptedProperties}
-                    loading={false}
-                    onRefresh={handleRefresh}
-                    onPaymentComplete={handlePaymentComplete}
-                    emptyStateMessage="No confirmed bookings found"
-                    emptyStateSubtitle="You don't have any confirmed bookings yet."
-                  />
+                  {acceptedProperties.length > 0 ? (
+                    <PropertyGrid
+                      properties={acceptedProperties}
+                      loading={false}
+                      onViewProperty={handleViewProperty}
+                      variant="bookings"
+                      emptyStateMessage="No confirmed bookings found"
+                      emptyStateSubtitle="You don't have any confirmed bookings yet."
+                    />
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 6 }}>
+                      <AcceptedIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary" gutterBottom>
+                        No confirmed bookings found
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                        You don't have any confirmed bookings yet.
+                      </Typography>
+                      <Button 
+                        variant="contained" 
+                        onClick={() => navigate('/properties')}
+                      >
+                        Browse Properties
+                      </Button>
+                    </Box>
+                  )}
                 </Box>
               )}
             </Box>
