@@ -41,9 +41,7 @@ import {
   Person as PersonIcon,
   AttachMoney as MoneyIcon,
   Lock as LockIcon,
-  Shield as ShieldIcon
-} from '@mui/icons-material';
-import {
+  Shield as ShieldIcon,
   Payment as VisaIcon,
   CreditCard as MasterCardIcon,
   AccountBalance as AmexIcon,
@@ -58,7 +56,18 @@ import {
   updateBookingDummyPayment
 } from '../../api/bookingApi';
 
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY);
+const stripePromise = (() => {
+  const stripeKey = process.env.REACT_APP_STRIPE_PUBLISHABLE_KEY;
+
+   if (!stripeKey) {
+    console.warn('Stripe publishable key not found. Stripe payment will not work.');
+    return null;
+  }
+  return loadStripe(stripeKey, {
+    // Disable betas for better compatibility
+    betas: [],
+  });
+})();
 
 const ProfessionalStripeForm = ({ booking, onSuccess, onError }) => {
   const stripe = useStripe();
@@ -106,7 +115,10 @@ const ProfessionalStripeForm = ({ booking, onSuccess, onError }) => {
   const handleSubmit = async (event) => {
     event.preventDefault();
     
-    if (!stripe || !elements) return;
+    if (!stripe || !elements) {
+      onError('Stripe is not properly configured. Please try again later.');
+      return;
+    }
     
     setProcessing(true);
     
@@ -651,7 +663,7 @@ const ProfessionalStripeForm = ({ booking, onSuccess, onError }) => {
         variant="contained"
         size="large"
         fullWidth
-        disabled={processing || !stripe}
+        disabled={processing || !stripe || !stripePromise}
         startIcon={processing ? <CircularProgress size={20} /> : <LockIcon />}
         sx={{
           py: 2,
@@ -990,13 +1002,19 @@ const PaymentPage = () => {
               {/* Payment Content */}
               {paymentMethod === 'stripe' && booking && (
                 <Box>
-                  <Elements stripe={stripePromise}>
-                    <ProfessionalStripeForm
-                      booking={booking}
-                      onSuccess={handleStripeSuccess}
-                      onError={handleStripeError}
-                    />
-                  </Elements>
+                  {stripePromise ? (
+                    <Elements stripe={stripePromise}>
+                      <ProfessionalStripeForm
+                        booking={booking}
+                        onSuccess={handleStripeSuccess}
+                        onError={handleStripeError}
+                      />
+                    </Elements>
+                  ) : (
+                    <Alert severity="warning" sx={{ mb: 3 }}>
+                      Stripe payment is not configured properly. Please check your environment variables.
+                    </Alert>
+                  )}
                 </Box>
               )}
 
