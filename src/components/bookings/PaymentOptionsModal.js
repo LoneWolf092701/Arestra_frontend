@@ -247,6 +247,28 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
+  const [cardComplete, setCardComplete] = useState(false);
+  const [paymentIntent, setPaymentIntent] = useState(null);
+
+
+  const handleCardChange = (event) => {
+    setError(event.error ? event.error.message : '');
+    setCardComplete(event.complete);
+  };
+
+  const validateForm = () => {
+    if (!stripe || !elements) {
+      setError('Stripe is not properly initialized');
+      return false;
+    }
+
+    if (!cardComplete) {
+      setError('Please complete all card details');
+      return false;
+    }
+
+    return true;
+  };
 
   // Function to handle dummy payment success
   const handleDummyPaymentSuccess = async () => {
@@ -291,25 +313,29 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    if (!stripe || !elements) return;
+    if (!validateForm()) return;
 
     setProcessing(true);
     setError('');
 
     const cardElement = elements.getElement(CardElement);
 
+    try {
+      // Step 1: Create payment method
     const { error: methodError, paymentMethod } = await stripe.createPaymentMethod({
       type: 'card',
       card: cardElement,
+      billing_details: {
+          name: booking?.guest_name || '',
+          email: booking?.email || '',
+        }
     });
 
     if (methodError) {
-      setError(methodError.message);
-      setProcessing(false);
-      return;
+      throw new Error(methodError.message);
     }
 
-    try {
+    // Step 2: Create payment intent
       const token = localStorage.getItem('token');
       const response = await fetch('/api/payments/create-payment-intent', {
         method: 'POST',
@@ -319,13 +345,20 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
         },
         body: JSON.stringify({
           booking_id: booking.id,
-          amount: Math.round(booking.advance_amount * 100),
+          amount: Math.round(booking.advance_amount * 100), // Convert LKR to cents for USD
           payment_method_id: paymentMethod.id
         })
       });
 
-      const responseData = await response.json();
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create payment intent');
+      }
 
+      const responseData = await response.json();
+      const { client_secret, payment_intent_id } = responseData;
+
+      
       // Check for "Not Valid API Key" error specifically
       if (!response.ok && 
           (responseData.error?.toLowerCase().includes('not valid api key') || 
@@ -344,16 +377,21 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
           return;
         }
       }
+      
+      // Step 3: Confirm the payment using Stripe's confirmCardPayment
+      const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(client_secret, {
+        payment_method: paymentMethod.id
+      });
 
       if (!response.ok) {
         throw new Error(responseData.error || 'Payment failed');
       }
 
-      const { client_secret } = responseData;
-
-      const { error: confirmError, paymentIntent } = await stripe.confirmCardPayment(client_secret);
-
       if (confirmError) {
+        
+        // Store payment intent for potential error handling
+        setPaymentIntent(paymentIntent);
+
         // Check if confirm error is also related to API key
         if (confirmError.message?.toLowerCase().includes('not valid api key')) {
           if (retryCount === 0) {
@@ -369,26 +407,39 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
         }
         setError(confirmError.message);
       } else {
-        await fetch(`/api/bookings/${booking.id}/stripe-payment`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            payment_intent_id: paymentIntent.id,
-            payment_method_id: paymentMethod.id
-          })
-        });
+        const updateResponse = await fetch(`/api/bookings/${booking.id}/stripe-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          payment_intent_id: paymentIntent.id,
+          payment_method_id: paymentMethod.id
+        })
+      });
 
-        onPaymentSuccess(paymentIntent);
+      if (!updateResponse.ok) {
+        throw new Error('Payment successful but failed to update booking. Please contact support.');
+      }
+
+      // Redirect to success page
+      window.location.href = `/payment/success/${paymentIntent.id}`;
+
+      onPaymentSuccess(paymentIntent);
+
       }
     } catch (error) {
       // Check for API key error in catch block
       if (error.message?.toLowerCase().includes('not valid api key')) {
         if (retryCount === 0) {
-          setError('Please try again');
+          setError(error.message || 'Payment failed. Please try again.');
           setRetryCount(1);
+      //     if (paymentIntent?.id) {
+      //   setTimeout(() => {
+      //     window.location.href = `/payment/failure/${paymentIntent.id}?error=${encodeURIComponent(error.message)}`;
+      //   }, 2000);
+      // }
         } else {
           await handleDummyPaymentSuccess();
         }
@@ -402,19 +453,70 @@ const StripePaymentForm = ({ booking, onPaymentSuccess }) => {
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2, textAlign: 'left' }}>
-      <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 1, mb: 2 }}>
-        <CardElement />
+      <Box 
+        sx={{ 
+          p: 2, 
+          border: 1, 
+          borderColor: error ? 'error.main' : 'divider', 
+          borderRadius: 1, 
+          mb: 2,
+          backgroundColor: 'background.paper'
+        }}
+      >
+        <CardElement 
+          onChange={handleCardChange}
+          options={{
+            style: {
+              base: {
+                fontSize: '16px',
+                color: '#424770',
+                '::placeholder': {
+                  color: '#aab7c4',
+                },
+              },
+              invalid: {
+                color: '#9e2146',
+              },
+            },
+            hidePostalCode: true
+          }}
+        />
       </Box>
       
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && (
+        <Alert 
+          severity="error" 
+          sx={{ mb: 2 }}
+          onClose={() => setError('')}
+        >
+          {error}
+        </Alert>
+      )}
       
       <Button
         type="submit"
         variant="contained"
         fullWidth
-        disabled={!stripe || processing}
+        disabled={!stripe || processing || !cardComplete}
+        sx={{
+          height: 48,
+          position: 'relative'
+        }}
       >
-        {processing ? <CircularProgress size={24} /> : `Pay LKR ${booking?.advance_amount?.toLocaleString()}`}
+        {processing ? (
+          <CircularProgress 
+            size={24} 
+            sx={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              marginTop: '-12px',
+              marginLeft: '-12px'
+            }}
+          />
+        ) : (
+          `Pay LKR ${booking?.advance_amount?.toLocaleString() || 0}`
+        )}
       </Button>
     </Box>
   );

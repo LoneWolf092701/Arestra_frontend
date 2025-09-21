@@ -143,7 +143,7 @@ export const getUserBookings = async (options = {}) => {
       params.append('status', status);
     }
     
-    if (property_id) {
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -209,7 +209,7 @@ export const getOwnerBookings = async (options = {}) => {
       params.append('status', status);
     }
     
-    if (property_id) {
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -263,11 +263,16 @@ export const respondToBookingRequest = async (bookingId, responseData) => {
       throw new Error('Action must be either "approve" or "reject"');
     }
 
+    const backendAction = responseData.action === 'approve' ? 'approved' : 'rejected';
+    
     if (responseData.action === 'reject' && !responseData.message) {
       throw new Error('Rejection reason is required');
     }
 
-    const response = await apiClient.put(`/bookings/${validatedId}/respond`, responseData);
+    const response = await apiClient.put(`/bookings/${validatedId}/respond`, {
+      ...responseData,
+      action: backendAction
+    });
     
     if (!response.data) {
       throw new Error('Invalid response from server');
@@ -448,7 +453,7 @@ export const getBookingStatistics = async (options = {}) => {
     const { property_id, date_from, date_to } = options;
     
     const params = new URLSearchParams();
-    if (property_id) {
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -510,7 +515,7 @@ export const getBookingsByDateRange = async (options = {}) => {
     const params = new URLSearchParams();
     if (date_from) params.append('date_from', date_from);
     if (date_to) params.append('date_to', date_to);
-    if (property_id) {
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
@@ -586,7 +591,7 @@ export const exportBookingData = async (options = {}) => {
     params.append('format', format);
     if (date_from) params.append('date_from', date_from);
     if (date_to) params.append('date_to', date_to);
-    if (property_id) {
+    if (property_id && property_id !== 'all') {
       const validatedId = validatePropertyId(property_id);
       if (validatedId) {
         params.append('property_id', validatedId.toString());
