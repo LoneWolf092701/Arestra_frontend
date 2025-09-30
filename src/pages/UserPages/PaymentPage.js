@@ -136,7 +136,7 @@ const ProfessionalStripeForm = ({ booking, onSuccess, onError }) => {
 
       if (error) {
         // Check for API key error in createPaymentMethod
-        if (error.message?.toLowerCase().includes('not valid api key')) {
+        if (error.message?.toLowerCase().includes('not valid api key'||'Please try again')) {
           if (retryCount === 0) {
             onError('Please try again');
             setRetryCount(1);
@@ -160,7 +160,7 @@ const ProfessionalStripeForm = ({ booking, onSuccess, onError }) => {
       );
 
       // Check for API key error in payment intent creation
-      if (intentResponse.error?.toLowerCase().includes('not valid api key')) {
+      if (intentResponse.error?.toLowerCase().includes('not valid api key'||'Please try again')) {
         if (retryCount === 0) {
           onError('Please try again');
           setRetryCount(1);
@@ -179,7 +179,7 @@ const ProfessionalStripeForm = ({ booking, onSuccess, onError }) => {
       
       if (confirmError) {
         // Check for API key error in confirm payment
-        if (confirmError.message?.toLowerCase().includes('not valid api key')) {
+        if (confirmError.message?.toLowerCase().includes('not valid api key'||'Please try again')) {
           if (retryCount === 0) {
             onError('Please try again');
             setRetryCount(1);
@@ -202,7 +202,7 @@ const ProfessionalStripeForm = ({ booking, onSuccess, onError }) => {
       }
     } catch (error) {
       // Check for API key error in catch block
-      if (error.message?.toLowerCase().includes('not valid api key')) {
+      if (error.message?.toLowerCase().includes('not valid api key'||'Please try again')) {
         if (retryCount === 0) {
           onError('Please try again');
           setRetryCount(1);
