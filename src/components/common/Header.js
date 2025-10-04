@@ -145,7 +145,7 @@ const Header = () => {
           title={authenticated ? `Go to ${roleValue || 'user'} dashboard` : 'Go to home page'}
         />
 
-        {!isAuthPage && (
+        {!isAuthPage && roleValue && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Tooltip title={`You have ${unreadCount} unread notifications`}>
               <IconButton
