@@ -43,23 +43,18 @@ import ImageUpload from '../components/common/ImageUpload';
 import AppSnackbar from '../components/common/AppSnackbar';
 import MapSearch from '../components/specific/MapSearch';
 
-const propertyTypes = ['ROOMS', 'FLATS', 'HOTELS', 'VILLAS', 'Hostels', 'Apartments', 'Rooms', 'Flats', 'Villas'];
+const propertyTypes = ['Hostels', 'Rooms', 'Flats', 'Villas'];
 
 const unitOptions = [
-  { label: 'Annex', value: 'Annex' },
-  { label: 'Full House', value: 'Full House' },
-  { label: 'Single Room', value: 'Single Room' },
-  { label: 'Shared Room', value: 'Shared Room' },
-  { label: 'Studio Apartment', value: 'Studio Apartment' },
-  { label: 'One Bedroom', value: 'One Bedroom' },
-  { label: 'Two Bedroom', value: 'Two Bedroom' },
-  { label: 'Three Bedroom', value: 'Three Bedroom' },
   { label: 'Rental unit', value: 'Rental unit' },
+  { label: 'Shared unit', value: 'Shared unit' },
+  { label: 'Entire unit', value: 'Entire unit' },
 ];
 
 const availableAmenities = [
-  'WiFi', 'TV', 'Air Conditioning', 'Kitchen', 'Washing Machine', 'Parking',
-  'Swimming Pool', 'Gym', 'Security', 'Garden', 'Balcony', 'Furnished', 'Recreation Room'
+  'Swimming Pool', 'Recreation Room', 'Bed Linens', 'Hot Water', 'Air Conditioning',
+  'Kitchen', 'Washing Machine', 'WiFi', 'TV', 'Parking', 'Security', 'Garden',
+  'Balcony', 'Furnished', 'Fridge', 'Cleaner', 'Lift'
 ];
 
 const availableFacilities = ['Bedrooms', 'Bathrooms', 'Kitchen', 'Balcony', 'Living Area'];

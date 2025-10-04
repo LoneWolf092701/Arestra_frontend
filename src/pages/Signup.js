@@ -234,7 +234,36 @@ const validateEmployeeIdField = async (employeeId) => {
       setError('Please enter a valid email address');
       return false;
     }
+    const phoneRegex = /^\+?[0-9]{7,15}$/; // Simple phone number regex
+    if (currentForm.phone && !phoneRegex.test(currentForm.phone)) {
+      setError('Please enter a valid phone number');
+      return false;
+    }
+    if (currentForm.birthdate) {
+      const birthDate = new Date(currentForm.birthdate);
+      const ageDifMs = Date.now() - birthDate.getTime();
+      const ageDate = new Date(ageDifMs); // miliseconds from epoch
+      const age = Math.abs(ageDate.getUTCFullYear() - 1970);      
+      if (age < 16) {
+        setError('You must be at least 16 years old to register');
+        return false;
+      }
+      if (age > 100) {
+        setError('Please enter a valid birth date');
+        return false;
+      }
+    } else {
+      setError('Please enter your birth date');
+      return false;
+    }
 
+   const nicRegex = /^(?:\d{9}[VXvx]|\d{12})$/;
+   const passportRegex = /^[A-Z][0-9]{7}$/;
+
+    if (!(nicRegex.test(currentForm.identificationNumber) || passportRegex.test(currentForm.identificationNumber))) {
+     setError('Please enter a valid Sri Lanka NIC or Passport number');
+     return false;
+} 
     return true;
   };
 
