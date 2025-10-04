@@ -350,6 +350,8 @@ const UserViewProperty = () => {
 
   const userRole = getUserRole();
 
+  console.log({userRole});
+
   const isPropertyOwner = userRole === 'propertyowner';
 
   console.log({property})
@@ -1159,7 +1161,7 @@ const renderBookingButton = () => {
         <ListItemIcon><EmailIcon /></ListItemIcon>
         <ListItemText primary={property.owner_info.email} />
       </ListItem>
-      {property.owner_info.phone && (
+      {property.owner_info.phone && userRole && (
         <ListItem disableGutters>
           <ListItemIcon><PhoneIcon /></ListItemIcon>
           <ListItemText primary={property.owner_info.phone} />

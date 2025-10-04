@@ -957,3 +957,12 @@ export const exportBookingPayments = async (options = {}) => {
     throw new Error('Failed to export payment data. Please try again.');
   }
 };
+
+export const checkHasActiveBookings = async (propertyId) => {
+  try {
+    const response = await apiClient.get(`/admin/properties/${propertyId}/has-active-bookings`);
+    return response.data;
+  } catch (error) {
+    throw new Error(error, 'check active bookings');
+  }
+};

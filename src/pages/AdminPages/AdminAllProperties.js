@@ -40,7 +40,7 @@ import {
   Cancel as RejectedIcon,
   Person as PersonIcon
 } from '@mui/icons-material';
-import { getAllPropertiesAdmin, deletePropertyAdmin } from '../../api/adminAPI';
+import { getAllPropertiesAdmin, deletePropertyAdmin, checkHasActiveBookings } from '../../api/adminAPI';
 import Pagination from '../../components/common/Pagination';
 import AppSnackbar from '../../components/common/AppSnackbar';
 import Room from '../../assets/images/Room.jpg';
@@ -58,6 +58,8 @@ const AdminAllProperties = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [stats, setStats] = useState({});
+
+  const [hasActiveBookings, setHasActiveBookings] = useState(false);
   
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(12);
@@ -159,6 +161,21 @@ const AdminAllProperties = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+  const fetchActiveBookings = async () => {
+    if (removeDialogOpen && selectedProperty) {
+      try {
+        const response = await checkHasActiveBookings(selectedProperty.id);
+        setHasActiveBookings(response.hasActiveBookings);
+      } catch (error) {
+        console.error('Error checking active bookings:', error);
+        setHasActiveBookings(false);
+      }
+    }
+  };
+  fetchActiveBookings();
+}, [removeDialogOpen, selectedProperty]);
 
   const handlePageChange = (newPage) => {
     setCurrentPage(newPage);
@@ -515,28 +532,34 @@ const AdminAllProperties = () => {
         <DialogTitle>Remove Property</DialogTitle>
         <DialogContent>
           {selectedProperty && (
-            <Box>
-              <Typography variant="body1" gutterBottom>
-                Are you sure you want to remove this property from the system?
-              </Typography>
-              
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
-                <Typography variant="subtitle2">
-                  {selectedProperty.property_type} - {selectedProperty.unit_type}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {selectedProperty.address}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Owner: {selectedProperty.owner_info?.username}
-                </Typography>
-              </Box>
-              
-              <Alert severity="warning" sx={{ mt: 2 }}>
-                This action cannot be undone. The property will be permanently removed from the system.
-              </Alert>
-            </Box>
-          )}
+  <Box>
+    <Typography variant="body1" gutterBottom>
+      Are you sure you want to remove this property from the system?
+    </Typography>
+    
+    <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
+      <Typography variant="subtitle2">
+        {selectedProperty.property_type} - {selectedProperty.unit_type}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {selectedProperty.address}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        Owner: {selectedProperty.owner_info?.username}
+      </Typography>
+    </Box>
+    
+    <Alert severity="warning" sx={{ mt: 2 }}>
+      This action cannot be undone. The property will be permanently removed from the system.
+    </Alert>
+
+    {hasActiveBookings && (
+      <Alert severity="error" sx={{ mt: 2 }}>
+        THIS PROPERTY HAS AN ACTIVE BOOKING ARE YOU SURE ABOUT DELETING?
+      </Alert>
+    )}
+  </Box>
+)}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setRemoveDialogOpen(false)}>

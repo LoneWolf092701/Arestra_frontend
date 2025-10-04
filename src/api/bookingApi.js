@@ -493,10 +493,7 @@ export const getBookingStatistics = async (options = {}) => {
 
 export const uploadBookingDocuments = async (bookingId, formData) => {
   try {
-    const validatedId = validateBookingId(bookingId);
-    
-    const uploadClient = createUploadClient();
-    const response = await uploadClient.post(`/bookings/${validatedId}/upload-documents`, formData);
+    const response = await apiClient.post(`/bookings/${bookingId}/upload-documents`, formData);
     
     if (!response.data) {
       throw new Error('Invalid response from server');
