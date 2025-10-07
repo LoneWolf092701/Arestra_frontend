@@ -541,3 +541,28 @@ export const validatePropertyData = (property) => {
     ].slice(0, 5)
   };
 };
+
+export const normalizeFacilities = (facilities) => {  
+  if (!facilities || typeof facilities !== 'object') return {};
+
+  const normalized = {};
+  const keyMap = {
+    'bedroom': 'Bedrooms',
+    'bedrooms': 'Bedrooms',
+    'bathroom': 'Bathrooms',
+    'bathrooms': 'Bathrooms',
+    'living area': 'Living Area',
+    'kitchen': 'Kitchen',
+    'balcony': 'Balcony',
+  };
+
+  Object.entries(facilities).forEach(([key, value]) => {
+    const normKey = keyMap[key.toLowerCase()] || key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
+    const numValue = parseInt(value, 10);
+    if (!isNaN(numValue) && numValue > 0) {
+      normalized[normKey] = Math.max(normalized[normKey] || 0, numValue); // Use Math.max to handle duplicates without inflation
+    }
+  });
+
+  return normalized;
+};

@@ -701,7 +701,7 @@ const PaymentPage = () => {
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [paymentMethod, setPaymentMethod] = useState('stripe');
-  const [files, setFiles] = useState({ payment_receipt: null, nic_document: null });
+  const [files, setFiles] = useState({ paymentReceipt: null, nicPhoto: null });
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -729,27 +729,15 @@ const PaymentPage = () => {
     }
   };
 
-  const handleFileChange = (event, type) => {
-    const file = event.target.files[0];
-    if (file) {
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf'];
-      if (!allowedTypes.includes(file.type)) {
-        setError('Please select a valid image file (JPG, PNG, WEBP) or PDF document');
-        return;
-      }
-      
-      if (file.size > 10 * 1024 * 1024) {
-        setError('File size must be less than 10MB');
-        return;
-      }
-      
-      setFiles(prev => ({ ...prev, [type]: file }));
-      setError('');
-    }
-  };
+  const handleFileChange = (e, type) => {
+  const file = e.target.files[0];
+  if (file) {
+    setFiles(prev => ({ ...prev, [type]: file }));
+  }
+};
 
   const handleReceiptUpload = async () => {
-    if (!files.payment_receipt || !files.nic_document) {
+    if (!files.paymentReceipt || !files.nicPhoto) {
       setError('Please select both payment receipt and NIC document');
       return;
     }
@@ -759,8 +747,8 @@ const PaymentPage = () => {
 
     try {
       const formData = new FormData();
-      formData.append('paymentReceipt', files.payment_receipt);
-      formData.append('nicPhoto', files.nic_document);
+      formData.append('paymentReceipt', files.paymentReceipt);
+      formData.append('nicPhoto', files.nicPhoto);
 
       await uploadBookingDocuments(booking.id, formData);
       setSuccess('Documents uploaded successfully! Your payment is being processed.');
@@ -1043,12 +1031,12 @@ const PaymentPage = () => {
                         <Input
                           type="file"
                           accept="image/*,.pdf"
-                          onChange={(e) => handleFileChange(e, 'payment_receipt')}
+                          onChange={(e) => handleFileChange(e, 'paymentReceipt')}
                           sx={{ mb: 1 }}
                         />
-                        {files.payment_receipt && (
+                        {files.paymentReceipt && (
                           <Chip 
-                            label={files.payment_receipt.name}
+                            label={files.paymentReceipt.name}
                             color="success"
                             size="small"
                             icon={<CheckIcon />}
@@ -1075,12 +1063,12 @@ const PaymentPage = () => {
                         <Input
                           type="file"
                           accept="image/*,.pdf"
-                          onChange={(e) => handleFileChange(e, 'nic_document')}
+                          onChange={(e) => handleFileChange(e, 'nicPhoto')}
                           sx={{ mb: 1 }}
                         />
-                        {files.nic_document && (
+                        {files.nicPhoto && (
                           <Chip 
-                            label={files.nic_document.name}
+                            label={files.nicPhoto.name}
                             color="success"
                             size="small"
                             icon={<CheckIcon />}
@@ -1096,7 +1084,7 @@ const PaymentPage = () => {
                       variant="contained"
                       size="large"
                       onClick={handleReceiptUpload}
-                      disabled={!files.payment_receipt || !files.nic_document || uploading}
+                      disabled={!files.paymentReceipt || !files.nicPhoto || uploading}
                       startIcon={uploading ? <CircularProgress size={20} /> : <UploadIcon />}
                       sx={{
                         py: 2,

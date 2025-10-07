@@ -81,9 +81,11 @@ const ImageCarousel = ({ images, propertyTitle }) => {
   
   const transformUrlToAzure = (url) => {
     if (!url || typeof url !== 'string') return url;
+    
     if (url.includes('localhost:5000/uploads/')) {
       return url.replace('http://localhost:5000/uploads/', 'http://127.0.0.1:10000/devstoreaccount1/staywise-uploads/');
     }
+    
     return url;
   };
 
@@ -91,7 +93,12 @@ const ImageCarousel = ({ images, propertyTitle }) => {
     if (!images || !Array.isArray(images) || images.length === 0) {
       return [];
     }
-    return images.filter(img => typeof img === 'string' && img.trim() !== '');
+    
+    return images.filter(img => {
+      if (typeof img === 'string') return img.trim() !== '';
+      if (typeof img === 'object' && img?.url) return img.url.trim() !== '';
+      return false;
+    });
   };
 
   const validImages = getValidImages();
@@ -99,21 +106,42 @@ const ImageCarousel = ({ images, propertyTitle }) => {
   if (validImages.length === 0) {
     return (
       <Card sx={{ mb: 3 }}>
-        <Box sx={{ height: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: theme.cardBackground, color: theme.textSecondary }}>
+        <Box sx={ 
+          { 
+            height: 400, 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            backgroundColor: theme.cardBackground,
+            color: theme.textSecondary
+          }}>
           <Typography variant="h6">No images available</Typography>
         </Box>
       </Card>
     );
   }
 
-  const getCurrentImageUrl = () => transformUrlToAzure(validImages[currentImageIndex]);
+  const getCurrentImageUrl = () => {
+    const currentImg = validImages[currentImageIndex];
+    if (typeof currentImg === 'string') {
+      return transformUrlToAzure(currentImg);
+    }
+    if (typeof currentImg === 'object' && currentImg?.url) {
+      return transformUrlToAzure(currentImg.url);
+    }
+    return '';
+  };
 
   const previousImage = () => {
-    setCurrentImageIndex(prev => (prev === 0 ? validImages.length - 1 : prev - 1));
+    setCurrentImageIndex(prev => 
+      prev === 0 ? validImages.length - 1 : prev - 1
+    );
   };
 
   const nextImage = () => {
-    setCurrentImageIndex(prev => (prev === validImages.length - 1 ? 0 : prev + 1));
+    setCurrentImageIndex(prev => 
+      prev === validImages.length - 1 ? 0 : prev + 1
+    );
   };
 
   return (
@@ -124,67 +152,148 @@ const ImageCarousel = ({ images, propertyTitle }) => {
           height="400"
           image={getCurrentImageUrl()}
           alt={propertyTitle}
-          sx={{ objectFit: 'cover', cursor: 'pointer' }}
+          sx={{ 
+            objectFit: 'cover',
+            cursor: 'pointer'
+          }}
           onClick={() => setImageViewerOpen(true)}
         />
+        
         {validImages.length > 1 && (
           <>
             <IconButton
-              sx={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' } }}
+              sx={{
+                position: 'absolute',
+                left: 16,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                color: 'white',
+                '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' }
+              }}
               onClick={previousImage}
             >
               <ArrowBackIcon />
             </IconButton>
+            
             <IconButton
-              sx={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' } }}
+              sx={{
+                position: 'absolute',
+                right: 16,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                color: 'white',
+                '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' }
+              }}
               onClick={nextImage}
             >
               <ArrowForwardIcon />
             </IconButton>
-            <Box sx={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 1 }}>
+
+            <Box sx={{
+              position: 'absolute',
+              bottom: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              gap: 1
+            }}>
               {validImages.map((_, index) => (
                 <Box
                   key={index}
-                  sx={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: index === currentImageIndex ? 'white' : 'rgba(255,255,255,0.5)', cursor: 'pointer' }}
+                  sx={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: index === currentImageIndex ? 'white' : 'rgba(255,255,255,0.5)',
+                    cursor: 'pointer'
+                  }}
                   onClick={() => setCurrentImageIndex(index)}
                 />
               ))}
             </Box>
           </>
         )}
-        <Box sx={{ position: 'absolute', top: 16, right: 16, backgroundColor: 'rgba(0, 0, 0, 0.6)', color: 'white', px: 2, py: 1, borderRadius: 2, fontSize: '0.875rem' }}>
+
+        <Box sx={{
+          position: 'absolute',
+          top: 16,
+          right: 16,
+          backgroundColor: 'rgba(0, 0, 0, 0.6)',
+          color: 'white',
+          px: 2,
+          py: 1,
+          borderRadius: 2,
+          fontSize: '0.875rem'
+        }}>
           {currentImageIndex + 1} / {validImages.length}
         </Box>
       </Card>
+
       <Dialog
         open={imageViewerOpen}
         onClose={() => setImageViewerOpen(false)}
         maxWidth="md"
         fullWidth
-        PaperProps={{ sx: { backgroundColor: 'transparent', boxShadow: 'none' } }}
+        PaperProps={{
+          sx: { backgroundColor: 'transparent', boxShadow: 'none' }
+        }}
       >
         <DialogContent sx={{ p: 0, position: 'relative' }}>
           <IconButton
-            sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' } }}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              zIndex: 1,
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              color: 'white',
+              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' }
+            }}
             onClick={() => setImageViewerOpen(false)}
           >
             <CloseIcon />
           </IconButton>
+          
           <img
             src={getCurrentImageUrl()}
             alt={propertyTitle}
-            style={{ width: '100%', height: 'auto', maxHeight: '80vh', objectFit: 'contain' }}
+            style={{
+              width: '100%',
+              height: 'auto',
+              maxHeight: '80vh',
+              objectFit: 'contain'
+            }}
           />
+          
           {validImages.length > 1 && (
             <>
               <IconButton
-                sx={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' } }}
+                sx={{
+                  position: 'absolute',
+                  left: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  color: 'white',
+                  '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.7)' }
+                }}
                 onClick={previousImage}
               >
                 <ArrowBackIcon />
               </IconButton>
+              
               <IconButton
-                sx={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', backgroundColor: 'rgba(255, 255, 255, 0.1)', color: 'white', '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.2)' } }}
+                sx={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  '&:hover': { backgroundColor: 'rgba(255, 255, 255, 0.2)' }
+                }}
                 onClick={nextImage}
               >
                 <ArrowForwardIcon />
