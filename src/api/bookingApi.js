@@ -5,6 +5,7 @@ import { createApiClient, createUploadClient } from './apiConfig';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 const apiClient = createApiClient();
+const uploadClient = createUploadClient();
 
 apiClient.interceptors.request.use(
   (config) => {
@@ -493,7 +494,7 @@ export const getBookingStatistics = async (options = {}) => {
 
 export const uploadBookingDocuments = async (bookingId, formData) => {
   try {
-    const response = await apiClient.post(`/bookings/${bookingId}/upload-documents`, formData);
+    const response = await uploadClient.post(`/bookings/${bookingId}/upload-documents`, formData);
     
     if (!response.data) {
       throw new Error('Invalid response from server');

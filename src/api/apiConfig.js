@@ -69,9 +69,7 @@ const handleNetworkError = (error) => {
 export const createUploadClient = () => {
   return createApiClient({
     timeout: 120000,
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
+    headers: {},
   });
 };
 
